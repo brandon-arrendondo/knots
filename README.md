@@ -230,4 +230,4 @@ cargo test
 
 ## License
 
-This project is open source.
+MIT License.  See LICENSE file.
