@@ -1,11 +1,15 @@
 # knots
 
-A Rust-based code complexity analyzer for C files that calculates McCabe (cyclomatic) complexity and cognitive complexity metrics.
+A comprehensive Rust-based code complexity analyzer for C files that calculates multiple complexity metrics including McCabe complexity, cognitive complexity, nesting depth, SLOC, ABC complexity, and return counts.
 
 ## Features
 
 - **McCabe Complexity (Cyclomatic Complexity)**: Measures the number of linearly independent paths through a program's source code
 - **Cognitive Complexity**: Measures how difficult code is to understand, with penalties for nesting
+- **Nesting Depth**: Maximum nesting level of control structures
+- **SLOC**: Source Lines of Code (non-comment, non-blank lines)
+- **ABC Complexity**: Assignment-Branch-Condition metric with vector magnitude
+- **Return Count**: Number of return statements in each function
 - Per-function analysis with detailed metrics
 - Summary statistics across all functions
 - **Validated**: McCabe complexity results match pmccabe output exactly
@@ -25,7 +29,13 @@ The McCabe complexity implementation has been validated against multiple industr
 - ✓ Handles nested structures, loops, and logical operators accurately
 
 ### Unique Value:
-Unlike most tools that only measure McCabe complexity, knots also implements **Cognitive Complexity** based on the [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/), making it one of the few tools that provides both metrics for C code.
+Unlike most tools that only measure McCabe complexity, knots provides a comprehensive suite of metrics:
+- **Cognitive Complexity** based on the [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/)
+- **ABC Complexity** for measuring assignment, branch, and condition complexity
+- **Nesting Depth** analysis to identify deeply nested code
+- **SLOC** and **Return Count** for additional code quality insights
+
+This makes knots one of the most feature-complete complexity analyzers available for C code.
 
 ## Building
 
@@ -137,6 +147,72 @@ void flattened(int a, int b, int c, int d) {
 ```
 
 Both functions have the same McCabe complexity (5) but vastly different cognitive complexity (10 vs 4), demonstrating why flattening deeply nested code improves readability.
+
+### Nesting Depth
+
+Nesting depth measures the maximum level of nested control structures. Deeply nested code is harder to understand and maintain.
+
+**Example:**
+```c
+// Nesting depth: 4
+void deeply_nested(int a, int b, int c, int d) {
+    if (a > 0) {           // Level 1
+        if (b > 0) {       // Level 2
+            if (c > 0) {   // Level 3
+                if (d > 0) {  // Level 4
+                    printf("Deep!\n");
+                }
+            }
+        }
+    }
+}
+
+// Nesting depth: 1
+void flat(int a, int b, int c, int d) {
+    if (a <= 0) return;  // Level 1
+    if (b <= 0) return;  // Level 1
+    if (c <= 0) return;  // Level 1
+    if (d <= 0) return;  // Level 1
+    printf("Flat!\n");
+}
+```
+
+### SLOC (Source Lines of Code)
+
+SLOC counts non-comment, non-blank lines of code. It provides a simple measure of function size. Larger functions are generally harder to understand and maintain.
+
+### ABC Complexity
+
+ABC complexity is a vector metric that counts:
+- **A (Assignments)**: Assignment statements and increment/decrement operators
+- **B (Branches)**: Function/method calls
+- **C (Conditions)**: Conditional logic (if, while, for, switch, logical operators)
+
+The magnitude is calculated as: √(A² + B² + C²)
+
+**Example:**
+```c
+// ABC: <3, 2, 2>, magnitude: 4.12
+int process_data(int x, int y) {
+    int result = 0;           // A+1
+    result = x + y;           // A+1
+
+    if (result > 0) {         // C+1
+        result++;             // A+1
+        printf("Positive\n"); // B+1
+    }
+
+    if (result < 100) {       // C+1
+        log_result(result);   // B+1
+    }
+
+    return result;
+}
+```
+
+### Return Count
+
+Return count measures the number of return statements in a function. Functions with many return points can be harder to understand and debug. However, early returns can sometimes improve readability by reducing nesting.
 
 ## Testing
 

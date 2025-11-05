@@ -1,0 +1,175 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  MAJOR: 0
+  MINOR: 1
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact_name: knots-linux-x64
+            binary_path: target/release/knots
+          - os: windows-2022
+            artifact_name: knots-windows-x64
+            binary_path: target/release/knots.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify Rust installation
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Security Audit - Check Dependencies
+        run: |
+          cargo install cargo-audit
+          cargo audit
+        continue-on-error: true
+
+      - name: Build Release Binary
+        run: cargo build --release
+
+      - name: Run Tests
+        run: cargo test --release
+        continue-on-error: true
+
+      - name: List Build Output (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "=== Build Artifacts ==="
+          ls -lh ${{ matrix.binary_path }} || echo "Binary not found"
+
+      - name: List Build Output (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Write-Host "=== Build Artifacts ==="
+          if (Test-Path "${{ matrix.binary_path }}") {
+            Get-Item "${{ matrix.binary_path }}" | Format-List Name, Length, LastWriteTime
+          } else {
+            Write-Host "Binary not found"
+          }
+        shell: pwsh
+
+      - name: Stage Artifacts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          VERSION_STRING="${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
+          ARTIFACT_DIR="artifacts/${{ matrix.artifact_name }}-${VERSION_STRING}"
+          mkdir -p "${ARTIFACT_DIR}"
+          cp ${{ matrix.binary_path }} "${ARTIFACT_DIR}/"
+          cp README.md "${ARTIFACT_DIR}/" 2>/dev/null || true
+          cp hooks/README.md "${ARTIFACT_DIR}/HOOKS_README.md" 2>/dev/null || true
+          echo "=== Artifacts staged ==="
+          ls -lh "${ARTIFACT_DIR}/"
+          echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_ENV
+          echo "ARTIFACT_DIR=${ARTIFACT_DIR}" >> $GITHUB_ENV
+
+      - name: Stage Artifacts (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $VERSION_STRING = "${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
+          $ARTIFACT_DIR = "artifacts/${{ matrix.artifact_name }}-${VERSION_STRING}"
+          New-Item -ItemType Directory -Force -Path $ARTIFACT_DIR
+          Copy-Item "${{ matrix.binary_path }}" -Destination $ARTIFACT_DIR
+          Copy-Item "README.md" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
+          Copy-Item "hooks/README.md" -Destination "$ARTIFACT_DIR/HOOKS_README.md" -ErrorAction SilentlyContinue
+          Write-Host "=== Artifacts staged ==="
+          Get-ChildItem $ARTIFACT_DIR
+          echo "VERSION_STRING=${VERSION_STRING}" >> $env:GITHUB_ENV
+          echo "ARTIFACT_DIR=${ARTIFACT_DIR}" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}
+          path: ${{ env.ARTIFACT_DIR }}
+          retention-days: 30
+
+  package:
+    name: Package Release
+    needs: build
+    runs-on: ubuntu-22.04
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+
+    steps:
+      - name: Set version string
+        run: |
+          VERSION_STRING="${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
+          echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_ENV
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: knots-linux-x64-${{ env.VERSION_STRING }}
+          path: artifacts/knots-linux-x64-${{ env.VERSION_STRING }}
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: knots-windows-x64-${{ env.VERSION_STRING }}
+          path: artifacts/knots-windows-x64-${{ env.VERSION_STRING }}
+
+      - name: Verify Release Package
+        run: |
+          echo "=== Downloaded Artifacts ==="
+          ls -lR artifacts/
+          echo ""
+          echo "Release package ready with version: ${{ env.VERSION_STRING }}"
+
+      - name: Create Release Archive (Linux)
+        run: |
+          cd artifacts
+          tar -czf knots-linux-x64-${{ env.VERSION_STRING }}.tar.gz knots-linux-x64-${{ env.VERSION_STRING }}
+          cd ..
+
+      - name: Create Release Archive (Windows)
+        run: |
+          cd artifacts
+          zip -r knots-windows-x64-${{ env.VERSION_STRING }}.zip knots-windows-x64-${{ env.VERSION_STRING }}
+          cd ..
+
+      - name: Upload Release Archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-packages-${{ env.VERSION_STRING }}
+          path: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+          retention-days: 90
