@@ -4,13 +4,11 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches:
       - main
-
-env:
-  MAJOR: 0
-  MINOR: 1
 
 jobs:
   build:
@@ -29,6 +27,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+        shell: bash
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -89,36 +95,34 @@ jobs:
       - name: Stage Artifacts (Linux)
         if: runner.os == 'Linux'
         run: |
-          VERSION_STRING="${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
-          ARTIFACT_DIR="artifacts/${{ matrix.artifact_name }}-${VERSION_STRING}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          ARTIFACT_DIR="artifacts/${{ matrix.artifact_name }}-${VERSION}"
           mkdir -p "${ARTIFACT_DIR}"
           cp ${{ matrix.binary_path }} "${ARTIFACT_DIR}/"
           cp README.md "${ARTIFACT_DIR}/" 2>/dev/null || true
           cp hooks/README.md "${ARTIFACT_DIR}/HOOKS_README.md" 2>/dev/null || true
           echo "=== Artifacts staged ==="
           ls -lh "${ARTIFACT_DIR}/"
-          echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_ENV
           echo "ARTIFACT_DIR=${ARTIFACT_DIR}" >> $GITHUB_ENV
 
       - name: Stage Artifacts (Windows)
         if: runner.os == 'Windows'
         run: |
-          $VERSION_STRING = "${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
-          $ARTIFACT_DIR = "artifacts/${{ matrix.artifact_name }}-${VERSION_STRING}"
+          $VERSION = "${{ steps.version.outputs.VERSION }}"
+          $ARTIFACT_DIR = "artifacts/${{ matrix.artifact_name }}-${VERSION}"
           New-Item -ItemType Directory -Force -Path $ARTIFACT_DIR
           Copy-Item "${{ matrix.binary_path }}" -Destination $ARTIFACT_DIR
           Copy-Item "README.md" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
           Copy-Item "hooks/README.md" -Destination "$ARTIFACT_DIR/HOOKS_README.md" -ErrorAction SilentlyContinue
           Write-Host "=== Artifacts staged ==="
           Get-ChildItem $ARTIFACT_DIR
-          echo "VERSION_STRING=${VERSION_STRING}" >> $env:GITHUB_ENV
           echo "ARTIFACT_DIR=${ARTIFACT_DIR}" >> $env:GITHUB_ENV
         shell: pwsh
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}-${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}
+          name: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}
           path: ${{ env.ARTIFACT_DIR }}
           retention-days: 30
 
@@ -129,46 +133,51 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
 
     steps:
-      - name: Set version string
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from Cargo.toml
+        id: version
         run: |
-          VERSION_STRING="${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
-          echo "VERSION_STRING=${VERSION_STRING}" >> $GITHUB_ENV
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
 
       - name: Download Linux Artifact
         uses: actions/download-artifact@v4
         with:
-          name: knots-linux-x64-${{ env.VERSION_STRING }}
-          path: artifacts/knots-linux-x64-${{ env.VERSION_STRING }}
+          name: knots-linux-x64-${{ steps.version.outputs.VERSION }}
+          path: artifacts/knots-linux-x64-${{ steps.version.outputs.VERSION }}
 
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
-          name: knots-windows-x64-${{ env.VERSION_STRING }}
-          path: artifacts/knots-windows-x64-${{ env.VERSION_STRING }}
+          name: knots-windows-x64-${{ steps.version.outputs.VERSION }}
+          path: artifacts/knots-windows-x64-${{ steps.version.outputs.VERSION }}
 
       - name: Verify Release Package
         run: |
           echo "=== Downloaded Artifacts ==="
           ls -lR artifacts/
           echo ""
-          echo "Release package ready with version: ${{ env.VERSION_STRING }}"
+          echo "Release package ready with version: ${{ steps.version.outputs.VERSION }}"
 
       - name: Create Release Archive (Linux)
         run: |
           cd artifacts
-          tar -czf knots-linux-x64-${{ env.VERSION_STRING }}.tar.gz knots-linux-x64-${{ env.VERSION_STRING }}
+          tar -czf knots-linux-x64-${{ steps.version.outputs.VERSION }}.tar.gz knots-linux-x64-${{ steps.version.outputs.VERSION }}
           cd ..
 
       - name: Create Release Archive (Windows)
         run: |
           cd artifacts
-          zip -r knots-windows-x64-${{ env.VERSION_STRING }}.zip knots-windows-x64-${{ env.VERSION_STRING }}
+          zip -r knots-windows-x64-${{ steps.version.outputs.VERSION }}.zip knots-windows-x64-${{ steps.version.outputs.VERSION }}
           cd ..
 
       - name: Upload Release Archives
         uses: actions/upload-artifact@v4
         with:
-          name: release-packages-${{ env.VERSION_STRING }}
+          name: release-packages-${{ steps.version.outputs.VERSION }}
           path: |
             artifacts/*.tar.gz
             artifacts/*.zip
