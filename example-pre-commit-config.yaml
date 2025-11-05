@@ -18,7 +18,7 @@ repos:
   # Code complexity checking with knots
   # Requires: knots binary installed (cargo install knots or download from releases)
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: 0.1.3
+    rev: 0.1.4
     hooks:
       # Standard complexity check
       # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
