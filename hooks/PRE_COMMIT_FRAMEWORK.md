@@ -46,7 +46,7 @@ repos:
 ```yaml
 repos:
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v0.1.4  # Use specific version
+    rev: v0.2.0  # Use specific version
     hooks:
       - id: knots
 ```
@@ -397,7 +397,7 @@ jobs:
       - name: Install knots
         run: |
           cargo install knots
-          # Or: curl -L https://github.com/brandon-arrendondo/knots/releases/download/v0.1.4/knots-linux-x64 -o /usr/local/bin/knots && chmod +x /usr/local/bin/knots
+          # Or: curl -L https://github.com/brandon-arrendondo/knots/releases/download/v0.2.0/knots-linux-x64 -o /usr/local/bin/knots && chmod +x /usr/local/bin/knots
       
       - uses: pre-commit/action@v3.0.0
 ```
