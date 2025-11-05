@@ -1,0 +1,116 @@
+#!/bin/bash
+#
+# Pre-commit hook for knots (WARNING MODE)
+# Reports complexity but doesn't block commits
+#
+# Installation:
+#   cp pre-commit-warning-only .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+
+# Configuration
+MCCABE_THRESHOLD=${MCCABE_THRESHOLD:-$(git config hooks.knots.mccabe-threshold || echo "15")}
+COGNITIVE_THRESHOLD=${COGNITIVE_THRESHOLD:-$(git config hooks.knots.cognitive-threshold || echo "15")}
+NESTING_THRESHOLD=${NESTING_THRESHOLD:-$(git config hooks.knots.nesting-threshold || echo "5")}
+SLOC_THRESHOLD=${SLOC_THRESHOLD:-$(git config hooks.knots.sloc-threshold || echo "50")}
+ABC_THRESHOLD=${ABC_THRESHOLD:-$(git config hooks.knots.abc-threshold || echo "10.0")}
+RETURN_THRESHOLD=${RETURN_THRESHOLD:-$(git config hooks.knots.return-threshold || echo "3")}
+VALIDATOR_PATH=${VALIDATOR_PATH:-$(git config hooks.knots.path || which knots)}
+
+# Colors
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+# Check if knots is installed
+if [ ! -x "$VALIDATOR_PATH" ]; then
+    exit 0
+fi
+
+# Get list of C files being committed
+C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|h)$')
+
+if [ -z "$C_FILES" ]; then
+    exit 0
+fi
+
+echo "Checking complexity of C files..."
+echo ""
+
+WARNINGS=0
+
+for file in $C_FILES; do
+    if [ ! -f "$file" ]; then
+        continue
+    fi
+
+    # Run knots on the file (always verbose for per-function details)
+    OUTPUT=$($VALIDATOR_PATH -v "$file" 2>&1)
+
+    while IFS= read -r line; do
+        # Stop parsing at Summary section
+        if echo "$line" | grep -q "^Summary:"; then
+            break
+        fi
+
+        if echo "$line" | grep -q "Function:"; then
+            # Extract function name and remove emoji (emojis are at the end)
+            CURRENT_FUNCTION=$(echo "$line" | sed 's/Function: //' | sed 's/ [😊😐😠😢]$//')
+        elif echo "$line" | grep -q "  McCabe Complexity:"; then
+            MCCABE=$(echo "$line" | awk '{print $3}')
+            if [[ "$MCCABE" =~ ^[0-9]+$ ]] && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
+                echo -e "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
+                echo "  McCabe Complexity: $MCCABE (threshold: $MCCABE_THRESHOLD)"
+                WARNINGS=$((WARNINGS + 1))
+            fi
+        elif echo "$line" | grep -q "  Cognitive Complexity:"; then
+            COGNITIVE=$(echo "$line" | awk '{print $3}')
+            if [[ "$COGNITIVE" =~ ^[0-9]+$ ]] && [ "$COGNITIVE" -gt "$COGNITIVE_THRESHOLD" ]; then
+                echo -e "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
+                echo "  Cognitive Complexity: $COGNITIVE (threshold: $COGNITIVE_THRESHOLD)"
+                WARNINGS=$((WARNINGS + 1))
+            fi
+        elif echo "$line" | grep -q "  Nesting Depth:"; then
+            NESTING=$(echo "$line" | awk '{print $3}')
+            if [[ "$NESTING" =~ ^[0-9]+$ ]] && [ "$NESTING" -gt "$NESTING_THRESHOLD" ]; then
+                echo -e "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
+                echo "  Nesting Depth: $NESTING (threshold: $NESTING_THRESHOLD)"
+                WARNINGS=$((WARNINGS + 1))
+            fi
+        elif echo "$line" | grep -q "  SLOC:"; then
+            SLOC=$(echo "$line" | awk '{print $2}')
+            if [[ "$SLOC" =~ ^[0-9]+$ ]] && [ "$SLOC" -gt "$SLOC_THRESHOLD" ]; then
+                echo -e "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
+                echo "  SLOC: $SLOC (threshold: $SLOC_THRESHOLD)"
+                WARNINGS=$((WARNINGS + 1))
+            fi
+        elif echo "$line" | grep -q "  ABC:"; then
+            # Extract ABC magnitude from line like "ABC: <2,4,5> (magnitude: 6.71)"
+            ABC_MAG=$(echo "$line" | sed -n 's/.*magnitude: \([0-9.]*\).*/\1/p')
+            if [[ "$ABC_MAG" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+                if [ $(echo "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
+                    echo -e "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
+                    echo "  ABC Magnitude: $ABC_MAG (threshold: $ABC_THRESHOLD)"
+                    WARNINGS=$((WARNINGS + 1))
+                fi
+            fi
+        elif echo "$line" | grep -q "  Return Count:"; then
+            RETURN_COUNT=$(echo "$line" | awk '{print $3}')
+            if [[ "$RETURN_COUNT" =~ ^[0-9]+$ ]] && [ "$RETURN_COUNT" -gt "$RETURN_THRESHOLD" ]; then
+                echo -e "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
+                echo "  Return Count: $RETURN_COUNT (threshold: $RETURN_THRESHOLD)"
+                WARNINGS=$((WARNINGS + 1))
+            fi
+        fi
+    done <<< "$OUTPUT"
+done
+
+if [ $WARNINGS -gt 0 ]; then
+    echo ""
+    echo -e "${YELLOW}Found $WARNINGS complexity warning(s) - consider refactoring${NC}"
+else
+    echo -e "${GREEN}✓ All complexity checks passed${NC}"
+fi
+
+# Always succeed (warning mode)
+exit 0

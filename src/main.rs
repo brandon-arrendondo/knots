@@ -1,0 +1,205 @@
+use anyhow::{Context, Result};
+use clap::Parser;
+use std::fs;
+use std::path::PathBuf;
+use tree_sitter::{Node, Tree, TreeCursor};
+
+mod complexity;
+use complexity::{
+    calculate_abc_complexity, calculate_cognitive_complexity, calculate_mccabe_complexity,
+    calculate_nesting_depth, calculate_return_count, calculate_sloc,
+};
+
+fn get_complexity_emoji(complexity: u32) -> &'static str {
+    match complexity {
+        1..=10 => "😊",   // Smiley - good complexity
+        11..=20 => "😐",  // Neutral - okay complexity
+        21..=49 => "😠",  // Angry - bad complexity
+        _ => "😢",        // Sad - worst complexity (50+)
+    }
+}
+
+#[derive(Parser, Debug)]
+#[command(name = "knots")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(about = "Analyzes C code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
+struct Args {
+    /// Path to the C file to analyze
+    #[arg(value_name = "FILE")]
+    file: PathBuf,
+
+    /// Show detailed per-function analysis
+    #[arg(short, long)]
+    verbose: bool,
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    // Read the C file
+    let source_code = fs::read_to_string(&args.file)
+        .with_context(|| format!("Failed to read file: {}", args.file.display()))?;
+
+    // Parse the C code using tree-sitter
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&tree_sitter_c::language())
+        .context("Failed to set C language")?;
+
+    let tree = parser
+        .parse(&source_code, None)
+        .context("Failed to parse C code")?;
+
+    // Analyze the code
+    analyze_code(&tree, &source_code, args.verbose)?;
+
+    Ok(())
+}
+
+fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
+    let root_node = tree.root_node();
+    let mut cursor = root_node.walk();
+
+    let mut total_mccabe = 0;
+    let mut total_cognitive = 0;
+    let mut total_nesting = 0;
+    let mut total_sloc = 0;
+    let mut total_abc_magnitude = 0.0;
+    let mut total_return_count = 0;
+    let mut function_count = 0;
+
+    // Find all function definitions
+    visit_functions(&mut cursor, source_code, &mut |node, src| {
+        if let Some(name) = get_function_name(node, src) {
+            function_count += 1;
+
+            let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
+            let cognitive = calculate_cognitive_complexity(node, src.as_bytes());
+            let nesting = calculate_nesting_depth(node);
+            let sloc = calculate_sloc(node, src.as_bytes());
+            let abc = calculate_abc_complexity(node, src.as_bytes());
+            let abc_magnitude = abc.magnitude();
+            let return_count = calculate_return_count(node);
+
+            total_mccabe += mccabe;
+            total_cognitive += cognitive;
+            total_nesting += nesting;
+            total_sloc += sloc;
+            total_abc_magnitude += abc_magnitude;
+            total_return_count += return_count;
+
+            // Always show per-function analysis with emojis
+            let max_complexity = std::cmp::max(mccabe, cognitive);
+            let emoji = get_complexity_emoji(max_complexity);
+
+            if verbose {
+                println!("Function: {} {}", name, emoji);
+                println!("  McCabe Complexity: {}", mccabe);
+                println!("  Cognitive Complexity: {}", cognitive);
+                println!("  Nesting Depth: {}", nesting);
+                println!("  SLOC: {}", sloc);
+                println!("  ABC: <{},{},{}> (magnitude: {:.2})", abc.assignments, abc.branches, abc.conditions, abc_magnitude);
+                println!("  Return Count: {}", return_count);
+                println!("  Max Complexity: {}", max_complexity);
+                println!();
+            } else {
+                println!(
+                    "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {})",
+                    emoji, name, mccabe, cognitive, nesting, sloc, abc_magnitude, return_count
+                );
+            }
+        }
+    });
+
+    // Print summary
+    println!();
+    println!("Summary:");
+    println!("  Total Functions: {}", function_count);
+    println!("  Total McCabe Complexity: {}", total_mccabe);
+    println!("  Total Cognitive Complexity: {}", total_cognitive);
+    println!("  Total Nesting Depth: {}", total_nesting);
+    println!("  Total SLOC: {}", total_sloc);
+    println!("  Total ABC Magnitude: {:.2}", total_abc_magnitude);
+    println!("  Total Return Count: {}", total_return_count);
+
+    if function_count > 0 {
+        println!("  Average McCabe Complexity: {:.2}", total_mccabe as f64 / function_count as f64);
+        println!("  Average Cognitive Complexity: {:.2}", total_cognitive as f64 / function_count as f64);
+        println!("  Average Nesting Depth: {:.2}", total_nesting as f64 / function_count as f64);
+        println!("  Average SLOC: {:.2}", total_sloc as f64 / function_count as f64);
+        println!("  Average ABC Magnitude: {:.2}", total_abc_magnitude / function_count as f64);
+        println!("  Average Return Count: {:.2}", total_return_count as f64 / function_count as f64);
+    }
+
+    Ok(())
+}
+
+fn visit_functions<F>(cursor: &mut TreeCursor, source_code: &str, callback: &mut F)
+where
+    F: FnMut(Node, &str),
+{
+    let node = cursor.node();
+
+    if node.kind() == "function_definition" {
+        callback(node, source_code);
+    }
+
+    if cursor.goto_first_child() {
+        loop {
+            visit_functions(cursor, source_code, callback);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+        cursor.goto_parent();
+    }
+}
+
+fn get_function_name(node: Node, source_code: &str) -> Option<String> {
+    let mut cursor = node.walk();
+
+    for child in node.children(&mut cursor) {
+        if child.kind() == "function_declarator" {
+            return get_declarator_name(child, source_code);
+        } else if child.kind() == "pointer_declarator" {
+            // For functions returning pointers, the function_declarator is nested inside
+            if let Some(name) = get_function_name_from_declarator(child, source_code) {
+                return Some(name);
+            }
+        }
+    }
+
+    None
+}
+
+fn get_function_name_from_declarator(node: Node, source_code: &str) -> Option<String> {
+    let mut cursor = node.walk();
+
+    for child in node.children(&mut cursor) {
+        if child.kind() == "function_declarator" {
+            return get_declarator_name(child, source_code);
+        } else if child.kind() == "pointer_declarator" {
+            if let Some(name) = get_function_name_from_declarator(child, source_code) {
+                return Some(name);
+            }
+        }
+    }
+
+    None
+}
+
+fn get_declarator_name(node: Node, source_code: &str) -> Option<String> {
+    let mut cursor = node.walk();
+
+    for child in node.children(&mut cursor) {
+        if child.kind() == "identifier" {
+            return Some(child.utf8_text(source_code.as_bytes()).ok()?.to_string());
+        } else if child.kind() == "pointer_declarator" || child.kind() == "function_declarator" {
+            if let Some(name) = get_declarator_name(child, source_code) {
+                return Some(name);
+            }
+        }
+    }
+
+    None
+}

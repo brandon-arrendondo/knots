@@ -1,0 +1,71 @@
+# Example .pre-commit-config.yaml for knots
+#
+# Copy this to your project as .pre-commit-config.yaml
+# Then run: pre-commit install
+#
+# See https://pre-commit.com for more information
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: check-yaml
+
+  # Code complexity checking with knots
+  - repo: local
+    hooks:
+      # Standard complexity check
+      # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 4
+      - id: knots
+        name: Code Complexity Check
+        entry: hooks/pre-commit-wrapper.sh
+        language: script
+        files: \.(c|h)$
+        pass_filenames: true
+
+      # Uncomment for verbose output:
+      # - id: knots-verbose
+      #   name: Code Complexity Check (Verbose)
+      #   entry: hooks/pre-commit-wrapper.sh --verbose
+      #   language: script
+      #   files: \.(c|h)$
+      #   pass_filenames: true
+
+      # Uncomment for strict checking:
+      # - id: knots-strict
+      #   name: Code Complexity Check (Strict)
+      #   entry: hooks/pre-commit-wrapper.sh
+      #   language: script
+      #   files: \.(c|h)$
+      #   pass_filenames: true
+      #   args:
+      #     - --mccabe-threshold=10
+      #     - --cognitive-threshold=10
+      #     - --nesting-threshold=3
+      #     - --sloc-threshold=30
+      #     - --abc-threshold=5.0
+      #     - --return-threshold=3
+
+      # Uncomment for custom thresholds:
+      # - id: knots-custom
+      #   name: Code Complexity Check (Custom)
+      #   entry: hooks/pre-commit-wrapper.sh
+      #   language: script
+      #   files: \.(c|h)$
+      #   pass_filenames: true
+      #   args:
+      #     - --mccabe-threshold=20
+      #     - --cognitive-threshold=15
+      #     - --nesting-threshold=7
+      #     - --sloc-threshold=100
+      #     - --abc-threshold=15.0
+      #     - --return-threshold=5
+
+# Configuration for pre-commit.ci (if using)
+ci:
+  autofix_commit_msg: 'ci: auto fixes from pre-commit hooks'
+  autoupdate_commit_msg: 'ci: pre-commit autoupdate'
