@@ -1,0 +1,30 @@
+# Pre-commit hooks for knots
+# See https://pre-commit.com for more information
+
+# Standard complexity check
+- id: knots
+  name: Code Complexity Check
+  description: Check C code complexity with default thresholds (McCabe 15, Cognitive 15, Nesting 5, SLOC 50, ABC 10.0, Returns 3)
+  entry: hooks/pre-commit-wrapper.sh
+  language: system
+  files: \.(c|h)$
+  pass_filenames: true
+
+# Verbose variant - shows summary for all files
+- id: knots-verbose
+  name: Code Complexity Check (Verbose)
+  description: Show summary for all files, not just violations
+  entry: hooks/pre-commit-wrapper.sh --verbose
+  language: system
+  files: \.(c|h)$
+  pass_filenames: true
+
+# Strict variant - stricter thresholds
+- id: knots-strict
+  name: Code Complexity Check (Strict)
+  description: Strict thresholds (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
+  entry: hooks/pre-commit-wrapper.sh
+  language: system
+  files: \.(c|h)$
+  pass_filenames: true
+  args: ['--mccabe-threshold=10', '--cognitive-threshold=10', '--nesting-threshold=3', '--sloc-threshold=30', '--abc-threshold=5.0', '--return-threshold=3']

@@ -16,48 +16,23 @@ repos:
       - id: check-yaml
 
   # Code complexity checking with knots
-  - repo: local
+  # Requires: knots binary installed (cargo install knots or download from releases)
+  - repo: https://github.com/brandon-arrendondo/knots
+    rev: 0.1.2
     hooks:
       # Standard complexity check
       # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
       # Shows only violations. Passes silently if no issues.
       - id: knots
-        name: Code Complexity Check
-        entry: hooks/pre-commit-wrapper.sh
-        language: script
-        files: \.(c|h)$
-        pass_filenames: true
 
       # Uncomment for verbose output (shows summary even for passing files):
       # - id: knots-verbose
-      #   name: Code Complexity Check (Verbose)
-      #   entry: hooks/pre-commit-wrapper.sh --verbose
-      #   language: script
-      #   files: \.(c|h)$
-      #   pass_filenames: true
 
-      # Uncomment for strict checking:
+      # Uncomment for strict checking (McCabe: 10, Cognitive: 10, Nesting: 3, SLOC: 30, ABC: 5.0):
       # - id: knots-strict
-      #   name: Code Complexity Check (Strict)
-      #   entry: hooks/pre-commit-wrapper.sh
-      #   language: script
-      #   files: \.(c|h)$
-      #   pass_filenames: true
-      #   args:
-      #     - --mccabe-threshold=10
-      #     - --cognitive-threshold=10
-      #     - --nesting-threshold=3
-      #     - --sloc-threshold=30
-      #     - --abc-threshold=5.0
-      #     - --return-threshold=3
 
-      # Uncomment for custom thresholds:
-      # - id: knots-custom
-      #   name: Code Complexity Check (Custom)
-      #   entry: hooks/pre-commit-wrapper.sh
-      #   language: script
-      #   files: \.(c|h)$
-      #   pass_filenames: true
+      # For custom thresholds, use the standard hook with args:
+      # - id: knots
       #   args:
       #     - --mccabe-threshold=20
       #     - --cognitive-threshold=15
