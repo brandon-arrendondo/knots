@@ -78,6 +78,8 @@ Now pre-commit will run knots automatically on commit.
 
 **Thresholds:** McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
 
+**Output:** Shows only violations (functions exceeding thresholds). Passes silently if no issues found.
+
 ### Verbose Hook
 
 ```yaml
@@ -91,7 +93,9 @@ Now pre-commit will run knots automatically on commit.
       pass_filenames: true
 ```
 
-Shows detailed output for all functions.
+**Output:** Shows violations (if any) and a summary of all files checked, even when they pass.
+
+**Note:** Both hooks internally run `knots -v` to get detailed per-function metrics for parsing. The `--verbose` flag controls whether to show summaries for passing files, not the knots output format.
 
 ### Strict Hook
 

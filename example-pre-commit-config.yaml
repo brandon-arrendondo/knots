@@ -19,7 +19,8 @@ repos:
   - repo: local
     hooks:
       # Standard complexity check
-      # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 4
+      # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
+      # Shows only violations. Passes silently if no issues.
       - id: knots
         name: Code Complexity Check
         entry: hooks/pre-commit-wrapper.sh
@@ -27,7 +28,7 @@ repos:
         files: \.(c|h)$
         pass_filenames: true
 
-      # Uncomment for verbose output:
+      # Uncomment for verbose output (shows summary even for passing files):
       # - id: knots-verbose
       #   name: Code Complexity Check (Verbose)
       #   entry: hooks/pre-commit-wrapper.sh --verbose

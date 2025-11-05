@@ -50,7 +50,7 @@ Analyze a C file with per-function complexity and visual indicators:
 ./target/release/knots <file.c>
 ```
 
-Show detailed per-function analysis:
+Show detailed per-function analysis (multi-line format with each metric on a separate line):
 ```bash
 ./target/release/knots --verbose <file.c>
 ```
@@ -59,6 +59,8 @@ Or using the short flag:
 ```bash
 ./target/release/knots -v <file.c>
 ```
+
+Without the verbose flag, each function's metrics are displayed on a single line. Summary statistics are always shown regardless of verbose mode.
 
 ### Visual Complexity Indicators
 

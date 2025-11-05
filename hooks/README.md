@@ -71,8 +71,9 @@ git config hooks.knots.abc-threshold 10.0
 # Set Return count threshold (default: 3)
 git config hooks.knots.return-threshold 3
 
-# Enable verbose output (shows summary statistics for all files)
-# Note: Per-function details are always shown when violations occur
+# Enable verbose output (shows per-function details in multi-line format)
+# Non-verbose shows single-line format per function
+# Note: Summary statistics are always shown regardless of verbose mode
 git config hooks.knots.verbose true
 
 # Set custom knots path
