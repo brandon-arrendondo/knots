@@ -32,6 +32,7 @@ repos:
       # - id: knots-strict
 
       # For custom thresholds, use the standard hook with args:
+      # Note: Custom thresholds automatically enable detailed analysis mode
       # - id: knots
       #   args:
       #     - --mccabe-threshold=20

@@ -7,7 +7,7 @@ use tree_sitter::{Node, Tree, TreeCursor};
 mod complexity;
 use complexity::{
     calculate_abc_complexity, calculate_cognitive_complexity, calculate_mccabe_complexity,
-    calculate_nesting_depth, calculate_return_count, calculate_sloc,
+    calculate_nesting_depth, calculate_return_count, calculate_sloc, calculate_test_scoring,
 };
 
 fn get_complexity_emoji(complexity: u32) -> &'static str {
@@ -31,6 +31,10 @@ struct Args {
     /// Show detailed per-function analysis
     #[arg(short, long)]
     verbose: bool,
+
+    /// Show testability matrix categorization
+    #[arg(short, long)]
+    matrix: bool,
 }
 
 fn main() -> Result<()> {
@@ -51,7 +55,11 @@ fn main() -> Result<()> {
         .context("Failed to parse C code")?;
 
     // Analyze the code
-    analyze_code(&tree, &source_code, args.verbose)?;
+    if args.matrix {
+        analyze_matrix(&tree, &source_code)?;
+    } else {
+        analyze_code(&tree, &source_code, args.verbose)?;
+    }
 
     Ok(())
 }
@@ -66,6 +74,7 @@ fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
     let mut total_sloc = 0;
     let mut total_abc_magnitude = 0.0;
     let mut total_return_count = 0;
+    let mut total_test_score = 0;
     let mut function_count = 0;
 
     // Find all function definitions
@@ -80,6 +89,7 @@ fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
             let abc = calculate_abc_complexity(node, src.as_bytes());
             let abc_magnitude = abc.magnitude();
             let return_count = calculate_return_count(node);
+            let test_scoring = calculate_test_scoring(node, src.as_bytes());
 
             total_mccabe += mccabe;
             total_cognitive += cognitive;
@@ -87,6 +97,7 @@ fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
             total_sloc += sloc;
             total_abc_magnitude += abc_magnitude;
             total_return_count += return_count;
+            total_test_score += test_scoring.total_score as i64;
 
             // Always show per-function analysis with emojis
             let max_complexity = std::cmp::max(mccabe, cognitive);
@@ -100,12 +111,18 @@ fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
                 println!("  SLOC: {}", sloc);
                 println!("  ABC: <{},{},{}> (magnitude: {:.2})", abc.assignments, abc.branches, abc.conditions, abc_magnitude);
                 println!("  Return Count: {}", return_count);
+                println!("  Test Scoring: {} ({})", test_scoring.total_score, test_scoring.classification());
+                println!("    - Signature: {}", test_scoring.signature_score);
+                println!("    - Dependency: {}", test_scoring.dependency_score);
+                println!("    - Observable: {}", test_scoring.observable_score);
+                println!("    - Implementation: {}", test_scoring.implementation_score);
+                println!("    - Documentation: {}", test_scoring.documentation_score);
                 println!("  Max Complexity: {}", max_complexity);
                 println!();
             } else {
                 println!(
-                    "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {})",
-                    emoji, name, mccabe, cognitive, nesting, sloc, abc_magnitude, return_count
+                    "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {})",
+                    emoji, name, mccabe, cognitive, nesting, sloc, abc_magnitude, return_count, test_scoring.total_score
                 );
             }
         }
@@ -121,6 +138,7 @@ fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
     println!("  Total SLOC: {}", total_sloc);
     println!("  Total ABC Magnitude: {:.2}", total_abc_magnitude);
     println!("  Total Return Count: {}", total_return_count);
+    println!("  Total Test Score: {}", total_test_score);
 
     if function_count > 0 {
         println!("  Average McCabe Complexity: {:.2}", total_mccabe as f64 / function_count as f64);
@@ -129,7 +147,114 @@ fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
         println!("  Average SLOC: {:.2}", total_sloc as f64 / function_count as f64);
         println!("  Average ABC Magnitude: {:.2}", total_abc_magnitude / function_count as f64);
         println!("  Average Return Count: {:.2}", total_return_count as f64 / function_count as f64);
+        println!("  Average Test Score: {:.2}", total_test_score as f64 / function_count as f64);
     }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct FunctionMetrics {
+    name: String,
+    mccabe: u32,
+    test_score: i32,
+}
+
+fn analyze_matrix(tree: &Tree, source_code: &str) -> Result<()> {
+    let root_node = tree.root_node();
+    let mut cursor = root_node.walk();
+
+    let mut functions: Vec<FunctionMetrics> = Vec::new();
+
+    // Collect all function metrics
+    visit_functions(&mut cursor, source_code, &mut |node, src| {
+        if let Some(name) = get_function_name(node, src) {
+            let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
+            let test_scoring = calculate_test_scoring(node, src.as_bytes());
+
+            functions.push(FunctionMetrics {
+                name,
+                mccabe,
+                test_score: test_scoring.total_score,
+            });
+        }
+    });
+
+    // Categorize functions into quadrants
+    let mut quick_wins = Vec::new();
+    let mut invest_tests = Vec::new();
+    let mut add_docs = Vec::new();
+    let mut refactor = Vec::new();
+
+    for func in functions {
+        let low_complexity = func.mccabe <= 10;
+        let easy_to_test = func.test_score <= 10;
+
+        match (low_complexity, easy_to_test) {
+            (true, true) => quick_wins.push(func),
+            (false, true) => invest_tests.push(func),
+            (true, false) => add_docs.push(func),
+            (false, false) => refactor.push(func),
+        }
+    }
+
+    // Print matrix results
+    println!("Function Testability Matrix");
+    println!("===========================");
+    println!();
+
+    println!("📊 QUICK WINS (Low Complexity, Easy to Test) - Automate!");
+    println!("=========================================================");
+    if quick_wins.is_empty() {
+        println!("  (none)");
+    } else {
+        for func in &quick_wins {
+            println!("  ✓ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_score);
+        }
+    }
+    println!();
+
+    println!("🎯 INVEST IN TESTS (High Complexity, Easy to Test)");
+    println!("==================================================");
+    if invest_tests.is_empty() {
+        println!("  (none)");
+    } else {
+        for func in &invest_tests {
+            println!("  → {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_score);
+        }
+    }
+    println!();
+
+    println!("📝 ADD DOCS (Low Complexity, Hard to Test)");
+    println!("===========================================");
+    if add_docs.is_empty() {
+        println!("  (none)");
+    } else {
+        for func in &add_docs {
+            println!("  ⚠ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_score);
+        }
+    }
+    println!();
+
+    println!("🚨 REFACTOR (High Complexity, Hard to Test) - HIGH RISK!");
+    println!("========================================================");
+    if refactor.is_empty() {
+        println!("  (none)");
+    } else {
+        for func in &refactor {
+            println!("  ⛔ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_score);
+        }
+    }
+    println!();
+
+    // Print summary
+    println!("Summary:");
+    println!("--------");
+    println!("  Quick Wins:    {} functions", quick_wins.len());
+    println!("  Invest Tests:  {} functions", invest_tests.len());
+    println!("  Add Docs:      {} functions", add_docs.len());
+    println!("  Refactor:      {} functions", refactor.len());
+    println!("  Total:         {} functions", quick_wins.len() + invest_tests.len() + add_docs.len() + refactor.len());
 
     Ok(())
 }

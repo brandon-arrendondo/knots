@@ -1,6 +1,6 @@
 # knots
 
-A comprehensive Rust-based code complexity analyzer for C files that calculates multiple complexity metrics including McCabe complexity, cognitive complexity, nesting depth, SLOC, ABC complexity, and return counts.
+A comprehensive Rust-based code complexity analyzer for C files that calculates multiple complexity metrics including McCabe complexity, cognitive complexity, nesting depth, SLOC, ABC complexity, return counts, and test generation difficulty scoring.
 
 ## Features
 
@@ -10,6 +10,7 @@ A comprehensive Rust-based code complexity analyzer for C files that calculates 
 - **SLOC**: Source Lines of Code (non-comment, non-blank lines)
 - **ABC Complexity**: Assignment-Branch-Condition metric with vector magnitude
 - **Return Count**: Number of return statements in each function
+- **Test Scoring**: Multi-dimensional assessment of automated test generation difficulty
 - Per-function analysis with detailed metrics
 - Summary statistics across all functions
 - **Validated**: McCabe complexity results match pmccabe output exactly
@@ -62,6 +63,22 @@ Or using the short flag:
 
 Without the verbose flag, each function's metrics are displayed on a single line. Summary statistics are always shown regardless of verbose mode.
 
+Show testability matrix categorization:
+```bash
+./target/release/knots --matrix <file.c>
+```
+
+Or using the short flag:
+```bash
+./target/release/knots -m <file.c>
+```
+
+The matrix view categorizes functions into four quadrants based on complexity (McCabe ≤10) and testability (Test Score ≤10):
+- **Quick Wins** (Low complexity, Easy to test) - Perfect for automation
+- **Invest in Tests** (High complexity, Easy to test) - Write comprehensive tests
+- **Add Docs** (Low complexity, Hard to test) - Improve documentation to reduce test difficulty
+- **Refactor** (High complexity, Hard to test) - High-risk code that needs refactoring
+
 ### Visual Complexity Indicators
 
 The tool uses emojis to quickly identify complexity levels:
@@ -90,6 +107,9 @@ The `examples/` directory contains sample C files demonstrating different comple
 
 # Nested code showing cognitive complexity impact
 ./target/release/knots --verbose examples/nested.c
+
+# View testability matrix for prioritizing testing efforts
+./target/release/knots --matrix examples/simple.c
 ```
 
 ## Complexity Metrics Explained
@@ -215,6 +235,90 @@ int process_data(int x, int y) {
 ### Return Count
 
 Return count measures the number of return statements in a function. Functions with many return points can be harder to understand and debug. However, early returns can sometimes improve readability by reducing nesting.
+
+### Test Scoring
+
+Test scoring is a multi-dimensional metric that assesses the difficulty of automatically generating unit tests for C functions. It combines five scoring dimensions into a single score that ranges from negative (very easy to test) to high positive values (very hard to test).
+
+**Score Components:**
+
+1. **Signature Score (0-10)**: Complexity of function parameters and return type
+   - Simple primitives score low, function pointers and void* score high
+
+2. **Dependency Score (0-10)**: Side effects and external dependencies
+   - Pure functions score 0, functions with I/O, memory allocation, or global state score higher
+
+3. **Observable Score (0-10)**: How easy it is to verify correctness
+   - Functions with clear return values score low, void functions with side effects score high
+
+4. **Implementation Score (0-10)**: Based on cyclomatic complexity
+   - Mapped from McCabe complexity: 1-5 → 0-2, 6-10 → 3-5, 11-20 → 6-8, 20+ → 9-10
+
+5. **Documentation Score (-10 to 0)**: Quality of function documentation
+   - Better documentation **reduces** difficulty (negative contribution)
+   - Looks for Doxygen tags like @intent, @param, @return, @requires, @ensures, @example
+
+**Total Score Formula:**
+```
+Total = Signature + Dependency + Observable + Implementation - Documentation
+```
+
+**Score Classification:**
+
+| Score Range | Classification | Description |
+|-------------|----------------|-------------|
+| ≤10 | Trivial | Fully automatable test generation |
+| 11-20 | Simple | Automated with minimal metadata |
+| 21-30 | Moderate | Needs good documentation |
+| 31-40 | Complex | Requires detailed specifications |
+| 41-50 | Difficult | May need manual test design |
+| 51+ | Very Hard | Extensive manual effort needed |
+
+**Example:**
+```c
+/**
+ * @intent Compute the sum of two integers
+ * @param a First integer
+ * @param b Second integer
+ * @return Sum of a and b
+ * @example add(2, 3) = 5
+ */
+int add(int a, int b) {
+    return a + b;
+}
+// Test Score: -10 (Trivial)
+//   Signature: 0 (simple primitives)
+//   Dependency: 0 (pure function)
+//   Observable: 0 (clear return value)
+//   Implementation: 0 (no branches)
+//   Documentation: 10 (excellent docs)
+
+char* strdup_custom(const char* s) {
+    if (s == NULL) return NULL;
+
+    int len = 0;
+    while (s[len]) len++;
+
+    char* result = malloc(len + 1);
+    if (result == NULL) return NULL;
+
+    for (int i = 0; i <= len; i++) {
+        result[i] = s[i];
+    }
+
+    return result;
+}
+// Test Score: 1 (Trivial)
+//   Signature: 0 (pointers but simple)
+//   Dependency: 3 (memory allocation)
+//   Observable: 0 (return value easily checked)
+//   Implementation: 2 (moderate complexity)
+//   Documentation: 4 (basic comment above)
+```
+
+**Note:** The test scoring metric is currently informational and not used in pre-commit hooks, as optimal threshold values are still being determined.
+
+For the complete specification of the test scoring metric, see [test_scoring.md](test_scoring.md).
 
 ## Testing
 

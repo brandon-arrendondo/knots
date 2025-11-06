@@ -63,6 +63,16 @@ Now pre-commit will run knots automatically on commit.
 
 ## Available Hooks
 
+All three hook variants use the same wrapper script but differ in their behavior:
+
+| Variant | Uses `knots -v`? | Shows Summaries? | Default Thresholds |
+|---------|-----------------|------------------|-------------------|
+| **knots** | No | Only violations | Standard (15/15/5/50/10.0/3) |
+| **knots-verbose** | Yes | All files | Standard (15/15/5/50/10.0/3) |
+| **knots-strict** | Yes | Only violations | Strict (10/10/3/30/5.0/3) |
+
+**Note:** Any custom threshold arguments automatically enable `knots -v` mode for detailed analysis.
+
 ### Standard Hook
 
 ```yaml
@@ -80,6 +90,8 @@ Now pre-commit will run knots automatically on commit.
 
 **Output:** Shows only violations (functions exceeding thresholds). Passes silently if no issues found.
 
+**Implementation:** Uses compact knots output format (single line per function) for faster parsing.
+
 ### Verbose Hook
 
 ```yaml
@@ -95,7 +107,7 @@ Now pre-commit will run knots automatically on commit.
 
 **Output:** Shows violations (if any) and a summary of all files checked, even when they pass.
 
-**Note:** Both hooks internally run `knots -v` to get detailed per-function metrics for parsing. The `--verbose` flag controls whether to show summaries for passing files, not the knots output format.
+**Implementation:** Runs `knots -v` to get detailed per-function metrics and displays summary statistics for all analyzed files.
 
 ### Strict Hook
 
@@ -110,9 +122,21 @@ Now pre-commit will run knots automatically on commit.
       pass_filenames: true
 ```
 
-**Thresholds:** McCabe: 10, Cognitive: 10, Returns: 3
+**Thresholds:** McCabe: 10, Cognitive: 10, Nesting: 3, SLOC: 30, ABC: 5.0, Returns: 3
+
+**Output:** Shows only violations (functions exceeding stricter thresholds).
+
+**Implementation:** Automatically uses `knots -v` when custom thresholds are provided, enabling detailed per-function analysis for more accurate threshold checking.
 
 ## Custom Configuration
+
+### Argument Format
+
+The wrapper script supports both argument formats:
+- **Space-separated:** `--mccabe-threshold 15`
+- **Equals-separated:** `--mccabe-threshold=15`
+
+Both formats work identically. The `.pre-commit-hooks.yaml` file uses the equals format (`--arg=value`), but you can use either format in your configuration.
 
 ### Comparison with flake8 Configuration
 
@@ -177,6 +201,8 @@ Configure all available thresholds (similar to flake8):
         - --sloc-threshold=50
         - --abc-threshold=10.0
 ```
+
+**Note:** When any custom threshold arguments are provided, the wrapper automatically uses `knots -v` for detailed analysis. This ensures accurate threshold checking across all metrics.
 
 Or customize specific thresholds only:
 
