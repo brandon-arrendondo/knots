@@ -24,6 +24,19 @@ fn get_complexity_emoji(complexity: u32) -> &'static str {
     }
 }
 
+/// Compilation database entry from compile_commands.json
+#[derive(Debug, Clone, Deserialize)]
+struct CompileCommand {
+    #[serde(default)]
+    directory: String,
+    #[serde(default)]
+    _command: String,
+    file: String,
+    #[serde(default)]
+    #[serde(rename = "arguments")]
+    _arguments: Vec<String>,
+}
+
 /// Filter rules for including/excluding files and functions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -142,12 +155,16 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[command(about = "Analyzes C code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
 struct Args {
     /// Path to the C file or directory to analyze
-    #[arg(value_name = "FILE")]
-    file: PathBuf,
+    #[arg(value_name = "FILE", required_unless_present = "compile_commands")]
+    file: Option<PathBuf>,
 
     /// Recursively process all C files in directories
     #[arg(short, long)]
     recursive: bool,
+
+    /// Use compile_commands.json to get list of files to analyze
+    #[arg(long, value_name = "FILE", conflicts_with = "file")]
+    compile_commands: Option<PathBuf>,
 
     /// Show detailed per-function analysis
     #[arg(short, long)]
@@ -183,7 +200,15 @@ fn main() -> Result<()> {
     };
 
     // Collect files to process
-    let files = collect_files(&args.file, args.recursive, &include_rules, &exclude_rules)?;
+    let files = if let Some(compile_commands_path) = &args.compile_commands {
+        // Load files from compile_commands.json
+        load_compile_commands(compile_commands_path, &include_rules, &exclude_rules)?
+    } else if let Some(file_path) = &args.file {
+        // Use regular file/directory path
+        collect_files(file_path, args.recursive, &include_rules, &exclude_rules)?
+    } else {
+        anyhow::bail!("Either FILE or --compile-commands must be specified");
+    };
 
     // For matrix mode
     if args.matrix {
@@ -288,6 +313,57 @@ fn main() -> Result<()> {
     display_recursive_summary(&all_metrics, files.len(), skipped_files);
 
     Ok(())
+}
+
+/// Load file paths from compile_commands.json
+fn load_compile_commands(
+    compile_commands_path: &Path,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> Result<Vec<PathBuf>> {
+    let content = fs::read_to_string(compile_commands_path)
+        .with_context(|| format!("Failed to read compile_commands.json: {}", compile_commands_path.display()))?;
+
+    let commands: Vec<CompileCommand> = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse compile_commands.json: {}", compile_commands_path.display()))?;
+
+    let mut files = Vec::new();
+
+    for cmd in commands {
+        let file_path = PathBuf::from(&cmd.file);
+
+        // Only process C files
+        if let Some(ext) = file_path.extension() {
+            if ext == "c" {
+                let file_str = file_path.to_string_lossy();
+                if should_process_file(&file_str, include_rules, exclude_rules) {
+                    // Use absolute path if available, otherwise relative
+                    if file_path.is_absolute() {
+                        files.push(file_path);
+                    } else {
+                        // Try to make it absolute using the directory from compile command
+                        let abs_path = if !cmd.directory.is_empty() {
+                            PathBuf::from(&cmd.directory).join(&file_path)
+                        } else {
+                            file_path.clone()
+                        };
+
+                        if abs_path.exists() {
+                            files.push(abs_path);
+                        } else if file_path.exists() {
+                            files.push(file_path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if files.is_empty() {
+        anyhow::bail!("No .c files found in compile_commands.json");
+    }
+
+    Ok(files)
 }
 
 /// Collect files to process based on the path and recursive flag
