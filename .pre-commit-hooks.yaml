@@ -28,3 +28,13 @@
   files: \.(c|h)$
   pass_filenames: true
   args: ['--mccabe-threshold=10', '--cognitive-threshold=10', '--nesting-threshold=3', '--sloc-threshold=30', '--abc-threshold=5.0', '--return-threshold=3']
+
+# Test quality checker - validates tests have sufficient complexity and boundary coverage
+# Note: Requires manual configuration with test file and source file pairs
+# See README for configuration examples
+- id: test-complexity
+  name: Test Quality Check (Complexity & Boundaries)
+  description: Validate unit tests have sufficient cyclomatic complexity and boundary coverage
+  entry: test-complexity
+  language: rust
+  pass_filenames: false

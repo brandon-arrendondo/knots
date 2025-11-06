@@ -19,10 +19,12 @@ jobs:
         include:
           - os: ubuntu-22.04
             artifact_name: knots-linux-x64
-            binary_path: target/release/knots
+            knots_binary: target/release/knots
+            test_complexity_binary: target/release/test-complexity
           - os: windows-2022
             artifact_name: knots-windows-x64
-            binary_path: target/release/knots.exe
+            knots_binary: target/release/knots.exe
+            test_complexity_binary: target/release/test-complexity.exe
 
     steps:
       - name: Checkout code
@@ -31,7 +33,7 @@ jobs:
       - name: Extract version from Cargo.toml
         id: version
         run: |
-          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          VERSION=$(grep '^version = ' knots/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
         shell: bash
@@ -79,16 +81,26 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           echo "=== Build Artifacts ==="
-          ls -lh ${{ matrix.binary_path }} || echo "Binary not found"
+          echo "Knots binary:"
+          ls -lh ${{ matrix.knots_binary }} || echo "Knots binary not found"
+          echo "Test-complexity binary:"
+          ls -lh ${{ matrix.test_complexity_binary }} || echo "Test-complexity binary not found"
 
       - name: List Build Output (Windows)
         if: runner.os == 'Windows'
         run: |
           Write-Host "=== Build Artifacts ==="
-          if (Test-Path "${{ matrix.binary_path }}") {
-            Get-Item "${{ matrix.binary_path }}" | Format-List Name, Length, LastWriteTime
+          Write-Host "Knots binary:"
+          if (Test-Path "${{ matrix.knots_binary }}") {
+            Get-Item "${{ matrix.knots_binary }}" | Format-List Name, Length, LastWriteTime
           } else {
-            Write-Host "Binary not found"
+            Write-Host "Knots binary not found"
+          }
+          Write-Host "Test-complexity binary:"
+          if (Test-Path "${{ matrix.test_complexity_binary }}") {
+            Get-Item "${{ matrix.test_complexity_binary }}" | Format-List Name, Length, LastWriteTime
+          } else {
+            Write-Host "Test-complexity binary not found"
           }
         shell: pwsh
 
@@ -98,8 +110,10 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           ARTIFACT_DIR="artifacts/${{ matrix.artifact_name }}-${VERSION}"
           mkdir -p "${ARTIFACT_DIR}"
-          cp ${{ matrix.binary_path }} "${ARTIFACT_DIR}/"
+          cp ${{ matrix.knots_binary }} "${ARTIFACT_DIR}/"
+          cp ${{ matrix.test_complexity_binary }} "${ARTIFACT_DIR}/"
           cp README.md "${ARTIFACT_DIR}/" 2>/dev/null || true
+          cp test-complexity/README.md "${ARTIFACT_DIR}/TEST_COMPLEXITY_README.md" 2>/dev/null || true
           cp hooks/README.md "${ARTIFACT_DIR}/HOOKS_README.md" 2>/dev/null || true
           echo "=== Artifacts staged ==="
           ls -lh "${ARTIFACT_DIR}/"
@@ -111,8 +125,10 @@ jobs:
           $VERSION = "${{ steps.version.outputs.VERSION }}"
           $ARTIFACT_DIR = "artifacts/${{ matrix.artifact_name }}-${VERSION}"
           New-Item -ItemType Directory -Force -Path $ARTIFACT_DIR
-          Copy-Item "${{ matrix.binary_path }}" -Destination $ARTIFACT_DIR
+          Copy-Item "${{ matrix.knots_binary }}" -Destination $ARTIFACT_DIR
+          Copy-Item "${{ matrix.test_complexity_binary }}" -Destination $ARTIFACT_DIR
           Copy-Item "README.md" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
+          Copy-Item "test-complexity/README.md" -Destination "$ARTIFACT_DIR/TEST_COMPLEXITY_README.md" -ErrorAction SilentlyContinue
           Copy-Item "hooks/README.md" -Destination "$ARTIFACT_DIR/HOOKS_README.md" -ErrorAction SilentlyContinue
           Write-Host "=== Artifacts staged ==="
           Get-ChildItem $ARTIFACT_DIR
@@ -139,7 +155,7 @@ jobs:
       - name: Extract version from Cargo.toml
         id: version
         run: |
-          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          VERSION=$(grep '^version = ' knots/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
