@@ -18,12 +18,13 @@ repos:
   # Code complexity checking with knots
   # Requires: knots binary installed (cargo install knots or download from releases)
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: 0.2.0
+    rev: v0.3.0
     hooks:
       # Standard complexity check
       # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
       # Shows only violations. Passes silently if no issues.
       - id: knots
+        exclude: ^(Drivers/|Middlewares/)  # Exclude vendor/generated code
 
       # Uncomment for verbose output (shows summary even for passing files):
       # - id: knots-verbose
@@ -41,6 +42,17 @@ repos:
       #     - --sloc-threshold=100
       #     - --abc-threshold=15.0
       #     - --return-threshold=5
+
+      # Test quality validation - for Ceedling framework
+      # Parses TEST_SOURCE_FILE("path/to/source.c") macro from test files
+      # Customize --test-dir for your test directory (Test/test/Tests/etc)
+      # - id: test-complexity
+      #   args:
+      #     - --threshold=0.70
+      #     - --boundary-threshold=0.80
+      #     - --level=error
+      #     - --framework=ceedling
+      #     - --test-dir=Test
 
 # Configuration for pre-commit.ci (if using)
 ci:

@@ -28,3 +28,15 @@
   files: \.(c|h)$
   pass_filenames: true
   args: ['--mccabe-threshold=10', '--cognitive-threshold=10', '--nesting-threshold=3', '--sloc-threshold=30', '--abc-threshold=5.0', '--return-threshold=3']
+
+# Test quality checker - validates tests have sufficient complexity and boundary coverage
+# Designed for Ceedling framework - parses TEST_SOURCE_FILE macro to find source files
+- id: test-complexity
+  name: Test Quality Check (Complexity & Boundaries)
+  description: Validate unit tests have sufficient cyclomatic complexity and boundary coverage
+  entry: hooks/test-complexity-wrapper.sh
+  language: script
+  files: ^Test/test_.*\.c$
+  pass_filenames: true
+  require_serial: false
+  stages: [commit]

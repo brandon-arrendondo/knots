@@ -385,6 +385,60 @@ Multi-dimensional metric assessing automated testing difficulty:
 
 See [test_scoring.md](test_scoring.md) for complete specification.
 
+## Test Quality Analysis (test-complexity)
+
+This workspace also includes `test-complexity`, a companion tool that validates unit tests have sufficient complexity and boundary coverage to thoroughly exercise source code.
+
+### Quick Overview
+
+While traditional code coverage can be misleading (100% branch coverage doesn't guarantee all edge cases are tested), `test-complexity` enforces that tests have adequate cyclomatic complexity relative to the source code they're testing.
+
+```bash
+# Basic usage
+test-complexity test/test_battery.c src/battery.c
+
+# Custom thresholds
+test-complexity \
+  --threshold=0.70 \
+  --boundary-threshold=0.80 \
+  --level=error \
+  test/test_timer.c src/timer.c
+```
+
+### Key Features
+
+- **Complexity Ratio Analysis**: Ensures test complexity is proportional to source complexity
+- **Boundary Value Detection**: Validates tests cover critical boundary conditions (0, MAX, overflow)
+- **Pre-commit Integration**: Enforce test quality standards in your workflow
+
+### Pre-commit Hook
+
+The test-complexity hook is designed for **Ceedling** test framework and automatically finds source files by parsing the `TEST_SOURCE_FILE` macro:
+
+```yaml
+repos:
+  - repo: https://github.com/brandon-arrendondo/knots
+    rev: v0.3.0
+    hooks:
+      # Standard knots complexity check
+      - id: knots
+        args: [--mccabe-threshold=15, --cognitive-threshold=15]
+        exclude: ^(Drivers/|Middlewares/)
+
+      # Test quality validation for Ceedling projects
+      - id: test-complexity
+        args:
+          - --threshold=0.70
+          - --boundary-threshold=0.80
+          - --level=error
+          - --framework=ceedling
+          - --test-dir=Test
+```
+
+**How it works**: The wrapper parses `TEST_SOURCE_FILE("path/to/source.c")` from your Ceedling test files to automatically locate the corresponding source code. Adjust `--test-dir` if your tests are in a different directory (test/Tests/tests/etc).
+
+For complete documentation, see [test-complexity/README.md](test-complexity/README.md).
+
 ## Examples
 
 ### Example 1: Quick Health Check
@@ -548,8 +602,8 @@ cargo build
 cargo test
 
 # Run examples
-cargo run -- examples/complex.c
-cargo run -- -r -m examples/
+cargo run -- knots/examples/complex.c
+cargo run -- -r -m knots/examples/
 ```
 
 ## Dependencies
@@ -564,11 +618,13 @@ cargo run -- -r -m examples/
 
 ## See Also
 
+- [test-complexity/README.md](test-complexity/README.md) - Test quality analyzer documentation
 - [FILTERS.md](FILTERS.md) - Comprehensive filtering documentation
 - [test_scoring.md](test_scoring.md) - Test scoring metric specification
 - [filter-example-include.json](filter-example-include.json) - Example include filter
 - [filter-example-exclude.json](filter-example-exclude.json) - Example exclude filter
-- [examples/](examples/) - Sample C files with varying complexity
+- [knots/examples/](knots/examples/) - Sample C files with varying complexity
+- [test-complexity/examples/](test-complexity/examples/) - Test quality examples
 
 ## License
 
