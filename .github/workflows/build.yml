@@ -20,11 +20,11 @@ jobs:
           - os: ubuntu-22.04
             artifact_name: knots-linux-x64
             knots_binary: target/release/knots
-            test_complexity_binary: target/release/test-complexity
+            test_complexity_binary: target/release/knots-test-complexity
           - os: windows-2022
             artifact_name: knots-windows-x64
             knots_binary: target/release/knots.exe
-            test_complexity_binary: target/release/test-complexity.exe
+            test_complexity_binary: target/release/knots-test-complexity.exe
 
     steps:
       - name: Checkout code
@@ -78,7 +78,7 @@ jobs:
         continue-on-error: true
 
       - name: Run Tests - Test Complexity
-        run: cargo test --release -p test-complexity
+        run: cargo test --release -p knots-test-complexity
         continue-on-error: true
 
       - name: Verify Binaries
@@ -123,7 +123,7 @@ jobs:
           cp ${{ matrix.knots_binary }} "${ARTIFACT_DIR}/"
           cp ${{ matrix.test_complexity_binary }} "${ARTIFACT_DIR}/"
           cp README.md "${ARTIFACT_DIR}/" 2>/dev/null || true
-          cp test-complexity/README.md "${ARTIFACT_DIR}/TEST_COMPLEXITY_README.md" 2>/dev/null || true
+          cp knots-test-complexity/README.md "${ARTIFACT_DIR}/TEST_COMPLEXITY_README.md" 2>/dev/null || true
           cp hooks/README.md "${ARTIFACT_DIR}/HOOKS_README.md" 2>/dev/null || true
           echo "=== Artifacts staged ==="
           ls -lh "${ARTIFACT_DIR}/"
@@ -138,7 +138,7 @@ jobs:
           Copy-Item "${{ matrix.knots_binary }}" -Destination $ARTIFACT_DIR
           Copy-Item "${{ matrix.test_complexity_binary }}" -Destination $ARTIFACT_DIR
           Copy-Item "README.md" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
-          Copy-Item "test-complexity/README.md" -Destination "$ARTIFACT_DIR/TEST_COMPLEXITY_README.md" -ErrorAction SilentlyContinue
+          Copy-Item "knots-test-complexity/README.md" -Destination "$ARTIFACT_DIR/TEST_COMPLEXITY_README.md" -ErrorAction SilentlyContinue
           Copy-Item "hooks/README.md" -Destination "$ARTIFACT_DIR/HOOKS_README.md" -ErrorAction SilentlyContinue
           Write-Host "=== Artifacts staged ==="
           Get-ChildItem $ARTIFACT_DIR

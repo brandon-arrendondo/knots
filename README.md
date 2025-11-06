@@ -385,20 +385,20 @@ Multi-dimensional metric assessing automated testing difficulty:
 
 See [test_scoring.md](test_scoring.md) for complete specification.
 
-## Test Quality Analysis (test-complexity)
+## Test Quality Analysis (knots-test-complexity)
 
-This workspace also includes `test-complexity`, a companion tool that validates unit tests have sufficient complexity and boundary coverage to thoroughly exercise source code.
+This workspace also includes `knots-test-complexity`, a companion tool that validates unit tests have sufficient complexity and boundary coverage to thoroughly exercise source code.
 
 ### Quick Overview
 
-While traditional code coverage can be misleading (100% branch coverage doesn't guarantee all edge cases are tested), `test-complexity` enforces that tests have adequate cyclomatic complexity relative to the source code they're testing.
+While traditional code coverage can be misleading (100% branch coverage doesn't guarantee all edge cases are tested), `knots-test-complexity` enforces that tests have adequate cyclomatic complexity relative to the source code they're testing.
 
 ```bash
 # Basic usage
-test-complexity test/test_battery.c src/battery.c
+knots-test-complexity test/test_battery.c src/battery.c
 
 # Custom thresholds
-test-complexity \
+knots-test-complexity \
   --threshold=0.70 \
   --boundary-threshold=0.80 \
   --level=error \
@@ -413,7 +413,7 @@ test-complexity \
 
 ### Pre-commit Hook
 
-The test-complexity hook is designed for **Ceedling** test framework and automatically finds source files by parsing the `TEST_SOURCE_FILE` macro:
+The knots-test-complexity hook is designed for **Ceedling** test framework and automatically finds source files by parsing the `TEST_SOURCE_FILE` macro:
 
 ```yaml
 repos:
@@ -437,7 +437,7 @@ repos:
 
 **How it works**: The wrapper parses `TEST_SOURCE_FILE("path/to/source.c")` from your Ceedling test files to automatically locate the corresponding source code. Adjust `--test-dir` if your tests are in a different directory (test/Tests/tests/etc).
 
-For complete documentation, see [test-complexity/README.md](test-complexity/README.md).
+For complete documentation, see [knots-test-complexity/README.md](knots-test-complexity/README.md).
 
 ## Examples
 
@@ -618,13 +618,13 @@ cargo run -- -r -m knots/examples/
 
 ## See Also
 
-- [test-complexity/README.md](test-complexity/README.md) - Test quality analyzer documentation
+- [knots-test-complexity/README.md](knots-test-complexity/README.md) - Test quality analyzer documentation
 - [FILTERS.md](FILTERS.md) - Comprehensive filtering documentation
 - [test_scoring.md](test_scoring.md) - Test scoring metric specification
 - [filter-example-include.json](filter-example-include.json) - Example include filter
 - [filter-example-exclude.json](filter-example-exclude.json) - Example exclude filter
 - [knots/examples/](knots/examples/) - Sample C files with varying complexity
-- [test-complexity/examples/](test-complexity/examples/) - Test quality examples
+- [knots-test-complexity/examples/](knots-test-complexity/examples/) - Test quality examples
 
 ## License
 

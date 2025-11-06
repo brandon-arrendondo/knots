@@ -1,6 +1,6 @@
 [package]
-name = "test-complexity"
-version = "0.1.0"
+name = "knots-test-complexity"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Test quality analyzer - validates unit tests have sufficient complexity and boundary coverage"
 
 [[bin]]
-name = "test-complexity"
+name = "knots-test-complexity"
 path = "src/main.rs"
 
 [dependencies]

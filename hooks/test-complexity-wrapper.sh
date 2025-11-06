@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Pre-commit wrapper for test-complexity
+# Pre-commit wrapper for knots-test-complexity
 # Analyzes test files and their corresponding source files for quality
 #
 # Supports test frameworks:
@@ -15,7 +15,7 @@ BOUNDARY_THRESHOLD=0.80
 LEVEL="warn"
 CHECK_BOUNDARIES=true
 VERBOSE=false
-TOOL_PATH=${TOOL_PATH:-test-complexity}
+TOOL_PATH=${TOOL_PATH:-knots-test-complexity}
 FRAMEWORK="ceedling"
 TEST_DIR="Test"
 
@@ -100,9 +100,9 @@ if [ "$FRAMEWORK" != "ceedling" ]; then
     exit 1
 fi
 
-# Check if test-complexity is available
+# Check if knots-test-complexity is available
 if ! command -v "$TOOL_PATH" &> /dev/null; then
-    echo -e "${YELLOW}Warning: test-complexity not found at $TOOL_PATH${NC}"
+    echo -e "${YELLOW}Warning: knots-test-complexity not found at $TOOL_PATH${NC}"
     echo "Install it or set TOOL_PATH environment variable"
     exit 0  # Don't fail if tool not installed
 fi

@@ -9,7 +9,8 @@ use analyzer::TestQualityAnalyzer;
 use reporter::Reporter;
 
 #[derive(Parser)]
-#[command(name = "test-complexity")]
+#[command(name = "knots-test-complexity")]
+#[command(version)]
 #[command(about = "Test quality analyzer for C unit tests - validates test complexity against source complexity", long_about = None)]
 struct Args {
     /// Test file path (e.g., Test/test_battery_service.c)

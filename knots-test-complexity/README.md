@@ -1,4 +1,4 @@
-# tool_test_complexity
+# knots-test-complexity
 
 A Rust-based test quality analyzer for C projects that validates unit tests have sufficient complexity to thoroughly exercise source code.
 
@@ -99,56 +99,39 @@ void test_timeout_boundaries() {
 ## Building
 
 ```bash
-cargo build --release
+cargo build --release --workspace
 ```
 
-The binary will be at `target/release/test-complexity`
+The binary will be at `target/release/knots-test-complexity`
 
 ## Installation
 
-### Quick Install
+### From Source
 
 ```bash
-cd /home/tvanfossen/BISSELL/ELEC_SW/tool_test_complexity
-./hooks/install-hook.sh
+cd knots
+cargo build --release --workspace
+# Binary is at target/release/knots-test-complexity
 ```
 
-This installs the binary to `~/.local/bin/test-complexity`. For system-wide installation, use `./hooks/install-hook.sh --system`.
+Add to your PATH or copy to a location in your PATH.
 
 ### Pre-Commit Integration
 
-#### Local Development Setup
-
-For local development and testing, add to your project's `.pre-commit-config.yaml`:
+Add to your project's `.pre-commit-config.yaml`:
 
 ```yaml
 repos:
-  - repo: local
-    hooks:
-      - id: test-complexity
-        name: Test Quality Check (Complexity & Boundaries)
-        entry: /home/tvanfossen/BISSELL/ELEC_SW/tool_test_complexity/hooks/test-complexity-wrapper.sh
-        language: script
-        files: ^Test/test_.*\.c$
-        pass_filenames: true
-        args:
-          - --threshold=0.70
-          - --level=warn
-```
-
-#### Production Deployment
-
-When deployed as a proper pre-commit repository (future):
-
-```yaml
-repos:
-  - repo: https://github.com/your-org/tool_test_complexity
-    rev: v1.0.0  # Use specific version tag
+  - repo: https://github.com/brandon-arrendondo/knots
+    rev: v0.3.0  # Use specific version tag
     hooks:
       - id: test-complexity
         args:
           - --threshold=0.70
+          - --boundary-threshold=0.80
           - --level=warn
+          - --framework=ceedling
+          - --test-dir=Test
 ```
 
 **Configuration Options:**
@@ -181,19 +164,23 @@ args:
 Analyze a test file and its corresponding source:
 
 ```bash
-test-complexity Test/test_battery_service.c Core/Src/modules/battery_service/battery_service.c
+knots-test-complexity Test/test_battery_service.c Core/Src/modules/battery_service/battery_service.c
 ```
 
 With verbose output:
 
 ```bash
-test-complexity -v Test/test_battery_service.c Core/Src/modules/battery_service/battery_service.c
+knots-test-complexity -v Test/test_battery_service.c Core/Src/modules/battery_service/battery_service.c
 ```
 
-Check all test files in a project:
+With custom thresholds:
 
 ```bash
-test-complexity --check-all Test/ Core/Src/modules/
+knots-test-complexity \
+  --threshold=0.70 \
+  --boundary-threshold=0.80 \
+  --level=error \
+  Test/test_timer.c Core/Src/timer.c
 ```
 
 ### Output Example
@@ -342,14 +329,14 @@ void test_multiple_frames() {
 
 This encourages well-structured tests with reusable helpers.
 
-## Integration with tools_knots
+## Integration with knots
 
-`tool_test_complexity` complements `tools_knots`:
+`knots-test-complexity` complements `knots`:
 
 | Tool | Purpose | Applied To | Metric |
 |------|---------|------------|--------|
-| **tools_knots** | Source code quality | Production code (`.c`, `.h`) | McCabe & Cognitive complexity per function |
-| **tool_test_complexity** | Test quality | Test code (`test_*.c`) | Aggregate complexity ratio & boundary coverage |
+| **knots** | Source code quality | Production code (`.c`, `.h`) | McCabe & Cognitive complexity per function |
+| **knots-test-complexity** | Test quality | Test code (`test_*.c`) | Aggregate complexity ratio & boundary coverage |
 
 **Example Combined Workflow:**
 
@@ -401,30 +388,18 @@ regex = "1.10"
 ## Project Structure
 
 ```
-tool_test_complexity/
+knots-test-complexity/
 ├── Cargo.toml                          # Rust project manifest
-├── Cargo.lock                          # Dependency lock file
 ├── README.md                           # This file
-├── IMPLEMENTATION.md                   # Detailed implementation guide
-├── ALGORITHM.md                        # Algorithm specifications
-├── example-pre-commit-config.yaml     # Example pre-commit setup
-├── hooks/
-│   ├── test-complexity-wrapper.sh     # Pre-commit wrapper script
-│   ├── install-hook.sh                # Installation script
-│   └── README.md                      # Hook usage guide
 ├── src/
 │   ├── main.rs                        # CLI entry point
-│   ├── complexity.rs                  # Cyclomatic complexity calculator
-│   ├── boundary.rs                    # Boundary value detector
 │   ├── analyzer.rs                    # Test quality analyzer
+│   ├── boundary.rs                    # Boundary value detector
 │   └── reporter.rs                    # Output formatting
-├── examples/
-│   ├── good_test.c                    # Example: sufficient complexity
-│   ├── bad_test.c                     # Example: insufficient complexity
-│   └── boundary_test.c                # Example: boundary testing
-└── tests/
-    ├── integration_test.rs            # Integration tests
-    └── fixtures/                      # Test fixtures
+└── examples/
+    ├── test_timer_good.c              # Example: sufficient complexity
+    ├── test_timer_bad.c               # Example: insufficient complexity
+    └── README.md                      # Example documentation
 ```
 
 ## Testing
@@ -443,11 +418,11 @@ cargo test -- --nocapture
 
 ## License
 
-Internal BISSELL tool.
+MIT License. See LICENSE file.
 
 ## See Also
 
-- **tools_knots**: Source code complexity analyzer
+- **knots**: Source code complexity analyzer
 - **pmccabe**: Industry-standard McCabe complexity tool (validation reference)
 - **Cognitive Complexity**: [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/)
 - **Mutation Testing**: Alternative approach for test quality (future consideration)

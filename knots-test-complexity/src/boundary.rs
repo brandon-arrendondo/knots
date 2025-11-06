@@ -8,7 +8,6 @@ pub struct BoundaryValue {
     pub type_name: String,
     pub min_value: i64,
     pub max_value: i64,
-    pub line: usize,
 }
 
 impl BoundaryValue {
@@ -79,18 +78,11 @@ impl BoundaryDetector {
                         continue;
                     }
 
-                    // Find line number
-                    let line = source[..var_name.start()]
-                        .chars()
-                        .filter(|&c| c == '\n')
-                        .count() + 1;
-
                     self.boundaries.push(BoundaryValue {
                         variable_name: var_str.to_string(),
                         type_name: type_name.to_string(),
                         min_value: min_val,
                         max_value: max_val,
-                        line,
                     });
                 }
             }
@@ -122,12 +114,6 @@ impl BoundaryDetector {
             for captures in re.captures_iter(source) {
                 if let Some(value_match) = captures.get(1) {
                     if let Ok(value) = value_match.as_str().parse::<i64>() {
-                        // Find line number
-                        let line = source[..value_match.start()]
-                            .chars()
-                            .filter(|&c| c == '\n')
-                            .count() + 1;
-
                         // Create boundary based on the constant
                         let (min_val, max_val) = if boundary_type.contains("upper") || boundary_type.contains("max") {
                             // Upper bound: test value and value+1
@@ -142,7 +128,6 @@ impl BoundaryDetector {
                             type_name: boundary_type.to_string(),
                             min_value: min_val,
                             max_value: max_val,
-                            line,
                         });
                     }
                 }

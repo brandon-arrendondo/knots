@@ -1,6 +1,6 @@
-# test-complexity Examples
+# knots-test-complexity Examples
 
-This directory contains example C source files and their corresponding test files to demonstrate the `test-complexity` tool and best practices for writing thorough unit tests.
+This directory contains example C source files and their corresponding test files to demonstrate the `knots-test-complexity` tool and best practices for writing thorough unit tests.
 
 ## Overview
 
@@ -21,7 +21,7 @@ The examples show:
 
 **Good Test:** `test_timer_good.c`
 ```bash
-test-complexity examples/test_timer_good.c examples/timer.c
+knots-knots-test-complexity examples/test_timer_good.c examples/timer.c
 ```
 
 Expected: **PASS**
@@ -31,7 +31,7 @@ Expected: **PASS**
 
 **Bad Test:** `test_timer_bad.c`
 ```bash
-test-complexity examples/test_timer_bad.c examples/timer.c
+knots-test-complexity examples/test_timer_bad.c examples/timer.c
 ```
 
 Expected: **FAIL**
@@ -51,7 +51,7 @@ Expected: **FAIL**
 
 **Test:** `test_sensor_boundaries.c`
 ```bash
-test-complexity examples/test_sensor_boundaries.c examples/sensor.c
+knots-test-complexity examples/test_sensor_boundaries.c examples/sensor.c
 ```
 
 Expected: **PASS**
@@ -72,13 +72,13 @@ Expected: **PASS**
 
 ```bash
 # Good test (should pass)
-test-complexity examples/test_timer_good.c examples/timer.c --verbose
+knots-test-complexity examples/test_timer_good.c examples/timer.c --verbose
 
 # Bad test (should fail)
-test-complexity examples/test_timer_bad.c examples/timer.c --verbose
+knots-test-complexity examples/test_timer_bad.c examples/timer.c --verbose
 
 # Boundary test (should pass)
-test-complexity examples/test_sensor_boundaries.c examples/sensor.c --verbose
+knots-test-complexity examples/test_sensor_boundaries.c examples/sensor.c --verbose
 ```
 
 ### Compare Good vs Bad Tests
@@ -87,11 +87,11 @@ Run both tests against the same source to see the difference:
 
 ```bash
 echo "=== Good Test ==="
-test-complexity examples/test_timer_good.c examples/timer.c
+knots-test-complexity examples/test_timer_good.c examples/timer.c
 
 echo ""
 echo "=== Bad Test ==="
-test-complexity examples/test_timer_bad.c examples/timer.c
+knots-test-complexity examples/test_timer_bad.c examples/timer.c
 ```
 
 ### Compile and Run the Test Code

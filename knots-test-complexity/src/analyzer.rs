@@ -51,7 +51,6 @@ pub struct AnalysisResult {
     pub source_cognitive_complexity: u32,
     pub cyclomatic_ratio: f64,
     pub cognitive_ratio: f64,
-    pub combined_ratio: f64,
     pub threshold: f64,
     pub boundary_threshold: f64,
     pub test_function_count: usize,
@@ -102,9 +101,7 @@ impl TestQualityAnalyzer {
 
         // Use cyclomatic ratio only for pass/fail determination
         // Cognitive complexity is tracked but not used in threshold calculation
-        let combined_ratio = cyclomatic_ratio;
-
-        let mut passed = combined_ratio >= self.threshold;
+        let mut passed = cyclomatic_ratio >= self.threshold;
 
         // Perform boundary analysis if requested
         let boundary_analysis = if check_boundaries {
@@ -127,7 +124,7 @@ impl TestQualityAnalyzer {
 
         let mut recommendations = Vec::new();
         if !passed {
-            self.generate_recommendations(&mut recommendations, combined_ratio, &boundary_analysis);
+            self.generate_recommendations(&mut recommendations, cyclomatic_ratio, &boundary_analysis);
         }
 
         AnalysisResult {
@@ -138,7 +135,6 @@ impl TestQualityAnalyzer {
             source_cognitive_complexity: source_cognitive,
             cyclomatic_ratio,
             cognitive_ratio,
-            combined_ratio,
             threshold: self.threshold,
             boundary_threshold: self.boundary_threshold,
             test_function_count: self.test_analysis.functions.len(),
@@ -156,10 +152,10 @@ impl TestQualityAnalyzer {
         detector.analyze_test_coverage(&self.test_analysis.file_path)
     }
 
-    fn generate_recommendations(&self, recommendations: &mut Vec<String>, combined_ratio: f64, boundary_analysis: &Option<BoundaryAnalysis>) {
+    fn generate_recommendations(&self, recommendations: &mut Vec<String>, cyclomatic_ratio: f64, boundary_analysis: &Option<BoundaryAnalysis>) {
         // Only generate complexity recommendations if complexity ratio failed
-        if combined_ratio < self.threshold {
-            let gap_percent = ((self.threshold - combined_ratio) * 100.0) as i32;
+        if cyclomatic_ratio < self.threshold {
+            let gap_percent = ((self.threshold - cyclomatic_ratio) * 100.0) as i32;
 
             // Use average of both target complexities
             let target_cyclomatic = (self.source_analysis.total_cyclomatic_complexity as f64 * self.threshold) as u32;
