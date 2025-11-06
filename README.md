@@ -128,12 +128,14 @@ knots -r ~/projects/myproject/
 ```
 
 **Recursive mode automatically:**
-- Scans all `.c` and `.h` files recursively
+- Scans all `.c` files recursively (skips `.h` headers by default)
 - Handles UTF-8 encoding errors gracefully (skips and warns)
 - Shows top 5 worst functions by complexity
 - Displays totals and averages across all files
 - Writes detailed per-function report to `report.txt`
 - Reports file processing statistics
+
+**Note:** Recursive mode only scans `.c` files by default because header files often contain inline functions, vendor code, and simple utilities. You can still analyze a specific header file directly (e.g., `knots myheader.h`) or use filters to include headers if needed.
 
 **Example output:**
 ```
@@ -410,12 +412,19 @@ iconv -f ISO-8859-1 -t UTF-8 file.c > file_utf8.c
 knots -r . --exclude exclude-encoding-issues.json
 ```
 
-### "No C files (.c or .h) found"
+### "No .c files found in directory"
 
 Check:
-- File extensions are correct
+- File extensions are `.c` (recursive mode only scans `.c` files, not `.h`)
 - You're in the right directory
 - Files aren't filtered out by include/exclude rules
+
+**Note:** To include `.h` files, use a filter:
+```json
+{
+  "file_patterns": ["**/*.c", "**/*.h"]
+}
+```
 
 ## Advanced Usage
 

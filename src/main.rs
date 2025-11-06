@@ -313,7 +313,8 @@ fn collect_files(
             );
         }
 
-        // Recursive directory mode
+        // Recursive directory mode - only scan .c files by default
+        // (headers often contain inline/vendor code)
         for entry in WalkDir::new(path)
             .follow_links(true)
             .into_iter()
@@ -322,7 +323,7 @@ fn collect_files(
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension() {
-                    if ext == "c" || ext == "h" {
+                    if ext == "c" {
                         let file_str = file_path.to_string_lossy();
                         if should_process_file(&file_str, include_rules, exclude_rules) {
                             files.push(file_path.to_path_buf());
@@ -333,7 +334,7 @@ fn collect_files(
         }
 
         if files.is_empty() {
-            anyhow::bail!("No C files (.c or .h) found in directory: {}", path.display());
+            anyhow::bail!("No .c files found in directory: {}", path.display());
         }
     } else {
         anyhow::bail!("Path '{}' does not exist", path.display());
@@ -355,9 +356,9 @@ fn should_process_file(
         }
     }
 
-    // Check exclude rules (blacklist)
+    // Check exclude rules (blacklist) - if it matches exclude, DON'T process
     if let Some(rules) = exclude_rules {
-        if !rules.matches_file(file_path) {
+        if rules.matches_file(file_path) {
             return false;
         }
     }
@@ -428,8 +429,29 @@ fn should_process_function(
     }
 
     // Check exclude rules (blacklist) - if it matches exclude, DON'T process
+    // Only apply function/complexity filters if they're actually specified
     if let Some(rules) = exclude_rules {
-        if rules.matches_function(function_name) && rules.matches_complexity(complexity) {
+        let matches_func = !rules.function_patterns.is_empty() && rules.matches_function(function_name);
+        let matches_complexity = (rules.min_complexity.is_some() || rules.max_complexity.is_some()) && rules.matches_complexity(complexity);
+
+        // If no function patterns specified, only check complexity
+        // If no complexity bounds specified, only check function patterns
+        // If both specified, require both to match
+        let should_exclude = if rules.function_patterns.is_empty() && rules.min_complexity.is_none() && rules.max_complexity.is_none() {
+            // No function-level filters, don't exclude based on function criteria
+            false
+        } else if rules.function_patterns.is_empty() {
+            // Only complexity filter
+            matches_complexity
+        } else if rules.min_complexity.is_none() && rules.max_complexity.is_none() {
+            // Only function pattern filter
+            matches_func
+        } else {
+            // Both specified, require both
+            matches_func && matches_complexity
+        };
+
+        if should_exclude {
             return false;
         }
     }
