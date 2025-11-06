@@ -43,26 +43,16 @@ repos:
       #     - --abc-threshold=15.0
       #     - --return-threshold=5
 
-      # Test quality validation (requires explicit test/source file pairs)
-      # Configure one hook per test module you want to validate
-      # Example using included test-complexity examples:
+      # Test quality validation - for Ceedling framework
+      # Parses TEST_SOURCE_FILE("path/to/source.c") macro from test files
+      # Customize --test-dir for your test directory (Test/test/Tests/etc)
       # - id: test-complexity
-      #   name: Test Quality - Timer Module
       #   args:
-      #     - test-complexity/examples/test_timer_good.c
-      #     - test-complexity/examples/timer.c
       #     - --threshold=0.70
       #     - --boundary-threshold=0.80
       #     - --level=error
-      #
-      # - id: test-complexity
-      #   name: Test Quality - Sensor Module
-      #   args:
-      #     - test-complexity/examples/test_sensor_boundaries.c
-      #     - test-complexity/examples/sensor.c
-      #     - --threshold=0.70
-      #     - --boundary-threshold=0.80
-      #     - --level=error
+      #     - --framework=ceedling
+      #     - --test-dir=Test
 
 # Configuration for pre-commit.ci (if using)
 ci:

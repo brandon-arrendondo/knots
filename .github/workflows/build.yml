@@ -71,11 +71,21 @@ jobs:
         continue-on-error: true
 
       - name: Build Release Binary
-        run: cargo build --release
+        run: cargo build --release --workspace
 
-      - name: Run Tests
-        run: cargo test --release
+      - name: Run Tests - Knots
+        run: cargo test --release -p knots
         continue-on-error: true
+
+      - name: Run Tests - Test Complexity
+        run: cargo test --release -p test-complexity
+        continue-on-error: true
+
+      - name: Verify Binaries
+        run: |
+          echo "=== Verifying binaries ==="
+          ${{ matrix.knots_binary }} --version
+          ${{ matrix.test_complexity_binary }} --help | head -5
 
       - name: List Build Output (Linux)
         if: runner.os == 'Linux'

@@ -413,7 +413,7 @@ test-complexity \
 
 ### Pre-commit Hook
 
-Since test-complexity requires both test and source file pairs, you need to configure it explicitly:
+The test-complexity hook is designed for **Ceedling** test framework and automatically finds source files by parsing the `TEST_SOURCE_FILE` macro:
 
 ```yaml
 repos:
@@ -425,27 +425,17 @@ repos:
         args: [--mccabe-threshold=15, --cognitive-threshold=15]
         exclude: ^(Drivers/|Middlewares/)
 
-      # Test quality validation (configure per test/source pair)
+      # Test quality validation for Ceedling projects
       - id: test-complexity
-        name: Test Quality - Timer Module
         args:
-          - Test/test_timer.c
-          - Core/Src/timer.c
           - --threshold=0.70
           - --boundary-threshold=0.80
           - --level=error
-
-      - id: test-complexity
-        name: Test Quality - Sensor Module
-        args:
-          - Test/test_sensor.c
-          - Core/Src/sensor.c
-          - --threshold=0.70
-          - --boundary-threshold=0.80
-          - --level=error
+          - --framework=ceedling
+          - --test-dir=Test
 ```
 
-**Note**: Each test-complexity hook instance checks one test/source file pair. Repeat the hook configuration for each module you want to validate.
+**How it works**: The wrapper parses `TEST_SOURCE_FILE("path/to/source.c")` from your Ceedling test files to automatically locate the corresponding source code. Adjust `--test-dir` if your tests are in a different directory (test/Tests/tests/etc).
 
 For complete documentation, see [test-complexity/README.md](test-complexity/README.md).
 
@@ -612,8 +602,8 @@ cargo build
 cargo test
 
 # Run examples
-cargo run -- examples/complex.c
-cargo run -- -r -m examples/
+cargo run -- knots/examples/complex.c
+cargo run -- -r -m knots/examples/
 ```
 
 ## Dependencies
@@ -633,7 +623,7 @@ cargo run -- -r -m examples/
 - [test_scoring.md](test_scoring.md) - Test scoring metric specification
 - [filter-example-include.json](filter-example-include.json) - Example include filter
 - [filter-example-exclude.json](filter-example-exclude.json) - Example exclude filter
-- [examples/](examples/) - Sample C files with varying complexity
+- [knots/examples/](knots/examples/) - Sample C files with varying complexity
 - [test-complexity/examples/](test-complexity/examples/) - Test quality examples
 
 ## License
