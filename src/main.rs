@@ -57,8 +57,13 @@ fn main() -> Result<()> {
                 println!("\n=== {} ===", file.display());
             }
 
-            let source_code = fs::read_to_string(file)
-                .with_context(|| format!("Failed to read file: {}", file.display()))?;
+            let source_code = match fs::read_to_string(file) {
+                Ok(code) => code,
+                Err(e) => {
+                    eprintln!("Warning: Skipping {}: {}", file.display(), e);
+                    continue;
+                }
+            };
 
             let mut parser = tree_sitter::Parser::new();
             parser
@@ -95,29 +100,45 @@ fn main() -> Result<()> {
 
     // For recursive mode with multiple files: collect all metrics, write report, show summary
     let mut all_metrics = Vec::new();
+    let mut skipped_files = 0;
 
     for file in &files {
-        let source_code = fs::read_to_string(file)
-            .with_context(|| format!("Failed to read file: {}", file.display()))?;
+        let source_code = match fs::read_to_string(file) {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("Warning: Skipping {}: {}", file.display(), e);
+                skipped_files += 1;
+                continue;
+            }
+        };
 
         let mut parser = tree_sitter::Parser::new();
         parser
             .set_language(&tree_sitter_c::language())
             .context("Failed to set C language")?;
 
-        let tree = parser
-            .parse(&source_code, None)
-            .with_context(|| format!("Failed to parse C code in {}", file.display()))?;
+        let tree = match parser.parse(&source_code, None) {
+            Some(t) => t,
+            None => {
+                eprintln!("Warning: Failed to parse {}", file.display());
+                skipped_files += 1;
+                continue;
+            }
+        };
 
         let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""));
         all_metrics.extend(metrics);
+    }
+
+    if all_metrics.is_empty() {
+        anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
     }
 
     // Write detailed report to file
     write_detailed_report(&all_metrics, args.verbose)?;
 
     // Display summary with top 5 worst functions and totals/averages
-    display_recursive_summary(&all_metrics);
+    display_recursive_summary(&all_metrics, files.len(), skipped_files);
 
     Ok(())
 }
@@ -307,7 +328,7 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Resu
 }
 
 /// Display summary with top 5 worst functions and totals/averages
-fn display_recursive_summary(all_metrics: &[FunctionMetrics]) {
+fn display_recursive_summary(all_metrics: &[FunctionMetrics], total_files: usize, skipped_files: usize) {
     // Sort by worst complexity (max of McCabe and Cognitive)
     let mut sorted = all_metrics.to_vec();
     sorted.sort_by(|a, b| b.max_complexity().cmp(&a.max_complexity()));
@@ -370,6 +391,12 @@ fn display_recursive_summary(all_metrics: &[FunctionMetrics]) {
     }
 
     println!("\nDetailed per-function output written to report.txt");
+    println!("\n=== FILES PROCESSED ===\n");
+    println!("  Total files found: {}", total_files);
+    println!("  Successfully processed: {}", total_files - skipped_files);
+    if skipped_files > 0 {
+        println!("  Skipped (encoding/parse errors): {}", skipped_files);
+    }
 }
 
 #[derive(Debug, Clone)]
