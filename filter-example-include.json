@@ -1,0 +1,15 @@
+{
+  "file_patterns": [
+    "src/**/*.c",
+    "lib/**/*.c",
+    "!**/test_*.c",
+    "!**/vendor/**"
+  ],
+  "function_patterns": [
+    "^process_.*",
+    "^handle_.*",
+    "^init_.*"
+  ],
+  "min_complexity": 5,
+  "max_complexity": 50
+}

@@ -1,339 +1,499 @@
-# knots
+# Knots
 
-A comprehensive Rust-based code complexity analyzer for C files that calculates multiple complexity metrics including McCabe complexity, cognitive complexity, nesting depth, SLOC, ABC complexity, return counts, and test generation difficulty scoring.
+A fast, powerful C code complexity analyzer with visual indicators, built on tree-sitter. Knots helps you identify problematic code patterns, prioritize refactoring efforts, and understand testability concerns across your codebase.
 
 ## Features
 
-- **McCabe Complexity (Cyclomatic Complexity)**: Measures the number of linearly independent paths through a program's source code
-- **Cognitive Complexity**: Measures how difficult code is to understand, with penalties for nesting
-- **Nesting Depth**: Maximum nesting level of control structures
-- **SLOC**: Source Lines of Code (non-comment, non-blank lines)
-- **ABC Complexity**: Assignment-Branch-Condition metric with vector magnitude
-- **Return Count**: Number of return statements in each function
-- **Test Scoring**: Multi-dimensional assessment of automated test generation difficulty
-- Per-function analysis with detailed metrics
-- Summary statistics across all functions
-- **Validated**: McCabe complexity results match pmccabe output exactly
+- 🎯 **Multiple Complexity Metrics**: McCabe, Cognitive, Nesting Depth, SLOC, ABC, Test Scoring
+- 📊 **Testability Matrix**: Categorize functions by complexity and testability
+- 🔄 **Recursive Directory Scanning**: Analyze entire codebases at once
+- 🎨 **Visual Indicators**: Easy-to-understand emoji-based complexity ratings
+- 🔍 **Flexible Filtering**: Include/exclude files and functions with JSON-based rules
+- ⚡ **Fast & Accurate**: Built on tree-sitter for reliable AST-based analysis
+- 📝 **Detailed Reports**: Generate comprehensive reports with `report.txt`
+- ✅ **Validated**: McCabe complexity matches pmccabe output exactly (100% accuracy)
 
-## Validation
+## Installation
 
-The McCabe complexity implementation has been validated against multiple industry-standard tools with 100% accuracy:
-
-### Validated Against:
-- **[pmccabe](https://people.debian.org/~bame/pmccabe/)** - Industry standard since 1990s (HP origin)
-- **[lizard](https://github.com/terryyin/lizard)** - Popular multi-language complexity analyzer
-
-### Results:
-- ✓ 13/13 functions match pmccabe exactly (100% accuracy)
-- ✓ Validated against industry-standard reference implementation
-- ✓ Correctly implements switch/case complexity: +1 per switch statement (pmccabe compatible)
-- ✓ Handles nested structures, loops, and logical operators accurately
-
-### Unique Value:
-Unlike most tools that only measure McCabe complexity, knots provides a comprehensive suite of metrics:
-- **Cognitive Complexity** based on the [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/)
-- **ABC Complexity** for measuring assignment, branch, and condition complexity
-- **Nesting Depth** analysis to identify deeply nested code
-- **SLOC** and **Return Count** for additional code quality insights
-
-This makes knots one of the most feature-complete complexity analyzers available for C code.
-
-## Building
+### From Source
 
 ```bash
+git clone https://github.com/yourusername/knots.git
+cd knots
 cargo build --release
+./target/release/knots --version
+```
+
+### Requirements
+
+- Rust 1.70 or higher
+
+## Quick Start
+
+```bash
+# Analyze a single file
+knots path/to/file.c
+
+# Recursively analyze a directory
+knots -r path/to/project/
+
+# Show detailed per-function breakdown
+knots -v path/to/file.c
+
+# Display testability matrix
+knots -m path/to/file.c
+
+# Combine recursive and matrix modes
+knots -r -m path/to/project/
+
+# Filter analysis
+knots -r . --include filter.json --exclude exclude.json
+```
+
+## Complexity Indicators
+
+Knots uses visual emoji indicators based on the maximum of McCabe and Cognitive complexity:
+
+- 😊 **1-10**: Good - Low complexity, easy to maintain
+- 😐 **11-20**: Okay - Moderate complexity, monitor carefully
+- 😠 **21-49**: Bad - High complexity, should be refactored
+- 😢 **50+**: Critical - Very high complexity, urgent refactoring needed
+
+## Command-Line Options
+
+```
+knots [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>  Path to the C file or directory to analyze
+
+Options:
+  -r, --recursive         Recursively process all C files in directories
+  -v, --verbose           Show detailed per-function analysis
+  -m, --matrix            Show testability matrix categorization
+  --include <FILE>        Include filter rules from JSON file (whitelist)
+  --exclude <FILE>        Exclude filter rules from JSON file (blacklist)
+  -h, --help              Print help
+  -V, --version           Print version
 ```
 
 ## Usage
 
-Analyze a C file with per-function complexity and visual indicators:
+### Single File Analysis
+
 ```bash
-./target/release/knots <file.c>
+knots src/main.c
 ```
 
-Show detailed per-function analysis (multi-line format with each metric on a separate line):
-```bash
-./target/release/knots --verbose <file.c>
+Output shows per-function metrics:
+```
+😊 init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5)
+😠 process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18)
+
+Summary:
+  Total Functions: 2
+  Average McCabe Complexity: 15.50
+  ...
 ```
 
-Or using the short flag:
+### Verbose Mode
+
 ```bash
-./target/release/knots -v <file.c>
+knots -v src/main.c
 ```
 
-Without the verbose flag, each function's metrics are displayed on a single line. Summary statistics are always shown regardless of verbose mode.
-
-Show testability matrix categorization:
-```bash
-./target/release/knots --matrix <file.c>
+Shows detailed breakdown including all test scoring components:
+```
+Function: process_data 😠
+  McCabe Complexity: 28
+  Cognitive Complexity: 45
+  Nesting Depth: 8
+  SLOC: 120
+  ABC Magnitude: 35.71
+  Return Count: 7
+  Test Scoring: 18 (Simple)
+    - Signature: 3
+    - Dependency: 5
+    - Observable: 2
+    - Implementation: 8
+    - Documentation: 0
+  Max Complexity: 45
 ```
 
-Or using the short flag:
+### Recursive Directory Analysis
+
 ```bash
-./target/release/knots -m <file.c>
+# Analyze all C files in a directory tree
+knots -r ~/projects/myproject/
 ```
 
-The matrix view categorizes functions into four quadrants based on complexity (McCabe ≤10) and testability (Test Score ≤10):
-- **Quick Wins** (Low complexity, Easy to test) - Perfect for automation
-- **Invest in Tests** (High complexity, Easy to test) - Write comprehensive tests
-- **Add Docs** (Low complexity, Hard to test) - Improve documentation to reduce test difficulty
-- **Refactor** (High complexity, Hard to test) - High-risk code that needs refactoring
+**Recursive mode automatically:**
+- Scans all `.c` and `.h` files recursively
+- Handles UTF-8 encoding errors gracefully (skips and warns)
+- Shows top 5 worst functions by complexity
+- Displays totals and averages across all files
+- Writes detailed per-function report to `report.txt`
+- Reports file processing statistics
 
-### Visual Complexity Indicators
+**Example output:**
+```
+=== TOP 5 WORST FUNCTIONS ===
 
-The tool uses emojis to quickly identify complexity levels:
+1. 😢 HAL_RCC_OscConfig [drivers/hal_rcc.c]
+   McCabe: 71, Cognitive: 214, Nesting: 11, SLOC: 327, ABC: 134.90, Returns: 23, TestScore: 9
+2. 😢 process_matrix [src/complex.c]
+   McCabe: 43, Cognitive: 128, Nesting: 15, SLOC: 294, ABC: 118.35, Returns: 0, TestScore: 7
 
-- 😊 **Good** (1-10): Low complexity, easy to understand and maintain
-- 😐 **Okay** (11-20): Moderate complexity, consider refactoring  
-- 😠 **Bad** (21-49): High complexity, should be refactored
-- 😢 **Worst** (50+): Very high complexity, needs immediate attention
+=== TOTALS & AVERAGES ===
+
+  Total Functions: 3404
+  Average McCabe Complexity: 2.02
+  Average Cognitive Complexity: 1.65
+  ...
+
+Detailed per-function output written to report.txt
+
+=== FILES PROCESSED ===
+
+  Total files found: 165
+  Successfully processed: 163
+  Skipped (encoding/parse errors): 2
+```
+
+### Testability Matrix
+
+The testability matrix categorizes functions into four quadrants to help prioritize testing and refactoring:
+
+```bash
+# Single file
+knots -m src/module.c
+
+# Entire project
+knots -r -m ~/projects/myproject/
+```
+
+**Matrix Categories:**
+
+- **📊 QUICK WINS**: Low complexity, easy to test → Automate testing
+- **🎯 INVEST IN TESTS**: High complexity, easy to test → Priority for unit tests
+- **📝 ADD DOCS**: Low complexity, hard to test → Needs better documentation
+- **🚨 REFACTOR**: High complexity, hard to test → HIGH RISK, needs refactoring
+
+Example output:
+```
+=== TESTABILITY MATRIX ===
+
+📊 QUICK WINS (Low Complexity, Easy to Test) - Automate!
+=========================================================
+  ✓ init_module [src/module.c] (McCabe: 2, TestScore: 3)
+  ✓ cleanup [src/module.c] (McCabe: 1, TestScore: 2)
+
+🚨 REFACTOR (High Complexity, Hard to Test) - HIGH RISK!
+========================================================
+  ⛔ process_matrix [src/complex.c] (McCabe: 35, TestScore: 45)
+  ⛔ legacy_handler [src/old.c] (McCabe: 28, TestScore: 38)
+
+=== SUMMARY ===
+
+  Quick Wins:    15 functions
+  Invest Tests:  8 functions
+  Add Docs:      12 functions
+  Refactor:      5 functions
+  Total:         40 functions
+
+=== FILES PROCESSED ===
+
+  Total files found: 25
+  Successfully processed: 25
+```
+
+### Filtering with Include/Exclude
+
+Use JSON-based filters to focus on specific files or functions:
+
+```bash
+# Only analyze high-complexity functions
+knots -r . --include filter-high-complexity.json
+
+# Exclude vendor code
+knots -r . --exclude filter-exclude-vendor.json
+
+# Combine both
+knots -r . --include include.json --exclude exclude.json
+```
+
+**Filter JSON Schema:**
+
+```json
+{
+  "file_patterns": [
+    "src/**/*.c",
+    "lib/**/*.c",
+    "!**/vendor/**",
+    "!**/test_*.c"
+  ],
+  "function_patterns": [
+    "^process_.*",
+    "^handle_.*"
+  ],
+  "min_complexity": 10,
+  "max_complexity": 50
+}
+```
+
+All fields are optional. See [FILTERS.md](FILTERS.md) for comprehensive documentation.
+
+**Example Filters:**
+
+1. **High Complexity Only:**
+```json
+{
+  "min_complexity": 20
+}
+```
+
+2. **Exclude Tests and Vendor Code:**
+```json
+{
+  "file_patterns": [
+    "!**/test_*.c",
+    "!**/vendor/**",
+    "!**/third_party/**"
+  ]
+}
+```
+
+3. **Focus on Specific Subsystem:**
+```json
+{
+  "file_patterns": ["src/core/**/*.c"],
+  "function_patterns": ["^(init|process|handle)_.*"],
+  "min_complexity": 5
+}
+```
+
+## Complexity Metrics
+
+### McCabe Cyclomatic Complexity
+Measures the number of linearly independent paths through code. Based on control flow decision points.
+
+- **Formula**: Count decision points + 1
+- **Thresholds**: ≤10 good, 11-20 okay, 21+ needs refactoring
+- **Validated**: 100% match with pmccabe output
+
+### Cognitive Complexity
+Measures how difficult code is to understand, emphasizing nesting and structural complexity.
+
+- Higher weight for nested structures
+- Better indicator of maintainability than McCabe
+- Based on [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/)
+
+### Nesting Depth
+Maximum depth of nested control structures (if/for/while/switch).
+
+- Deep nesting makes code hard to follow
+- Threshold: >4 levels considered problematic
+
+### SLOC (Source Lines of Code)
+Counts non-blank, non-comment lines of code in a function.
+
+- Simple metric but useful in combination
+- Large functions (>50 SLOC) often need splitting
+
+### ABC Complexity
+Assignment, Branch, and Condition complexity vector.
+
+- **A**: Assignment statements
+- **B**: Branch statements (function calls)
+- **C**: Condition statements
+- **Magnitude**: √(A² + B² + C²)
+
+### Test Scoring
+Multi-dimensional metric assessing automated testing difficulty:
+
+- **Signature**: Parameter complexity (0-10)
+- **Dependency**: External dependencies (0-10)
+- **Observable**: Side effects and observability (0-10)
+- **Implementation**: Internal complexity (0-10)
+- **Documentation**: Comment quality (-10 to 0, reduces difficulty)
+
+**Score ranges:**
+- **≤10**: Trivial to test
+- **11-20**: Simple, automated with minimal metadata
+- **21-30**: Moderate, needs good documentation
+- **31+**: Complex, requires detailed specifications
+
+See [test_scoring.md](test_scoring.md) for complete specification.
 
 ## Examples
 
-The `examples/` directory contains sample C files demonstrating different complexity levels:
-
-- `simple.c` - Simple functions with low complexity
-- `complex.c` - Functions with higher complexity including nested loops and conditions
-- `nested.c` - Demonstrates the difference between McCabe and cognitive complexity
-
-### Running Examples
+### Example 1: Quick Health Check
 
 ```bash
-# Simple example
-./target/release/knots --verbose examples/simple.c
-
-# Complex example with nested structures
-./target/release/knots --verbose examples/complex.c
-
-# Nested code showing cognitive complexity impact
-./target/release/knots --verbose examples/nested.c
-
-# View testability matrix for prioritizing testing efforts
-./target/release/knots --matrix examples/simple.c
+# Get quick overview of worst functions
+knots -r ~/myproject/ | head -20
 ```
 
-## Complexity Metrics Explained
+### Example 2: Detailed Audit
 
-### McCabe Complexity (Cyclomatic Complexity)
-
-McCabe complexity counts decision points in code:
-- Base complexity: 1
-- +1 for each: `if`, `while`, `for`, `switch`, `&&`, `||`, `?:`, `goto`
-- Switch statements: +1 per switch (regardless of number of cases)
-
-**Example:**
-```c
-void simple() {
-    return;  // McCabe: 1
-}
-
-void with_if(int x) {
-    if (x > 0) {  // McCabe: 2 (1 base + 1 if)
-        return 1;
-    }
-    return 0;
-}
-```
-
-### Cognitive Complexity
-
-Cognitive complexity measures how hard code is to understand:
-- +1 for control flow breaks: `if`, `while`, `for`, `switch`, etc.
-- +1 for each level of nesting (makes code harder to follow)
-- +1 for `break`, `continue`, `goto`
-- +1 for logical operator sequences (but not for each operator in a sequence)
-
-**Example:**
-```c
-// McCabe: 5, Cognitive: 10 (high nesting penalty)
-void deeply_nested(int a, int b, int c, int d) {
-    if (a > 0) {           // +1
-        if (b > 0) {       // +1 (base) +1 (nesting) = +2
-            if (c > 0) {   // +1 (base) +2 (nesting) = +3
-                if (d > 0) {  // +1 (base) +3 (nesting) = +4
-                    printf("All positive!\n");
-                }
-            }
-        }
-    }
-}
-
-// McCabe: 5, Cognitive: 4 (early returns reduce nesting)
-void flattened(int a, int b, int c, int d) {
-    if (a <= 0) return;  // +1
-    if (b <= 0) return;  // +1
-    if (c <= 0) return;  // +1
-    if (d <= 0) return;  // +1
-    printf("All positive!\n");
-}
-```
-
-Both functions have the same McCabe complexity (5) but vastly different cognitive complexity (10 vs 4), demonstrating why flattening deeply nested code improves readability.
-
-### Nesting Depth
-
-Nesting depth measures the maximum level of nested control structures. Deeply nested code is harder to understand and maintain.
-
-**Example:**
-```c
-// Nesting depth: 4
-void deeply_nested(int a, int b, int c, int d) {
-    if (a > 0) {           // Level 1
-        if (b > 0) {       // Level 2
-            if (c > 0) {   // Level 3
-                if (d > 0) {  // Level 4
-                    printf("Deep!\n");
-                }
-            }
-        }
-    }
-}
-
-// Nesting depth: 1
-void flat(int a, int b, int c, int d) {
-    if (a <= 0) return;  // Level 1
-    if (b <= 0) return;  // Level 1
-    if (c <= 0) return;  // Level 1
-    if (d <= 0) return;  // Level 1
-    printf("Flat!\n");
-}
-```
-
-### SLOC (Source Lines of Code)
-
-SLOC counts non-comment, non-blank lines of code. It provides a simple measure of function size. Larger functions are generally harder to understand and maintain.
-
-### ABC Complexity
-
-ABC complexity is a vector metric that counts:
-- **A (Assignments)**: Assignment statements and increment/decrement operators
-- **B (Branches)**: Function/method calls
-- **C (Conditions)**: Conditional logic (if, while, for, switch, logical operators)
-
-The magnitude is calculated as: √(A² + B² + C²)
-
-**Example:**
-```c
-// ABC: <3, 2, 2>, magnitude: 4.12
-int process_data(int x, int y) {
-    int result = 0;           // A+1
-    result = x + y;           // A+1
-
-    if (result > 0) {         // C+1
-        result++;             // A+1
-        printf("Positive\n"); // B+1
-    }
-
-    if (result < 100) {       // C+1
-        log_result(result);   // B+1
-    }
-
-    return result;
-}
-```
-
-### Return Count
-
-Return count measures the number of return statements in a function. Functions with many return points can be harder to understand and debug. However, early returns can sometimes improve readability by reducing nesting.
-
-### Test Scoring
-
-Test scoring is a multi-dimensional metric that assesses the difficulty of automatically generating unit tests for C functions. It combines five scoring dimensions into a single score that ranges from negative (very easy to test) to high positive values (very hard to test).
-
-**Score Components:**
-
-1. **Signature Score (0-10)**: Complexity of function parameters and return type
-   - Simple primitives score low, function pointers and void* score high
-
-2. **Dependency Score (0-10)**: Side effects and external dependencies
-   - Pure functions score 0, functions with I/O, memory allocation, or global state score higher
-
-3. **Observable Score (0-10)**: How easy it is to verify correctness
-   - Functions with clear return values score low, void functions with side effects score high
-
-4. **Implementation Score (0-10)**: Based on cyclomatic complexity
-   - Mapped from McCabe complexity: 1-5 → 0-2, 6-10 → 3-5, 11-20 → 6-8, 20+ → 9-10
-
-5. **Documentation Score (-10 to 0)**: Quality of function documentation
-   - Better documentation **reduces** difficulty (negative contribution)
-   - Looks for Doxygen tags like @intent, @param, @return, @requires, @ensures, @example
-
-**Total Score Formula:**
-```
-Total = Signature + Dependency + Observable + Implementation - Documentation
-```
-
-**Score Classification:**
-
-| Score Range | Classification | Description |
-|-------------|----------------|-------------|
-| ≤10 | Trivial | Fully automatable test generation |
-| 11-20 | Simple | Automated with minimal metadata |
-| 21-30 | Moderate | Needs good documentation |
-| 31-40 | Complex | Requires detailed specifications |
-| 41-50 | Difficult | May need manual test design |
-| 51+ | Very Hard | Extensive manual effort needed |
-
-**Example:**
-```c
-/**
- * @intent Compute the sum of two integers
- * @param a First integer
- * @param b Second integer
- * @return Sum of a and b
- * @example add(2, 3) = 5
- */
-int add(int a, int b) {
-    return a + b;
-}
-// Test Score: -10 (Trivial)
-//   Signature: 0 (simple primitives)
-//   Dependency: 0 (pure function)
-//   Observable: 0 (clear return value)
-//   Implementation: 0 (no branches)
-//   Documentation: 10 (excellent docs)
-
-char* strdup_custom(const char* s) {
-    if (s == NULL) return NULL;
-
-    int len = 0;
-    while (s[len]) len++;
-
-    char* result = malloc(len + 1);
-    if (result == NULL) return NULL;
-
-    for (int i = 0; i <= len; i++) {
-        result[i] = s[i];
-    }
-
-    return result;
-}
-// Test Score: 1 (Trivial)
-//   Signature: 0 (pointers but simple)
-//   Dependency: 3 (memory allocation)
-//   Observable: 0 (return value easily checked)
-//   Implementation: 2 (moderate complexity)
-//   Documentation: 4 (basic comment above)
-```
-
-**Note:** The test scoring metric is currently informational and not used in pre-commit hooks, as optimal threshold values are still being determined.
-
-For the complete specification of the test scoring metric, see [test_scoring.md](test_scoring.md).
-
-## Testing
-
-Run the test suite:
 ```bash
+# Generate comprehensive report
+knots -r -v ~/myproject/
+
+# Review report.txt for all functions
+less report.txt
+```
+
+### Example 3: Refactoring Prioritization
+
+```bash
+# Find high-complexity, hard-to-test functions
+echo '{"min_complexity": 15}' > complex.json
+knots -r -m ~/myproject/ --include complex.json
+```
+
+### Example 4: CI/CD Integration
+
+```bash
+#!/bin/bash
+# Fail if any function exceeds complexity threshold
+
+echo '{"min_complexity": 51}' > fail-threshold.json
+knots -r . --include fail-threshold.json > /tmp/knots-output.txt
+
+if grep -q "Total Functions: [1-9]" /tmp/knots-output.txt; then
+    echo "ERROR: Functions with complexity > 50 detected!"
+    cat /tmp/knots-output.txt
+    exit 1
+fi
+```
+
+### Example 5: Focus on New Code
+
+```bash
+# Analyze only files modified in last commit
+git diff --name-only HEAD~1 | grep '\\.c$' | while read file; do
+    knots "$file"
+done
+```
+
+## Validation
+
+The McCabe complexity implementation has been validated against industry-standard tools:
+
+### Validated Against:
+- **[pmccabe](https://people.debian.org/~bame/pmccabe/)** - Industry standard since 1990s
+- **[lizard](https://github.com/terryyin/lizard)** - Popular multi-language analyzer
+
+### Results:
+- ✓ 13/13 functions match pmccabe exactly (100% accuracy)
+- ✓ Correctly implements switch/case complexity
+- ✓ Handles nested structures and logical operators accurately
+
+## Troubleshooting
+
+### "Path is a directory. Use -r/--recursive"
+
+You tried to analyze a directory without `-r`:
+```bash
+knots -r path/to/directory/
+```
+
+### "Warning: Skipping <file>: stream did not contain valid UTF-8"
+
+File has encoding issues. Knots continues processing other files. To fix:
+```bash
+# Convert to UTF-8
+iconv -f ISO-8859-1 -t UTF-8 file.c > file_utf8.c
+
+# Or exclude problematic files
+knots -r . --exclude exclude-encoding-issues.json
+```
+
+### "No C files (.c or .h) found"
+
+Check:
+- File extensions are correct
+- You're in the right directory
+- Files aren't filtered out by include/exclude rules
+
+## Advanced Usage
+
+### Pre-commit Hook
+
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep '\\.c$')
+
+if [ -n "$staged_files" ]; then
+    for file in $staged_files; do
+        if knots "$file" | grep -q 😢; then
+            echo "ERROR: High complexity detected in $file"
+            knots "$file" | grep 😢
+            exit 1
+        fi
+    done
+fi
+```
+
+### Combining with Other Tools
+
+```bash
+# Generate complexity report and run static analysis
+knots -r src/ > complexity.txt
+cppcheck src/ 2> cppcheck.txt
+
+# Find high-complexity functions mentioned in warnings
+grep -f <(knots -r src/ | grep 😢 | cut -d' ' -f2) cppcheck.txt
+```
+
+## Contributing
+
+Contributions are welcome! Please submit issues or pull requests.
+
+### Development
+
+```bash
+# Clone and build
+git clone https://github.com/yourusername/knots.git
+cd knots
+cargo build
+
+# Run tests
 cargo test
+
+# Run examples
+cargo run -- examples/complex.c
+cargo run -- -r -m examples/
 ```
 
 ## Dependencies
 
-- `tree-sitter` - Parser generator and incremental parsing library
-- `tree-sitter-c` - C language grammar for tree-sitter
+- `tree-sitter` - Parser generator and incremental parsing
+- `tree-sitter-c` - C language grammar
 - `clap` - Command-line argument parsing
 - `anyhow` - Error handling
+- `serde` / `serde_json` - JSON filter support
+- `regex` - Pattern matching for filters
+- `walkdir` - Recursive directory traversal
+
+## See Also
+
+- [FILTERS.md](FILTERS.md) - Comprehensive filtering documentation
+- [test_scoring.md](test_scoring.md) - Test scoring metric specification
+- [filter-example-include.json](filter-example-include.json) - Example include filter
+- [filter-example-exclude.json](filter-example-exclude.json) - Example exclude filter
+- [examples/](examples/) - Sample C files with varying complexity
 
 ## License
 
-MIT License.  See LICENSE file.
+MIT License. See LICENSE file.
+
+## Acknowledgments
+
+- Built with [tree-sitter](https://tree-sitter.github.io/) for accurate C parsing
+- Implements standard complexity metrics from software engineering research
+- Cognitive Complexity based on [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/)
+- Inspired by tools like pmccabe, Lizard, CodeClimate, and SonarQube

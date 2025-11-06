@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tree_sitter::{Node, Tree, TreeCursor};
 use walkdir::WalkDir;
 
@@ -19,6 +21,118 @@ fn get_complexity_emoji(complexity: u32) -> &'static str {
         11..=20 => "😐",  // Neutral - okay complexity
         21..=49 => "😠",  // Angry - bad complexity
         _ => "😢",        // Sad - worst complexity (50+)
+    }
+}
+
+/// Filter rules for including/excluding files and functions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FilterRules {
+    /// File path patterns (glob-style, supports negation with !)
+    #[serde(default)]
+    pub file_patterns: Vec<String>,
+
+    /// Function name patterns (regex)
+    #[serde(default)]
+    pub function_patterns: Vec<String>,
+
+    /// Minimum complexity threshold (inclusive)
+    #[serde(default)]
+    pub min_complexity: Option<u32>,
+
+    /// Maximum complexity threshold (inclusive)
+    #[serde(default)]
+    pub max_complexity: Option<u32>,
+}
+
+impl FilterRules {
+    /// Load filter rules from a JSON file
+    fn from_file(path: &Path) -> Result<Self> {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read filter file: {}", path.display()))?;
+        let rules: FilterRules = serde_json::from_str(&content)
+            .with_context(|| format!("Failed to parse filter JSON: {}", path.display()))?;
+        Ok(rules)
+    }
+
+    /// Check if a file path matches the patterns
+    fn matches_file(&self, file_path: &str) -> bool {
+        if self.file_patterns.is_empty() {
+            return true;
+        }
+
+        let mut included = false;
+        let mut excluded = false;
+
+        for pattern in &self.file_patterns {
+            if let Some(neg_pattern) = pattern.strip_prefix('!') {
+                // Negation pattern - exclude
+                if glob_match(neg_pattern, file_path) {
+                    excluded = true;
+                }
+            } else {
+                // Include pattern
+                if glob_match(pattern, file_path) {
+                    included = true;
+                }
+            }
+        }
+
+        // If we have include patterns, file must match at least one
+        // Then check if it's explicitly excluded
+        if !self.file_patterns.iter().any(|p| !p.starts_with('!')) {
+            // No positive patterns, only negative ones
+            !excluded
+        } else {
+            included && !excluded
+        }
+    }
+
+    /// Check if a function name matches the patterns
+    fn matches_function(&self, function_name: &str) -> bool {
+        if self.function_patterns.is_empty() {
+            return true;
+        }
+
+        for pattern in &self.function_patterns {
+            if let Ok(re) = Regex::new(pattern) {
+                if re.is_match(function_name) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Check if complexity is within bounds
+    fn matches_complexity(&self, complexity: u32) -> bool {
+        if let Some(min) = self.min_complexity {
+            if complexity < min {
+                return false;
+            }
+        }
+        if let Some(max) = self.max_complexity {
+            if complexity > max {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+/// Simple glob matching (supports * and **)
+fn glob_match(pattern: &str, path: &str) -> bool {
+    let pattern_regex = pattern
+        .replace(".", "\\.")
+        .replace("**", "<!DOUBLESTAR!>")
+        .replace("*", "[^/]*")
+        .replace("<!DOUBLESTAR!>", ".*");
+
+    if let Ok(re) = Regex::new(&format!("^{}$", pattern_regex)) {
+        re.is_match(path)
+    } else {
+        false
     }
 }
 
@@ -42,25 +156,46 @@ struct Args {
     /// Show testability matrix categorization
     #[arg(short, long)]
     matrix: bool,
+
+    /// Include filter rules from JSON file (whitelist files/functions)
+    #[arg(long, value_name = "FILE")]
+    include: Option<PathBuf>,
+
+    /// Exclude filter rules from JSON file (blacklist files/functions)
+    #[arg(long, value_name = "FILE")]
+    exclude: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
+    // Load filter rules
+    let include_rules = if let Some(path) = &args.include {
+        Some(FilterRules::from_file(path)?)
+    } else {
+        None
+    };
+
+    let exclude_rules = if let Some(path) = &args.exclude {
+        Some(FilterRules::from_file(path)?)
+    } else {
+        None
+    };
+
     // Collect files to process
-    let files = collect_files(&args.file, args.recursive)?;
+    let files = collect_files(&args.file, args.recursive, &include_rules, &exclude_rules)?;
 
-    // For matrix mode, always use the old behavior (per-file output)
+    // For matrix mode
     if args.matrix {
-        for file in &files {
-            if files.len() > 1 {
-                println!("\n=== {} ===", file.display());
-            }
+        let mut all_metrics = Vec::new();
+        let mut skipped_files = 0;
 
+        for file in &files {
             let source_code = match fs::read_to_string(file) {
                 Ok(code) => code,
                 Err(e) => {
                     eprintln!("Warning: Skipping {}: {}", file.display(), e);
+                    skipped_files += 1;
                     continue;
                 }
             };
@@ -70,12 +205,24 @@ fn main() -> Result<()> {
                 .set_language(&tree_sitter_c::language())
                 .context("Failed to set C language")?;
 
-            let tree = parser
-                .parse(&source_code, None)
-                .with_context(|| format!("Failed to parse C code in {}", file.display()))?;
+            let tree = match parser.parse(&source_code, None) {
+                Some(t) => t,
+                None => {
+                    eprintln!("Warning: Failed to parse {}", file.display());
+                    skipped_files += 1;
+                    continue;
+                }
+            };
 
-            analyze_matrix(&tree, &source_code)?;
+            let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""), &include_rules, &exclude_rules);
+            all_metrics.extend(metrics);
         }
+
+        if all_metrics.is_empty() {
+            anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
+        }
+
+        display_testability_matrix(&all_metrics, files.len(), skipped_files);
         return Ok(());
     }
 
@@ -94,7 +241,7 @@ fn main() -> Result<()> {
             .parse(&source_code, None)
             .with_context(|| format!("Failed to parse C code in {}", file.display()))?;
 
-        analyze_code(&tree, &source_code, args.verbose)?;
+        analyze_code(&tree, &source_code, args.verbose, &include_rules, &exclude_rules)?;
         return Ok(());
     }
 
@@ -126,7 +273,7 @@ fn main() -> Result<()> {
             }
         };
 
-        let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""));
+        let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""), &include_rules, &exclude_rules);
         all_metrics.extend(metrics);
     }
 
@@ -144,12 +291,20 @@ fn main() -> Result<()> {
 }
 
 /// Collect files to process based on the path and recursive flag
-fn collect_files(path: &PathBuf, recursive: bool) -> Result<Vec<PathBuf>> {
+fn collect_files(
+    path: &PathBuf,
+    recursive: bool,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
     if path.is_file() {
         // Single file mode
-        files.push(path.clone());
+        let file_str = path.to_string_lossy();
+        if should_process_file(&file_str, include_rules, exclude_rules) {
+            files.push(path.clone());
+        }
     } else if path.is_dir() {
         if !recursive {
             anyhow::bail!(
@@ -168,7 +323,10 @@ fn collect_files(path: &PathBuf, recursive: bool) -> Result<Vec<PathBuf>> {
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension() {
                     if ext == "c" || ext == "h" {
-                        files.push(file_path.to_path_buf());
+                        let file_str = file_path.to_string_lossy();
+                        if should_process_file(&file_str, include_rules, exclude_rules) {
+                            files.push(file_path.to_path_buf());
+                        }
                     }
                 }
             }
@@ -184,8 +342,37 @@ fn collect_files(path: &PathBuf, recursive: bool) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+/// Check if a file should be processed based on include/exclude rules
+fn should_process_file(
+    file_path: &str,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> bool {
+    // Check include rules first (whitelist)
+    if let Some(rules) = include_rules {
+        if !rules.matches_file(file_path) {
+            return false;
+        }
+    }
+
+    // Check exclude rules (blacklist)
+    if let Some(rules) = exclude_rules {
+        if !rules.matches_file(file_path) {
+            return false;
+        }
+    }
+
+    true
+}
+
 /// Collect function metrics from a file
-fn collect_function_metrics(tree: &Tree, source_code: &str, file_path: &str) -> Vec<FunctionMetrics> {
+fn collect_function_metrics(
+    tree: &Tree,
+    source_code: &str,
+    file_path: &str,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> Vec<FunctionMetrics> {
     let root_node = tree.root_node();
     let mut cursor = root_node.walk();
     let mut metrics = Vec::new();
@@ -201,25 +388,63 @@ fn collect_function_metrics(tree: &Tree, source_code: &str, file_path: &str) -> 
             let return_count = calculate_return_count(node);
             let test_scoring = calculate_test_scoring(node, src.as_bytes());
 
-            metrics.push(FunctionMetrics {
-                name,
-                file_path: file_path.to_string(),
-                mccabe,
-                cognitive,
-                nesting,
-                sloc,
-                abc_magnitude,
-                return_count,
-                test_scoring,
-            });
+            let max_complexity = std::cmp::max(mccabe, cognitive);
+
+            // Apply filter rules
+            if should_process_function(&name, max_complexity, include_rules, exclude_rules) {
+                metrics.push(FunctionMetrics {
+                    name,
+                    file_path: file_path.to_string(),
+                    mccabe,
+                    cognitive,
+                    nesting,
+                    sloc,
+                    abc_magnitude,
+                    return_count,
+                    test_scoring,
+                });
+            }
         }
     });
 
     metrics
 }
 
-fn analyze_code(tree: &Tree, source_code: &str, verbose: bool) -> Result<()> {
-    let metrics = collect_function_metrics(tree, source_code, "");
+/// Check if a function should be processed based on include/exclude rules
+fn should_process_function(
+    function_name: &str,
+    complexity: u32,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> bool {
+    // Check include rules first (whitelist)
+    if let Some(rules) = include_rules {
+        if !rules.matches_function(function_name) {
+            return false;
+        }
+        if !rules.matches_complexity(complexity) {
+            return false;
+        }
+    }
+
+    // Check exclude rules (blacklist) - if it matches exclude, DON'T process
+    if let Some(rules) = exclude_rules {
+        if rules.matches_function(function_name) && rules.matches_complexity(complexity) {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn analyze_code(
+    tree: &Tree,
+    source_code: &str,
+    verbose: bool,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> Result<()> {
+    let metrics = collect_function_metrics(tree, source_code, "", include_rules, exclude_rules);
 
     let mut total_mccabe = 0;
     let mut total_cognitive = 0;
@@ -418,45 +643,15 @@ impl FunctionMetrics {
     }
 }
 
-fn analyze_matrix(tree: &Tree, source_code: &str) -> Result<()> {
-    let root_node = tree.root_node();
-    let mut cursor = root_node.walk();
-
-    let mut functions: Vec<FunctionMetrics> = Vec::new();
-
-    // Collect all function metrics
-    visit_functions(&mut cursor, source_code, &mut |node, src| {
-        if let Some(name) = get_function_name(node, src) {
-            let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
-            let cognitive = calculate_cognitive_complexity(node, src.as_bytes());
-            let nesting = calculate_nesting_depth(node);
-            let sloc = calculate_sloc(node, src.as_bytes());
-            let abc = calculate_abc_complexity(node, src.as_bytes());
-            let abc_magnitude = abc.magnitude();
-            let return_count = calculate_return_count(node);
-            let test_scoring = calculate_test_scoring(node, src.as_bytes());
-
-            functions.push(FunctionMetrics {
-                name,
-                file_path: String::new(),
-                mccabe,
-                cognitive,
-                nesting,
-                sloc,
-                abc_magnitude,
-                return_count,
-                test_scoring,
-            });
-        }
-    });
-
+/// Display testability matrix for all functions
+fn display_testability_matrix(all_metrics: &[FunctionMetrics], total_files: usize, skipped_files: usize) {
     // Categorize functions into quadrants
     let mut quick_wins = Vec::new();
     let mut invest_tests = Vec::new();
     let mut add_docs = Vec::new();
     let mut refactor = Vec::new();
 
-    for func in functions {
+    for func in all_metrics {
         let low_complexity = func.mccabe <= 10;
         let easy_to_test = func.test_scoring.total_score <= 10;
 
@@ -469,9 +664,7 @@ fn analyze_matrix(tree: &Tree, source_code: &str) -> Result<()> {
     }
 
     // Print matrix results
-    println!("Function Testability Matrix");
-    println!("===========================");
-    println!();
+    println!("\n=== TESTABILITY MATRIX ===\n");
 
     println!("📊 QUICK WINS (Low Complexity, Easy to Test) - Automate!");
     println!("=========================================================");
@@ -479,7 +672,11 @@ fn analyze_matrix(tree: &Tree, source_code: &str) -> Result<()> {
         println!("  (none)");
     } else {
         for func in &quick_wins {
-            println!("  ✓ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            if func.file_path.is_empty() {
+                println!("  ✓ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            } else {
+                println!("  ✓ {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+            }
         }
     }
     println!();
@@ -490,7 +687,11 @@ fn analyze_matrix(tree: &Tree, source_code: &str) -> Result<()> {
         println!("  (none)");
     } else {
         for func in &invest_tests {
-            println!("  → {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            if func.file_path.is_empty() {
+                println!("  → {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            } else {
+                println!("  → {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+            }
         }
     }
     println!();
@@ -501,7 +702,11 @@ fn analyze_matrix(tree: &Tree, source_code: &str) -> Result<()> {
         println!("  (none)");
     } else {
         for func in &add_docs {
-            println!("  ⚠ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            if func.file_path.is_empty() {
+                println!("  ⚠ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            } else {
+                println!("  ⚠ {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+            }
         }
     }
     println!();
@@ -512,21 +717,32 @@ fn analyze_matrix(tree: &Tree, source_code: &str) -> Result<()> {
         println!("  (none)");
     } else {
         for func in &refactor {
-            println!("  ⛔ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            if func.file_path.is_empty() {
+                println!("  ⛔ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+            } else {
+                println!("  ⛔ {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+            }
         }
     }
     println!();
 
     // Print summary
-    println!("Summary:");
-    println!("--------");
+    println!("=== SUMMARY ===\n");
     println!("  Quick Wins:    {} functions", quick_wins.len());
     println!("  Invest Tests:  {} functions", invest_tests.len());
     println!("  Add Docs:      {} functions", add_docs.len());
     println!("  Refactor:      {} functions", refactor.len());
-    println!("  Total:         {} functions", quick_wins.len() + invest_tests.len() + add_docs.len() + refactor.len());
+    println!("  Total:         {} functions", all_metrics.len());
 
-    Ok(())
+    if total_files > 1 {
+        println!();
+        println!("=== FILES PROCESSED ===\n");
+        println!("  Total files found: {}", total_files);
+        println!("  Successfully processed: {}", total_files - skipped_files);
+        if skipped_files > 0 {
+            println!("  Skipped (encoding/parse errors): {}", skipped_files);
+        }
+    }
 }
 
 fn visit_functions<F>(cursor: &mut TreeCursor, source_code: &str, callback: &mut F)

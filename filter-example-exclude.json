@@ -1,0 +1,14 @@
+{
+  "file_patterns": [
+    "**/test_*.c",
+    "**/vendor/**",
+    "**/third_party/**"
+  ],
+  "function_patterns": [
+    "^test_.*",
+    "^mock_.*",
+    "^stub_.*"
+  ],
+  "min_complexity": 0,
+  "max_complexity": 100
+}
