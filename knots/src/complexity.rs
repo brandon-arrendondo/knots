@@ -82,8 +82,10 @@ fn visit_node_cognitive(node: Node, source_code: &[u8], nesting_level: u32, comp
 
             for child in node.children(&mut cursor) {
                 if child.kind() == "if_statement" {
-                    // For else-if, only add +1 total (not +1 for else and +1+nesting for if)
-                    // Process the if with current nesting level, not increased
+                    // For else-if: +1 for the else-if itself (no nesting penalty).
+                    // But the body INSIDE the else-if IS nested — children get
+                    // nesting_level + 1 so that structures nested within the
+                    // else-if block are correctly penalized.
                     *complexity += 1;
                     visit_children_cognitive(child, source_code, nesting_level, complexity, None);
                     return;
@@ -175,7 +177,7 @@ pub fn calculate_nesting_depth(node: Node) -> u32 {
 fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
     let new_depth = match node.kind() {
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
-        | "switch_statement" | "compound_statement" => {
+        | "switch_statement" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -788,6 +790,72 @@ mod tests {
         let node = tree.root_node();
         // Simple function with no branches should have complexity 0
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 0);
+    }
+
+    #[test]
+    fn test_nesting_depth_simple_if() {
+        let code = r#"
+        void func() {
+            if (1) {
+                int x = 1;
+            }
+        }
+        "#;
+        let tree = parse_c_function(code);
+        let node = tree.root_node();
+        // One if statement = nesting depth 1
+        assert_eq!(calculate_nesting_depth(node), 1);
+    }
+
+    #[test]
+    fn test_nesting_depth_nested_if() {
+        let code = r#"
+        void func() {
+            if (1) {
+                if (2) {
+                    int x = 1;
+                }
+            }
+        }
+        "#;
+        let tree = parse_c_function(code);
+        let node = tree.root_node();
+        // Two nested ifs = nesting depth 2
+        assert_eq!(calculate_nesting_depth(node), 2);
+    }
+
+    #[test]
+    fn test_nesting_depth_no_control_flow() {
+        let code = r#"
+        void func() {
+            int x = 1;
+            int y = 2;
+        }
+        "#;
+        let tree = parse_c_function(code);
+        let node = tree.root_node();
+        // No control structures = nesting depth 0
+        assert_eq!(calculate_nesting_depth(node), 0);
+    }
+
+    #[test]
+    fn test_cognitive_else_if_nested() {
+        let code = r#"
+        void func() {
+            if (a) {
+            } else if (b) {
+                if (c) {
+                }
+            }
+        }
+        "#;
+        let tree = parse_c_function(code);
+        let node = tree.root_node();
+        // if(a): +1 (nesting 0)
+        // else if(b): +1 (else-if flat)
+        // if(c) inside else-if body: +1 (base) +1 (nesting=1) = +2
+        // Total: 4
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 4);
     }
 
     #[test]
