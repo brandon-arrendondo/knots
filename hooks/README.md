@@ -144,8 +144,8 @@ git commit --no-verify -m "Emergency fix"
 ## What Gets Checked?
 
 The hook checks:
-- All `.c` files being committed
-- All `.h` files being committed
+- All C/C++ source files (`.c`, `.cpp`, `.cc`, `.cxx`) being committed
+- All C/C++ header files (`.h`, `.hpp`, `.hxx`) being committed
 - Only files that are staged (in `git add`)
 
 Files NOT checked:

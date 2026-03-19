@@ -223,7 +223,7 @@ Or customize specific thresholds only:
 
 ### Custom File Pattern
 
-Only check .c files (not .h):
+Only check `.c` source files (exclude headers and C++ files):
 
 ```yaml
 - repo: local
@@ -232,7 +232,7 @@ Only check .c files (not .h):
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.c$  # Only .c files
+      files: \.c$  # Only .c files — default includes C++ extensions too
       pass_filenames: true
 ```
 

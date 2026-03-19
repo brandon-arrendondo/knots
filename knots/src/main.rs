@@ -14,6 +14,7 @@ use complexity::{
     calculate_nesting_depth, calculate_return_count, calculate_sloc, calculate_test_scoring,
     TestScoringMetric,
 };
+use knots::{is_source_extension, language_for_file};
 
 fn get_complexity_emoji(complexity: u32) -> &'static str {
     match complexity {
@@ -152,13 +153,13 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[derive(Parser, Debug)]
 #[command(name = "knots")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(about = "Analyzes C code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
+#[command(about = "Analyzes C/C++ code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
 struct Args {
-    /// Path to the C file or directory to analyze
+    /// Path to the C/C++ file or directory to analyze
     #[arg(value_name = "FILE", required_unless_present = "compile_commands")]
     file: Option<PathBuf>,
 
-    /// Recursively process all C files in directories
+    /// Recursively process all C/C++ source files in directories
     #[arg(short, long)]
     recursive: bool,
 
@@ -181,6 +182,19 @@ struct Args {
     /// Exclude filter rules from JSON file (blacklist files/functions)
     #[arg(long, value_name = "FILE")]
     exclude: Option<PathBuf>,
+}
+
+/// Parse a source file into a tree-sitter Tree, selecting the grammar by extension.
+/// @brief Parse C/C++ source file into AST
+/// @version 1
+fn parse_file(file: &Path, source_code: &str) -> Result<Tree> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&language_for_file(file))
+        .context("Failed to set language")?;
+    parser
+        .parse(source_code, None)
+        .with_context(|| format!("Failed to parse {}", file.display()))
 }
 
 fn main() -> Result<()> {
@@ -225,15 +239,15 @@ fn main() -> Result<()> {
                 }
             };
 
-            let mut parser = tree_sitter::Parser::new();
-            parser
-                .set_language(&tree_sitter_c::language())
-                .context("Failed to set C language")?;
-
-            let tree = match parser.parse(&source_code, None) {
-                Some(t) => t,
-                None => {
-                    eprintln!("Warning: Failed to parse {}", file.display());
+            let tree = match parse_file(file, &source_code) {
+                Ok(t) => t,
+                Err(_) => {
+                    let hint = if file.extension().and_then(|e| e.to_str()) == Some("h") {
+                        " (if this file contains C++, rename to .hpp)"
+                    } else {
+                        ""
+                    };
+                    eprintln!("Warning: Failed to parse {}{}", file.display(), hint);
                     skipped_files += 1;
                     continue;
                 }
@@ -257,14 +271,7 @@ fn main() -> Result<()> {
         let source_code = fs::read_to_string(file)
             .with_context(|| format!("Failed to read file: {}", file.display()))?;
 
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&tree_sitter_c::language())
-            .context("Failed to set C language")?;
-
-        let tree = parser
-            .parse(&source_code, None)
-            .with_context(|| format!("Failed to parse C code in {}", file.display()))?;
+        let tree = parse_file(file, &source_code)?;
 
         analyze_code(&tree, &source_code, args.verbose, &include_rules, &exclude_rules)?;
         return Ok(());
@@ -284,14 +291,9 @@ fn main() -> Result<()> {
             }
         };
 
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&tree_sitter_c::language())
-            .context("Failed to set C language")?;
-
-        let tree = match parser.parse(&source_code, None) {
-            Some(t) => t,
-            None => {
+        let tree = match parse_file(file, &source_code) {
+            Ok(t) => t,
+            Err(_) => {
                 eprintln!("Warning: Failed to parse {}", file.display());
                 skipped_files += 1;
                 continue;
@@ -332,9 +334,9 @@ fn load_compile_commands(
     for cmd in commands {
         let file_path = PathBuf::from(&cmd.file);
 
-        // Only process C files
+        // Only process C/C++ source files
         if let Some(ext) = file_path.extension() {
-            if ext == "c" {
+            if is_source_extension(ext) {
                 let file_str = file_path.to_string_lossy();
                 if should_process_file(&file_str, include_rules, exclude_rules) {
                     // Use absolute path if available, otherwise relative
@@ -360,7 +362,7 @@ fn load_compile_commands(
     }
 
     if files.is_empty() {
-        anyhow::bail!("No .c files found in compile_commands.json");
+        anyhow::bail!("No C/C++ source files found in compile_commands.json");
     }
 
     Ok(files)
@@ -399,7 +401,7 @@ fn collect_files(
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension() {
-                    if ext == "c" {
+                    if is_source_extension(ext) {
                         let file_str = file_path.to_string_lossy();
                         if should_process_file(&file_str, include_rules, exclude_rules) {
                             files.push(file_path.to_path_buf());
@@ -410,7 +412,7 @@ fn collect_files(
         }
 
         if files.is_empty() {
-            anyhow::bail!("No .c files found in directory: {}", path.display());
+            anyhow::bail!("No C/C++ source files found in directory: {}", path.display());
         }
     } else {
         anyhow::bail!("Path '{}' does not exist", path.display());
@@ -901,14 +903,90 @@ fn get_declarator_name(node: Node, source_code: &str) -> Option<String> {
     let mut cursor = node.walk();
 
     for child in node.children(&mut cursor) {
-        if child.kind() == "identifier" {
-            return Some(child.utf8_text(source_code.as_bytes()).ok()?.to_string());
-        } else if child.kind() == "pointer_declarator" || child.kind() == "function_declarator" {
-            if let Some(name) = get_declarator_name(child, source_code) {
-                return Some(name);
+        match child.kind() {
+            "identifier" | "qualified_identifier" | "destructor_name"
+            | "operator_name" | "field_identifier" => {
+                return Some(child.utf8_text(source_code.as_bytes()).ok()?.to_string());
             }
+            "pointer_declarator" | "function_declarator" => {
+                if let Some(name) = get_declarator_name(child, source_code) {
+                    return Some(name);
+                }
+            }
+            _ => {}
         }
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse C++ code and collect discovered function names via visit_functions + get_function_name.
+    fn discover_cpp_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_cpp::language())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_cpp_discover_namespace_function() {
+        let names = discover_cpp_functions(
+            r#"namespace myns { void func() { int x = 0; } }"#,
+        );
+        assert_eq!(names, vec!["func"]);
+    }
+
+    #[test]
+    fn test_cpp_discover_class_method() {
+        let names = discover_cpp_functions(
+            r#"class Foo { void method() { int x = 0; } };"#,
+        );
+        assert_eq!(names, vec!["method"]);
+    }
+
+    #[test]
+    fn test_cpp_discover_template_function() {
+        let names = discover_cpp_functions(
+            r#"template<typename T> T add(T a, T b) { return a + b; }"#,
+        );
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_cpp_discover_qualified_name() {
+        let names = discover_cpp_functions(
+            r#"void Foo::bar() { int x = 0; }"#,
+        );
+        assert_eq!(names, vec!["Foo::bar"]);
+    }
+
+    #[test]
+    fn test_cpp_discover_operator() {
+        let names = discover_cpp_functions(
+            r#"Foo operator+(Foo a, Foo b) { return a; }"#,
+        );
+        assert_eq!(names.len(), 1);
+        assert!(names[0].contains("operator+"), "Expected operator+, got: {}", names[0]);
+    }
+
+    #[test]
+    fn test_cpp_discover_destructor() {
+        let names = discover_cpp_functions(
+            r#"class Foo { ~Foo() { int x = 0; } };"#,
+        );
+        assert_eq!(names, vec!["~Foo"]);
+    }
 }

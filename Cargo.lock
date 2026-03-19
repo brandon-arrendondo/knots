@@ -159,7 +159,7 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "knots"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -168,12 +168,13 @@ dependencies = [
  "serde_json",
  "tree-sitter",
  "tree-sitter-c",
+ "tree-sitter-cpp",
  "walkdir",
 ]
 
 [[package]]
 name = "knots-test-complexity"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -182,6 +183,7 @@ dependencies = [
  "regex",
  "tree-sitter",
  "tree-sitter-c",
+ "tree-sitter-cpp",
 ]
 
 [[package]]
@@ -345,6 +347,16 @@ name = "tree-sitter-c"
 version = "0.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f956d5351d62652864a4ff3ae861747e7a1940dc96c9998ae400ac0d3ce30427"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-cpp"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e058d4b9cefb54a8f322b31a1bd3cd306919b70b729523473b5aad8d315a8897"
 dependencies = [
  "cc",
  "tree-sitter",

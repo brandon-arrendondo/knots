@@ -1,6 +1,6 @@
 # Knots
 
-A fast, powerful C code complexity analyzer with visual indicators, built on tree-sitter. Knots helps you identify problematic code patterns, prioritize refactoring efforts, and understand testability concerns across your codebase.
+A fast, powerful C/C++ code complexity analyzer with visual indicators, built on tree-sitter. Knots helps you identify problematic code patterns, prioritize refactoring efforts, and understand testability concerns across your codebase.
 
 ## Features
 
@@ -68,10 +68,10 @@ Knots uses visual emoji indicators based on the maximum of McCabe and Cognitive 
 knots [OPTIONS] <FILE>
 
 Arguments:
-  <FILE>  Path to the C file or directory to analyze
+  <FILE>  Path to the C/C++ file or directory to analyze
 
 Options:
-  -r, --recursive               Recursively process all C files in directories
+  -r, --recursive               Recursively process all C/C++ source files in directories
   -v, --verbose                 Show detailed per-function analysis
   -m, --matrix                  Show testability matrix categorization
   --compile-commands <FILE>     Use compile_commands.json to get list of files to analyze
@@ -132,14 +132,14 @@ knots -r ~/projects/myproject/
 ```
 
 **Recursive mode automatically:**
-- Scans all `.c` files recursively (skips `.h` headers by default)
+- Scans all `.c`/`.cpp`/`.cc`/`.cxx` files recursively (skips headers by default)
 - Handles UTF-8 encoding errors gracefully (skips and warns)
 - Shows top 5 worst functions by complexity
 - Displays totals and averages across all files
 - Writes detailed per-function report to `report.txt`
 - Reports file processing statistics
 
-**Note:** Recursive mode only scans `.c` files by default because header files often contain inline functions, vendor code, and simple utilities. You can still analyze a specific header file directly (e.g., `knots myheader.h`) or use filters to include headers if needed.
+**Note:** Recursive mode only scans source files (`.c`, `.cpp`, `.cc`, `.cxx`) by default because header files often contain inline functions, vendor code, and simple utilities. You can still analyze a specific header file directly (e.g., `knots myheader.h`) or use filters to include headers if needed.
 
 **Example output:**
 ```
@@ -186,7 +186,7 @@ knots --compile-commands compile_commands.json --include filter.json
 
 **Compile commands mode automatically:**
 - Reads file paths from the compilation database
-- Only analyzes `.c` files (skips headers and other file types)
+- Only analyzes C/C++ source files (`.c`, `.cpp`, `.cc`, `.cxx`; skips headers and other file types)
 - Resolves relative paths using the `directory` field from each entry
 - Respects include/exclude filters if specified
 - Works with any standard `compile_commands.json` format
@@ -486,7 +486,7 @@ fi
 
 ```bash
 # Analyze only files modified in last commit
-git diff --name-only HEAD~1 | grep '\\.c$' | while read file; do
+git diff --name-only HEAD~1 | grep -E '\.(c|cpp|cc|cxx)$' | while read file; do
     knots "$file"
 done
 ```
@@ -540,10 +540,10 @@ iconv -f ISO-8859-1 -t UTF-8 file.c > file_utf8.c
 knots -r . --exclude exclude-encoding-issues.json
 ```
 
-### "No .c files found in directory"
+### "No C/C++ source files found in directory"
 
 Check:
-- File extensions are `.c` (recursive mode only scans `.c` files, not `.h`)
+- File extensions are `.c`, `.cpp`, `.cc`, or `.cxx` (recursive mode only scans source files, not headers)
 - You're in the right directory
 - Files aren't filtered out by include/exclude rules
 
@@ -562,7 +562,7 @@ Check:
 #!/bin/bash
 # .git/hooks/pre-commit
 
-staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep '\\.c$')
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx)$')
 
 if [ -n "$staged_files" ]; then
     for file in $staged_files; do
@@ -610,6 +610,7 @@ cargo run -- -r -m knots/examples/
 
 - `tree-sitter` - Parser generator and incremental parsing
 - `tree-sitter-c` - C language grammar
+- `tree-sitter-cpp` - C++ language grammar
 - `clap` - Command-line argument parsing
 - `anyhow` - Error handling
 - `serde` / `serde_json` - JSON filter support
@@ -632,7 +633,7 @@ MIT License. See LICENSE file.
 
 ## Acknowledgments
 
-- Built with [tree-sitter](https://tree-sitter.github.io/) for accurate C parsing
+- Built with [tree-sitter](https://tree-sitter.github.io/) for accurate C/C++ parsing
 - Implements standard complexity metrics from software engineering research
 - Cognitive Complexity based on [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/)
 - Inspired by tools like pmccabe, Lizard, CodeClimate, and SonarQube
