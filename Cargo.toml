@@ -6,7 +6,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.0.1"
+version = "1.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["Brandon Arrendondo <brandon@arrendondo.dev>"]
@@ -15,6 +15,7 @@ repository = "https://github.com/brandon-arrendondo/knots"
 [workspace.dependencies]
 tree-sitter = "0.22"
 tree-sitter-c = "0.21"
+tree-sitter-cpp = "0.21"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 colored = "2.0"

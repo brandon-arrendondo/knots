@@ -210,12 +210,14 @@ impl TestQualityAnalyzer {
     }
 }
 
-/// Analyze a C file and extract function complexity metrics using knots
+/// Analyze a C/C++ file and extract function complexity metrics using knots
+/// @brief Parse and analyze a source file for function complexity
+/// @version 2
 pub fn analyze_file(file_path: &str) -> Result<FileAnalysis> {
     let source_code = std::fs::read(file_path)?;
 
     let mut parser = Parser::new();
-    let language = tree_sitter_c::language();
+    let language = knots::language_for_file(std::path::Path::new(file_path));
     parser.set_language(&language)?;
 
     let tree = parser.parse(&source_code, None)

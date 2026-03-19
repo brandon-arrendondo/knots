@@ -32,11 +32,11 @@ if [ ! -x "$VALIDATOR_PATH" ]; then
     exit 0
 fi
 
-# Get list of C files being committed
-C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|h)$')
+# Get list of C/C++ files being committed
+C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx)$')
 
 if [ -z "$C_FILES" ]; then
-    # No C files in this commit
+    # No C/C++ files in this commit
     exit 0
 fi
 

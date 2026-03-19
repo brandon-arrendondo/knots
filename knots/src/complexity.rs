@@ -18,7 +18,10 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         "if_statement" => *complexity += 1,
         "while_statement" => *complexity += 1,
         "do_statement" => *complexity += 1,
-        "for_statement" => *complexity += 1,
+        "for_statement" | "for_range_loop" => *complexity += 1,
+
+        // Throw creates exceptional control flow path (like goto)
+        "throw_statement" => *complexity += 1,
 
         // Switch statement: pmccabe compatibility - count as +1 regardless of cases
         // This matches pmccabe's simpler approach 
@@ -98,8 +101,23 @@ fn visit_node_cognitive(node: Node, source_code: &[u8], nesting_level: u32, comp
             return;
         }
 
-        "while_statement" | "do_statement" | "for_statement" => {
+        "while_statement" | "do_statement" | "for_statement" | "for_range_loop" => {
             *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Per SonarSource spec: try has NO cost and NO nesting increment.
+        // Only catch gets +1 + nesting penalty from the outer scope.
+        "try_statement" => {
+            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
+            return;
+        }
+
+        // Lambda body is a nested scope — children get increased nesting.
+        // No +1 base cost: a lambda definition is not a decision point. Complexity
+        // comes from structures INSIDE the lambda, not the lambda itself.
+        "lambda_expression" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -120,8 +138,8 @@ fn visit_node_cognitive(node: Node, source_code: &[u8], nesting_level: u32, comp
             return;
         }
 
-        // Jump statements: only goto (not break/continue in switches)
-        "goto_statement" => {
+        // Jump statements: goto and throw (flat +1, no nesting penalty)
+        "goto_statement" | "throw_statement" => {
             *complexity += 1;
         }
 
@@ -177,7 +195,8 @@ pub fn calculate_nesting_depth(node: Node) -> u32 {
 fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
     let new_depth = match node.kind() {
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
-        | "switch_statement" => {
+        | "for_range_loop" | "switch_statement" | "catch_clause"
+        | "lambda_expression" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -334,9 +353,14 @@ fn visit_node_abc(node: Node, source_code: &[u8], assignments: &mut u32, branche
             *branches += 1;
         }
 
+        // Branches: throw, new, delete create control flow paths
+        "throw_statement" | "new_expression" | "delete_expression" => {
+            *branches += 1;
+        }
+
         // Conditions
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
-        | "switch_statement" | "conditional_expression" => {
+        | "for_range_loop" | "switch_statement" | "conditional_expression" => {
             *conditions += 1;
         }
 
@@ -608,6 +632,11 @@ fn visit_node_dependencies(node: Node, source_code: &[u8], has_io: &mut bool,
         }
     }
 
+    // C++ new/delete expressions count as allocation
+    if node.kind() == "new_expression" || node.kind() == "delete_expression" {
+        *has_allocation = true;
+    }
+
     // Check for global variable modifications (simplified - looks for assignments to identifiers)
     if node.kind() == "assignment_expression" {
         if let Some(left) = node.child_by_field_name("left") {
@@ -750,6 +779,291 @@ mod tests {
         parser.set_language(&tree_sitter_c::language()).unwrap();
         parser.parse(code, None).unwrap()
     }
+
+    fn parse_cpp_function(code: &str) -> Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_cpp::language()).unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    // ---- C++ parser/discovery tests ----
+
+    #[test]
+    fn test_cpp_namespace_function() {
+        let code = r#"
+        namespace myns {
+            void func() {
+                if (x) { }
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // Same as equivalent C function: base 1 + 1 if = 2
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_cpp_class_method() {
+        let code = r#"
+        class Foo {
+            void method() {
+                if (x) { }
+            }
+        };
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_cpp_template_function() {
+        let code = r#"
+        template <typename T>
+        T add(T a, T b) {
+            if (a > b) { return a; }
+            return b;
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // base 1 + 1 if = 2
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_cpp_extern_c_function() {
+        let code = r#"
+        extern "C" {
+            void c_func() {
+                if (x) { }
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    // ---- C++ range-for tests ----
+
+    #[test]
+    fn test_cpp_range_for_mccabe() {
+        let code = r#"
+        void func() {
+            for (auto& x : items) {
+                x++;
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // base 1 + 1 for_range_loop = 2
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_cpp_range_for_cognitive() {
+        let code = r#"
+        void func() {
+            for (auto& x : items) {
+                if (x > 0) { }
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // for_range_loop: +1 (nesting 0)
+        // if inside loop: +1 (base) +1 (nesting=1) = +2
+        // Total: 3
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_cpp_range_for_nesting() {
+        let code = r#"
+        void func() {
+            for (auto& x : items) {
+                for (auto& y : other) {
+                    x++;
+                }
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        assert_eq!(calculate_nesting_depth(node), 2);
+    }
+
+    // ---- C++ lambda tests ----
+
+    #[test]
+    fn test_cpp_lambda_cognitive_nesting() {
+        let code = r#"
+        void func() {
+            auto f = [](int x) {
+                if (x > 0) { }
+            };
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // lambda: nesting increment (no +1 itself)
+        // if inside lambda: +1 (base) +1 (nesting=1) = +2
+        // Total: 2
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_cpp_lambda_nesting_depth() {
+        let code = r#"
+        void func() {
+            auto f = [](int x) {
+                if (x > 0) { }
+            };
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // lambda: depth 1, if inside: depth 2
+        assert_eq!(calculate_nesting_depth(node), 2);
+    }
+
+    // ---- C++ try/catch tests ----
+
+    #[test]
+    fn test_cpp_try_catch_cognitive() {
+        let code = r#"
+        void func() {
+            try {
+                if (x) { }
+            } catch (const std::exception& e) {
+                int y = 0;
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // Per SonarSource: try has NO cost, NO nesting increment
+        // if inside try: +1 (base) +0 (nesting=0) = +1
+        // catch: +1 (base) +0 (nesting=0) = +1
+        // Total: 2
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_cpp_try_nesting_depth() {
+        let code = r#"
+        void func() {
+            try {
+                if (x) { }
+            } catch (...) { }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // try has no nesting contribution; if: depth 1, catch: depth 1, max=1
+        assert_eq!(calculate_nesting_depth(node), 1);
+    }
+
+    #[test]
+    fn test_cpp_try_catch_nested_cognitive() {
+        let code = r#"
+        void func() {
+            try {
+            } catch (...) {
+                if (y) { }
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // catch: +1 (base) +0 (nesting=0) = +1
+        // if inside catch: +1 (base) +1 (nesting=1) = +2
+        // Total: 3
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
+    }
+
+    // ---- C++ throw tests ----
+
+    #[test]
+    fn test_cpp_throw_mccabe() {
+        let code = r#"
+        void func() {
+            if (x) {
+                throw std::runtime_error("err");
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // base 1 + 1 if + 1 throw = 3
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_cpp_throw_cognitive() {
+        let code = r#"
+        void func() {
+            throw std::runtime_error("err");
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        // throw: flat +1
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    // ---- C++ new/delete ABC tests ----
+
+    #[test]
+    fn test_cpp_new_delete_abc() {
+        let code = r#"
+        void func() {
+            int* p = new int(42);
+            delete p;
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        // new: +1 branch, delete: +1 branch
+        assert_eq!(abc.branches, 2);
+    }
+
+    #[test]
+    fn test_cpp_range_for_abc() {
+        let code = r#"
+        void func() {
+            for (auto& x : items) {
+                x++;
+            }
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        // for_range_loop: +1 condition, x++: +1 assignment
+        assert_eq!(abc.conditions, 1);
+        assert_eq!(abc.assignments, 1);
+    }
+
+    #[test]
+    fn test_cpp_throw_abc() {
+        let code = r#"
+        void func() {
+            throw 42;
+        }
+        "#;
+        let tree = parse_cpp_function(code);
+        let node = tree.root_node();
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        // throw: +1 branch
+        assert_eq!(abc.branches, 1);
+    }
+
+    // ---- Existing C tests ----
 
     #[test]
     fn test_simple_function_mccabe() {
