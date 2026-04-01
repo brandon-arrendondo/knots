@@ -1,0 +1,183 @@
+.TH KNOTS 1 "2026-04-01" "knots 1.2.0" "User Commands"
+.SH NAME
+knots \- C/C++ code complexity analyzer
+.SH SYNOPSIS
+.B knots
+[\fIOPTIONS\fR] <\fIFILE\fR>
+.br
+.B knots
+[\fIOPTIONS\fR] \fB\-\-compile\-commands\fR <\fIFILE\fR>
+.SH DESCRIPTION
+.B knots
+is a fast, powerful C/C++ code complexity analyzer with visual indicators,
+built on tree-sitter.
+It analyzes code complexity patterns, identifies problematic code,
+helps prioritize refactoring efforts, and assesses testability concerns
+across codebases.
+.PP
+.B knots
+computes the following metrics for each function:
+.TP
+.B McCabe Cyclomatic Complexity
+Counts decision points (if, while, for, do, switch, ternary, logical operators).
+Validated to match pmccabe output exactly.
+.TP
+.B Cognitive Complexity
+Measures difficulty to understand code, emphasizing nesting and structural
+complexity.
+Based on the SonarSource specification.
+.TP
+.B Nesting Depth
+Maximum nesting level of control structures.
+.TP
+.B SLOC
+Source lines of code (non-blank, non-comment).
+.TP
+.B ABC Complexity
+Assignment, Branch, Condition magnitude: sqrt(A^2 + B^2 + C^2).
+.TP
+.B Return Count
+Number of return statements in a function.
+.TP
+.B Test Scoring
+Multi-dimensional test difficulty metric across signature, dependency,
+observable, implementation, and documentation axes.
+.SH OPTIONS
+.TP
+.BR \-r ", " \-\-recursive
+Recursively process all C/C++ source files in directories.
+When used, a
+.I report.txt
+file is generated with per-function details.
+Header files (.h, .hpp, .hxx) are skipped by default in recursive mode.
+.TP
+.BR \-v ", " \-\-verbose
+Show detailed per-function analysis.
+.TP
+.BR \-m ", " \-\-matrix
+Show testability matrix categorization.
+Functions are placed into four quadrants:
+QUICK WINS (low complexity, easy to test),
+INVEST IN TESTS (high complexity, easy to test),
+ADD DOCS (low complexity, hard to test),
+REFACTOR (high complexity, hard to test).
+.TP
+.BI \-\-compile\-commands " FILE"
+Use a
+.I compile_commands.json
+file (from CMake, Bear, etc.) to get the list of files to analyze.
+Mutually exclusive with the positional \fIFILE\fR argument.
+.TP
+.BI \-\-include " FILE"
+Include filter rules from a JSON file (whitelist).
+See
+.BR FILTERS
+below.
+.TP
+.BI \-\-exclude " FILE"
+Exclude filter rules from a JSON file (blacklist).
+See
+.BR FILTERS
+below.
+.TP
+.BR \-h ", " \-\-help
+Print help message.
+.TP
+.BR \-V ", " \-\-version
+Print version information.
+.SH FILTERS
+Filter rules are specified in JSON files with the following optional fields:
+.TP
+.B file_patterns
+Glob patterns for file paths.
+Supports \fB*\fR, \fB**\fR, and \fB!\fR for negation.
+.TP
+.B function_patterns
+Regular expression patterns for function names.
+.TP
+.B min_complexity
+Minimum complexity threshold (inclusive).
+.TP
+.B max_complexity
+Maximum complexity threshold (inclusive).
+.PP
+Example filter file:
+.RS
+.nf
+{
+    "file_patterns": ["src/**/*.c"],
+    "function_patterns": ["^handle_"],
+    "min_complexity": 10
+}
+.fi
+.RE
+.SH COMPLEXITY INDICATORS
+.B knots
+uses visual emoji indicators based on the maximum of McCabe and
+Cognitive complexity:
+.PP
+.RS
+.nf
+1\-10   Good     \- Low complexity, easy to maintain
+11\-20  Okay     \- Moderate complexity, may need attention
+21\-49  Bad      \- High complexity, consider refactoring
+50+    Critical \- Very high complexity, refactor immediately
+.fi
+.RE
+.SH EXIT STATUS
+.TP
+.B 0
+Successful analysis.
+.TP
+.B 1
+Error occurred (file not found, parse error, invalid arguments).
+.SH EXAMPLES
+Analyze a single file:
+.RS
+.nf
+knots path/to/file.c
+.fi
+.RE
+.PP
+Recursively analyze a directory:
+.RS
+.nf
+knots \-r path/to/project/
+.fi
+.RE
+.PP
+Analyze files from a compilation database:
+.RS
+.nf
+knots \-\-compile\-commands build/compile_commands.json
+.fi
+.RE
+.PP
+Show detailed analysis with testability matrix:
+.RS
+.nf
+knots \-v \-m path/to/file.c
+.fi
+.RE
+.PP
+Filter to high-complexity functions only:
+.RS
+.nf
+knots \-r . \-\-include high\-complexity.json
+.fi
+.RE
+.SH FILES
+.TP
+.I report.txt
+Generated in the current directory when using \fB\-r\fR mode.
+Contains per-function complexity details.
+.TP
+.I compile_commands.json
+Compilation database used with \fB\-\-compile\-commands\fR.
+.SH AUTHORS
+Brandon Arrendondo <brandon@arrendondo.dev>
+.SH BUGS
+Report bugs at: https://github.com/brandon-arrendondo/knots/issues
+.SH SEE ALSO
+.BR knots-test-complexity (1),
+.BR pmccabe (1)

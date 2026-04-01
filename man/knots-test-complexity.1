@@ -1,0 +1,87 @@
+.TH KNOTS-TEST-COMPLEXITY 1 "2026-04-01" "knots 1.2.0" "User Commands"
+.SH NAME
+knots-test-complexity \- test quality analyzer for C/C++ unit tests
+.SH SYNOPSIS
+.B knots-test-complexity
+[\fIOPTIONS\fR] <\fITEST_FILE\fR> <\fISOURCE_FILE\fR>
+.SH DESCRIPTION
+.B knots-test-complexity
+validates that unit tests have sufficient complexity and boundary coverage
+relative to the source code they test.
+It compares the complexity of test functions against source functions and
+checks for boundary value testing patterns.
+.PP
+This tool is designed for use in CI/CD pipelines and pre-commit hooks to
+enforce test quality standards.
+.SH OPTIONS
+.TP
+.BR \-t ", " \fB\-\-threshold\fR " " \fIVALUE\fR
+Minimum test-to-source complexity ratio.
+Default: 0.70 (70%).
+Must be between 0.0 and 2.0.
+.TP
+.BR \-b ", " \fB\-\-boundary\-threshold\fR " " \fIVALUE\fR
+Minimum boundary test coverage ratio.
+Default: 0.80 (80%).
+Must be between 0.0 and 1.0.
+.TP
+.BR \-l ", " \fB\-\-level\fR " " \fILEVEL\fR
+Enforcement level.
+Valid values are \fBwarn\fR (print warnings but exit 0) and \fBerror\fR
+(exit 1 on failure).
+Default: warn.
+.TP
+.B \-\-no\-check\-boundaries
+Disable boundary value checking.
+By default, boundary checking is enabled.
+.TP
+.BR \-v ", " \-\-verbose
+Show detailed per-function analysis.
+.TP
+.BR \-h ", " \-\-help
+Print help message.
+.TP
+.BR \-V ", " \-\-version
+Print version information.
+.SH EXIT STATUS
+.TP
+.B 0
+Tests meet quality thresholds, or enforcement level is set to \fBwarn\fR.
+.TP
+.B 1
+Tests do not meet quality thresholds and enforcement level is \fBerror\fR,
+or an error occurred (file not found, invalid arguments).
+.SH EXAMPLES
+Check test quality with default thresholds:
+.RS
+.nf
+knots-test-complexity test/test_module.c src/module.c
+.fi
+.RE
+.PP
+Strict mode with custom thresholds:
+.RS
+.nf
+knots-test-complexity \-t 0.90 \-b 0.90 \-l error test/test_module.c src/module.c
+.fi
+.RE
+.PP
+Skip boundary checking:
+.RS
+.nf
+knots-test-complexity \-\-no\-check\-boundaries test/test_module.c src/module.c
+.fi
+.RE
+.PP
+Verbose output:
+.RS
+.nf
+knots-test-complexity \-v test/test_module.c src/module.c
+.fi
+.RE
+.SH AUTHORS
+Brandon Arrendondo <brandon@arrendondo.dev>
+.SH BUGS
+Report bugs at: https://github.com/brandon-arrendondo/knots/issues
+.SH SEE ALSO
+.BR knots (1)
