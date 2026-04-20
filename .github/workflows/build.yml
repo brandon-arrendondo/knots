@@ -87,6 +87,13 @@ jobs:
           ${{ matrix.knots_binary }} --version
           ${{ matrix.test_complexity_binary }} --help | head -5
 
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked
+
+      - name: Generate Third-Party Licenses
+        shell: bash
+        run: cargo about generate about.hbs -o THIRD_PARTY_LICENSES.txt
+
       - name: List Build Output (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -123,6 +130,8 @@ jobs:
           cp ${{ matrix.knots_binary }} "${ARTIFACT_DIR}/"
           cp ${{ matrix.test_complexity_binary }} "${ARTIFACT_DIR}/"
           cp README.md "${ARTIFACT_DIR}/" 2>/dev/null || true
+          cp LICENSE "${ARTIFACT_DIR}/" 2>/dev/null || true
+          cp THIRD_PARTY_LICENSES.txt "${ARTIFACT_DIR}/"
           cp knots-test-complexity/README.md "${ARTIFACT_DIR}/TEST_COMPLEXITY_README.md" 2>/dev/null || true
           cp hooks/README.md "${ARTIFACT_DIR}/HOOKS_README.md" 2>/dev/null || true
           mkdir -p "${ARTIFACT_DIR}/man"
@@ -141,6 +150,8 @@ jobs:
           Copy-Item "${{ matrix.knots_binary }}" -Destination $ARTIFACT_DIR
           Copy-Item "${{ matrix.test_complexity_binary }}" -Destination $ARTIFACT_DIR
           Copy-Item "README.md" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
+          Copy-Item "LICENSE" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
+          Copy-Item "THIRD_PARTY_LICENSES.txt" -Destination $ARTIFACT_DIR
           Copy-Item "knots-test-complexity/README.md" -Destination "$ARTIFACT_DIR/TEST_COMPLEXITY_README.md" -ErrorAction SilentlyContinue
           Copy-Item "hooks/README.md" -Destination "$ARTIFACT_DIR/HOOKS_README.md" -ErrorAction SilentlyContinue
           Write-Host "=== Artifacts staged ==="
@@ -249,6 +260,8 @@ jobs:
           # Docs
           cp README.md "${PKG_DIR}/usr/share/doc/knots/"
           cp LICENSE "${PKG_DIR}/usr/share/doc/knots/copyright"
+          cp "artifacts/knots-linux-x64-${VERSION}/THIRD_PARTY_LICENSES.txt" \
+             "${PKG_DIR}/usr/share/doc/knots/"
 
           dpkg-deb --build --root-owner-group "${PKG_DIR}"
           mv "${PKG_DIR}.deb" "artifacts/"
@@ -272,6 +285,7 @@ jobs:
           cp man/knots-test-complexity.1 "${TARDIR}/man/"
           cp README.md "${TARDIR}/doc/"
           cp LICENSE "${TARDIR}/doc/"
+          cp "artifacts/knots-linux-x64-${VERSION}/THIRD_PARTY_LICENSES.txt" "${TARDIR}/doc/"
           tar -czf "rpmbuild/SOURCES/knots-${VERSION}.tar.gz" "${TARDIR}"
           rm -rf "${TARDIR}"
 
@@ -305,6 +319,7 @@ jobs:
           install -m 644 man/knots-test-complexity.1 %{buildroot}%{_mandir}/man1/knots-test-complexity.1
           install -m 644 doc/README.md %{buildroot}%{_docdir}/%{name}/README.md
           install -m 644 doc/LICENSE %{buildroot}%{_docdir}/%{name}/LICENSE
+          install -m 644 doc/THIRD_PARTY_LICENSES.txt %{buildroot}%{_docdir}/%{name}/THIRD_PARTY_LICENSES.txt
 
           %files
           %{_bindir}/knots
@@ -312,6 +327,7 @@ jobs:
           %{_mandir}/man1/knots.1*
           %{_mandir}/man1/knots-test-complexity.1*
           %doc %{_docdir}/%{name}/README.md
+          %doc %{_docdir}/%{name}/THIRD_PARTY_LICENSES.txt
           %license %{_docdir}/%{name}/LICENSE
           SPEC_EOF
 
@@ -348,6 +364,12 @@ jobs:
           # Man pages
           cp man/knots.1 "${APPDIR}/usr/share/man/man1/"
           cp man/knots-test-complexity.1 "${APPDIR}/usr/share/man/man1/"
+
+          # License docs
+          mkdir -p "${APPDIR}/usr/share/doc/knots"
+          cp LICENSE "${APPDIR}/usr/share/doc/knots/"
+          cp "artifacts/knots-linux-x64-${VERSION}/THIRD_PARTY_LICENSES.txt" \
+             "${APPDIR}/usr/share/doc/knots/"
 
           # Desktop entry
           cat > "${APPDIR}/knots.desktop" << EOF

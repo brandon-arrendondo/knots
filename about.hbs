@@ -1,0 +1,20 @@
+Third-Party Licenses
+====================
+
+This binary includes code from the third-party Rust crates listed below.
+The applicable licenses and copyright notices are reproduced verbatim so
+that binary distributions satisfy each dependency's attribution
+requirements.
+
+--------------------------------------------------------------------------------
+
+{{#each licenses}}
+{{name}} ({{id}})
+{{#each used_by}}  - {{crate.name}} {{crate.version}}{{#if crate.repository}} — {{crate.repository}}{{/if}}
+{{/each}}
+
+{{{text}}}
+
+--------------------------------------------------------------------------------
+
+{{/each}}

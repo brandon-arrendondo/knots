@@ -1,0 +1,19 @@
+# cargo-about configuration — https://embarkstudios.github.io/cargo-about/
+#
+# SPDX license expressions that are acceptable for dependencies of this project.
+# New deps with licenses not on this list will fail the CI license check.
+
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "0BSD",
+    "MPL-2.0",
+    "CC0-1.0",
+]
