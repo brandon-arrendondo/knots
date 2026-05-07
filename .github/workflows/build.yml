@@ -88,14 +88,14 @@ jobs:
           ${{ matrix.test_complexity_binary }} --help | head -5
 
       - name: Install cargo-about
-        run: cargo install cargo-about --locked
+        run: cargo install cargo-about --features cli
 
       - name: Generate Third-Party Licenses
         shell: bash
         run: cargo about generate about.hbs -o THIRD_PARTY_LICENSES.txt
 
       - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx --locked
+        run: cargo install cargo-cyclonedx
 
       - name: Generate SBOM (CycloneDX)
         shell: bash
@@ -181,7 +181,11 @@ jobs:
     name: Package Release
     needs: build
     runs-on: ubuntu-22.04
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: >-
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+      && github.event_name != 'pull_request'
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -210,6 +214,11 @@ jobs:
         with:
           name: knots-windows-x64-${{ steps.version.outputs.VERSION }}
           path: artifacts/knots-windows-x64-${{ steps.version.outputs.VERSION }}
+
+      - name: Restore binary execute bits
+        run: |
+          chmod +x artifacts/knots-linux-x64-${{ steps.version.outputs.VERSION }}/knots
+          chmod +x artifacts/knots-linux-x64-${{ steps.version.outputs.VERSION }}/knots-test-complexity
 
       - name: Verify Release Package
         run: |
@@ -457,3 +466,15 @@ jobs:
             artifacts/*.rpm
             artifacts/*.AppImage
           retention-days: 90
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/*.deb
+            artifacts/*.rpm
+            artifacts/*.AppImage
