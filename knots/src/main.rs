@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -182,6 +182,18 @@ struct Args {
     /// Exclude filter rules from JSON file (blacklist files/functions)
     #[arg(long, value_name = "FILE")]
     exclude: Option<PathBuf>,
+
+    /// Output format
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    format: OutputFormat,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+enum OutputFormat {
+    /// Human-readable text output (default)
+    Text,
+    /// SARIF 2.1.0 JSON output for editor/CI integration
+    Sarif,
 }
 
 /// Parse a source file into a tree-sitter Tree, selecting the grammar by extension.
@@ -223,6 +235,14 @@ fn main() -> Result<()> {
     } else {
         anyhow::bail!("Either FILE or --compile-commands must be specified");
     };
+
+    // SARIF mode: collect metrics across all files and emit a SARIF 2.1.0 log.
+    // This bypasses text/matrix output so the JSON is the only thing on stdout.
+    if args.format == OutputFormat::Sarif {
+        let (all_metrics, _skipped_files) = collect_all_metrics(&files, &include_rules, &exclude_rules);
+        emit_sarif(&all_metrics)?;
+        return Ok(());
+    }
 
     // For matrix mode
     if args.matrix {
@@ -471,9 +491,13 @@ fn collect_function_metrics(
 
             // Apply filter rules
             if should_process_function(&name, max_complexity, include_rules, exclude_rules) {
+                let start_line = (node.start_position().row as u32) + 1;
+                let end_line = (node.end_position().row as u32) + 1;
                 metrics.push(FunctionMetrics {
                     name,
                     file_path: file_path.to_string(),
+                    start_line,
+                    end_line,
                     mccabe,
                     cognitive,
                     nesting,
@@ -616,6 +640,160 @@ fn analyze_code(
     Ok(())
 }
 
+/// Collect FunctionMetrics across multiple files, skipping unreadable/unparseable ones.
+/// Returns (metrics, skipped_file_count). Used by SARIF mode.
+fn collect_all_metrics(
+    files: &[PathBuf],
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> (Vec<FunctionMetrics>, usize) {
+    let mut all_metrics = Vec::new();
+    let mut skipped = 0;
+
+    for file in files {
+        let source_code = match fs::read_to_string(file) {
+            Ok(code) => code,
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
+        };
+
+        let tree = match parse_file(file, &source_code) {
+            Ok(t) => t,
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
+        };
+
+        let metrics = collect_function_metrics(
+            &tree,
+            &source_code,
+            file.to_str().unwrap_or(""),
+            include_rules,
+            exclude_rules,
+        );
+        all_metrics.extend(metrics);
+    }
+
+    (all_metrics, skipped)
+}
+
+/// SARIF level for a complexity bucket. Mirrors the emoji buckets:
+/// 1-10 healthy (no result emitted), 11-20 note, 21-49 warning, 50+ error.
+fn sarif_level(complexity: u32) -> &'static str {
+    match complexity {
+        0..=10 => "none",
+        11..=20 => "note",
+        21..=49 => "warning",
+        _ => "error",
+    }
+}
+
+/// Emit a SARIF 2.1.0 log to stdout describing functions whose max(McCabe, Cognitive)
+/// exceeds the healthy threshold (>10). One result per offending function.
+fn emit_sarif(all_metrics: &[FunctionMetrics]) -> Result<()> {
+    use serde_json::json;
+
+    let rules = json!([
+        {
+            "id": "knots/high-complexity",
+            "name": "HighComplexity",
+            "shortDescription": { "text": "Function exceeds complexity threshold" },
+            "fullDescription": {
+                "text": "Reports functions whose McCabe or cognitive complexity exceeds the healthy threshold (10). Severity escalates at 21 (warning) and 50 (error)."
+            },
+            "defaultConfiguration": { "level": "note" },
+            "helpUri": "https://github.com/brandon-arrendondo/knots"
+        }
+    ]);
+
+    let mut results = Vec::new();
+    for func in all_metrics {
+        let max = std::cmp::max(func.mccabe, func.cognitive);
+        if max <= 10 {
+            continue;
+        }
+
+        let uri = path_to_sarif_uri(&func.file_path);
+        let message = format!(
+            "{} has high complexity (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {})",
+            func.name,
+            func.mccabe,
+            func.cognitive,
+            func.nesting,
+            func.sloc,
+            func.abc_magnitude,
+            func.return_count,
+            func.test_scoring.total_score
+        );
+
+        results.push(json!({
+            "ruleId": "knots/high-complexity",
+            "level": sarif_level(max),
+            "message": { "text": message },
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": { "uri": uri },
+                    "region": {
+                        "startLine": func.start_line,
+                        "endLine": func.end_line
+                    }
+                },
+                "logicalLocations": [{
+                    "name": func.name,
+                    "kind": "function"
+                }]
+            }],
+            "properties": {
+                "mccabe": func.mccabe,
+                "cognitive": func.cognitive,
+                "nesting": func.nesting,
+                "sloc": func.sloc,
+                "abcMagnitude": func.abc_magnitude,
+                "returnCount": func.return_count,
+                "testScore": func.test_scoring.total_score
+            }
+        }));
+    }
+
+    let log = json!({
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "knots",
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "informationUri": "https://github.com/brandon-arrendondo/knots",
+                    "rules": rules
+                }
+            },
+            "results": results
+        }]
+    });
+
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    serde_json::to_writer_pretty(&mut handle, &log).context("Failed to write SARIF JSON")?;
+    writeln!(handle)?;
+    Ok(())
+}
+
+/// Convert a filesystem path string to a relative URI suitable for SARIF
+/// artifactLocation. Uses a path relative to the current working directory
+/// when possible, otherwise falls back to the raw path.
+fn path_to_sarif_uri(file_path: &str) -> String {
+    let path = Path::new(file_path);
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Ok(rel) = path.strip_prefix(&cwd) {
+            return rel.to_string_lossy().replace('\\', "/");
+        }
+    }
+    file_path.replace('\\', "/")
+}
+
 /// Write detailed report to report.txt for recursive analysis
 fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Result<()> {
     let mut file = fs::File::create("report.txt")
@@ -728,6 +906,8 @@ fn display_recursive_summary(all_metrics: &[FunctionMetrics], total_files: usize
 struct FunctionMetrics {
     name: String,
     file_path: String,
+    start_line: u32,
+    end_line: u32,
     mccabe: u32,
     cognitive: u32,
     nesting: u32,

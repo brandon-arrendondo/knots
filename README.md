@@ -77,6 +77,7 @@ Options:
   --compile-commands <FILE>     Use compile_commands.json to get list of files to analyze
   --include <FILE>              Include filter rules from JSON file (whitelist)
   --exclude <FILE>              Exclude filter rules from JSON file (blacklist)
+  --format <FORMAT>             Output format: text (default) or sarif
   -h, --help                    Print help
   -V, --version                 Print version
 ```
@@ -302,6 +303,38 @@ knots -r . --include include.json --exclude exclude.json
 ```
 
 All fields are optional. See [FILTERS.md](FILTERS.md) for comprehensive documentation.
+
+### SARIF Output (editor & CI integration)
+
+Knots can emit [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) JSON, which is consumed by VS Code (via the SARIF Viewer extension), GitHub Code Scanning, and other static-analysis tooling.
+
+```bash
+# Single file
+knots --format sarif src/main.c > knots.sarif
+
+# Whole project
+knots -r --format sarif src/ > knots.sarif
+
+# From a compile_commands.json
+knots --compile-commands compile_commands.json --format sarif > knots.sarif
+```
+
+In SARIF mode the JSON document is the *only* output on stdout — text/matrix output is suppressed so the result can be piped or redirected directly to a file.
+
+**What gets reported:** one SARIF result per function whose maximum of McCabe and cognitive complexity exceeds 10 (the healthy threshold). Severity follows the same buckets as the emoji indicators:
+
+| Max complexity | SARIF level | Emoji |
+|----------------|-------------|-------|
+| 1–10           | (omitted)   | 😊    |
+| 11–20          | `note`      | 😐    |
+| 21–49          | `warning`   | 😠    |
+| 50+            | `error`     | 😢    |
+
+Each result includes a `physicalLocation` (file URI + start/end line) and a `properties` bag carrying every metric (mccabe, cognitive, nesting, sloc, abcMagnitude, returnCount, testScore) so downstream tools can filter or sort on individual values.
+
+**GitHub Code Scanning:** upload the SARIF file from a workflow with `github/codeql-action/upload-sarif@v3` to surface findings as PR annotations.
+
+**VS Code:** install the *SARIF Viewer* extension and open `knots.sarif` to navigate findings inline with the source.
 
 **Example Filters:**
 
