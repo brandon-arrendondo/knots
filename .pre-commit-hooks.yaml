@@ -1,36 +1,49 @@
 # Pre-commit hooks for knots
 # See https://pre-commit.com for more information
 
-# Standard complexity check
+# Standard complexity check (language: rust — auto-installs via pre-commit)
 - id: knots
   name: Code Complexity Check
   description: Check C/C++ code complexity with default thresholds (McCabe 15, Cognitive 15, Nesting 5, SLOC 50, ABC 10.0, Returns 3)
-  entry: hooks/pre-commit-wrapper.sh
-  language: script
-  files: \.(c|cpp|cc|cxx|h|hpp|hxx)$
-  pass_filenames: true
+  entry: knots --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
+  language: rust
+  types_or: [c, c++]
 
-# Verbose variant - shows summary for all files
+# Verbose variant - shows full per-function analysis for all files
 - id: knots-verbose
   name: Code Complexity Check (Verbose)
-  description: Show summary for all files, not just violations
-  entry: hooks/pre-commit-wrapper.sh --verbose
-  language: script
-  files: \.(c|cpp|cc|cxx|h|hpp|hxx)$
-  pass_filenames: true
+  description: Show detailed per-function output; fails on same default thresholds
+  entry: knots --verbose --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
+  language: rust
+  types_or: [c, c++]
 
 # Strict variant - stricter thresholds
 - id: knots-strict
   name: Code Complexity Check (Strict)
   description: Strict thresholds (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
+  entry: knots --mccabe-threshold=10 --cognitive-threshold=10 --nesting-threshold=3 --sloc-threshold=30 --abc-threshold=5.0 --return-threshold=3
+  language: rust
+  types_or: [c, c++]
+
+# Legacy script-based hooks (require knots on PATH; kept for backwards compatibility)
+- id: knots-script
+  name: Code Complexity Check (script)
+  description: Script-based variant; requires knots installed on PATH
+  entry: hooks/pre-commit-wrapper.sh
+  language: script
+  files: \.(c|cpp|cc|cxx|h|hpp|hxx)$
+  pass_filenames: true
+
+- id: knots-strict-script
+  name: Code Complexity Check (Strict, script)
+  description: Strict script-based variant; requires knots installed on PATH
   entry: hooks/pre-commit-wrapper.sh
   language: script
   files: \.(c|cpp|cc|cxx|h|hpp|hxx)$
   pass_filenames: true
   args: ['--mccabe-threshold=10', '--cognitive-threshold=10', '--nesting-threshold=3', '--sloc-threshold=30', '--abc-threshold=5.0', '--return-threshold=3']
 
-# Test quality checker - validates tests have sufficient complexity and boundary coverage
-# Designed for Ceedling framework - parses TEST_SOURCE_FILE macro to find source files
+# Test quality checker - requires knots-test-complexity on PATH (no language: rust yet)
 - id: test-complexity
   name: Test Quality Check (Complexity & Boundaries)
   description: Validate unit tests have sufficient cyclomatic complexity and boundary coverage

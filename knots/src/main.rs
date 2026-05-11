@@ -186,6 +186,30 @@ struct Args {
     /// Output format
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     format: OutputFormat,
+
+    /// Exit 1 if any function exceeds this McCabe complexity (default: off)
+    #[arg(long, value_name = "N")]
+    mccabe_threshold: Option<u32>,
+
+    /// Exit 1 if any function exceeds this cognitive complexity (default: off)
+    #[arg(long, value_name = "N")]
+    cognitive_threshold: Option<u32>,
+
+    /// Exit 1 if any function exceeds this nesting depth (default: off)
+    #[arg(long, value_name = "N")]
+    nesting_threshold: Option<u32>,
+
+    /// Exit 1 if any function exceeds this SLOC count (default: off)
+    #[arg(long, value_name = "N")]
+    sloc_threshold: Option<u32>,
+
+    /// Exit 1 if any function exceeds this ABC magnitude (default: off)
+    #[arg(long, value_name = "F")]
+    abc_threshold: Option<f64>,
+
+    /// Exit 1 if any function exceeds this return count (default: off)
+    #[arg(long, value_name = "N")]
+    return_threshold: Option<u32>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -207,6 +231,88 @@ fn parse_file(file: &Path, source_code: &str) -> Result<Tree> {
     parser
         .parse(source_code, None)
         .with_context(|| format!("Failed to parse {}", file.display()))
+}
+
+struct Thresholds {
+    mccabe: Option<u32>,
+    cognitive: Option<u32>,
+    nesting: Option<u32>,
+    sloc: Option<u32>,
+    abc: Option<f64>,
+    returns: Option<u32>,
+}
+
+impl Thresholds {
+    fn active(&self) -> bool {
+        self.mccabe.is_some()
+            || self.cognitive.is_some()
+            || self.nesting.is_some()
+            || self.sloc.is_some()
+            || self.abc.is_some()
+            || self.returns.is_some()
+    }
+}
+
+fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
+    if !t.active() {
+        return Ok(());
+    }
+
+    let mut violations: Vec<String> = Vec::new();
+
+    for func in metrics {
+        let mut func_violations: Vec<String> = Vec::new();
+
+        if let Some(limit) = t.mccabe {
+            if func.mccabe > limit {
+                func_violations.push(format!("McCabe {} > {}", func.mccabe, limit));
+            }
+        }
+        if let Some(limit) = t.cognitive {
+            if func.cognitive > limit {
+                func_violations.push(format!("Cognitive {} > {}", func.cognitive, limit));
+            }
+        }
+        if let Some(limit) = t.nesting {
+            if func.nesting > limit {
+                func_violations.push(format!("Nesting {} > {}", func.nesting, limit));
+            }
+        }
+        if let Some(limit) = t.sloc {
+            if func.sloc > limit {
+                func_violations.push(format!("SLOC {} > {}", func.sloc, limit));
+            }
+        }
+        if let Some(limit) = t.abc {
+            if func.abc_magnitude > limit {
+                func_violations.push(format!("ABC {:.2} > {:.2}", func.abc_magnitude, limit));
+            }
+        }
+        if let Some(limit) = t.returns {
+            if func.return_count > limit {
+                func_violations.push(format!("Returns {} > {}", func.return_count, limit));
+            }
+        }
+
+        if !func_violations.is_empty() {
+            let loc = if func.file_path.is_empty() {
+                format!("{}:{}", func.name, func.start_line)
+            } else {
+                format!("{}:{}:{}", func.file_path, func.start_line, func.name)
+            };
+            violations.push(format!("  {} — {}", loc, func_violations.join(", ")));
+        }
+    }
+
+    if !violations.is_empty() {
+        eprintln!("Threshold violations ({}):", violations.len());
+        for v in &violations {
+            eprintln!("{}", v);
+        }
+        anyhow::bail!("{} function(s) exceeded complexity thresholds", violations.len());
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -234,6 +340,15 @@ fn main() -> Result<()> {
         collect_files(file_path, args.recursive, &include_rules, &exclude_rules)?
     } else {
         anyhow::bail!("Either FILE or --compile-commands must be specified");
+    };
+
+    let thresholds = Thresholds {
+        mccabe: args.mccabe_threshold,
+        cognitive: args.cognitive_threshold,
+        nesting: args.nesting_threshold,
+        sloc: args.sloc_threshold,
+        abc: args.abc_threshold,
+        returns: args.return_threshold,
     };
 
     // SARIF mode: collect metrics across all files and emit a SARIF 2.1.0 log.
@@ -282,6 +397,7 @@ fn main() -> Result<()> {
         }
 
         display_testability_matrix(&all_metrics, files.len(), skipped_files);
+        check_thresholds(&all_metrics, &thresholds)?;
         return Ok(());
     }
 
@@ -294,6 +410,8 @@ fn main() -> Result<()> {
         let tree = parse_file(file, &source_code)?;
 
         analyze_code(&tree, &source_code, args.verbose, &include_rules, &exclude_rules)?;
+        let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""), &include_rules, &exclude_rules);
+        check_thresholds(&metrics, &thresholds)?;
         return Ok(());
     }
 
@@ -334,6 +452,7 @@ fn main() -> Result<()> {
     // Display summary with top 5 worst functions and totals/averages
     display_recursive_summary(&all_metrics, files.len(), skipped_files);
 
+    check_thresholds(&all_metrics, &thresholds)?;
     Ok(())
 }
 
