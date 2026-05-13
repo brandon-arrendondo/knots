@@ -15,10 +15,16 @@ A fast, powerful C/C++ code complexity analyzer with visual indicators, built on
 
 ## Installation
 
+### From crates.io
+
+```bash
+cargo install knots
+```
+
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/knots.git
+git clone https://github.com/brandon-arrendondo/knots.git
 cd knots
 cargo build --release
 ./target/release/knots --version
