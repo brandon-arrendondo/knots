@@ -597,22 +597,34 @@ Check:
 
 ### Pre-commit Hook
 
-```bash
-#!/bin/bash
-# .git/hooks/pre-commit
+Knots integrates with the [pre-commit](https://pre-commit.com) framework. Add it to your `.pre-commit-config.yaml` and pre-commit will automatically build and install knots:
 
-staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx)$')
-
-if [ -n "$staged_files" ]; then
-    for file in $staged_files; do
-        if knots "$file" | grep -q 😢; then
-            echo "ERROR: High complexity detected in $file"
-            knots "$file" | grep 😢
-            exit 1
-        fi
-    done
-fi
+```yaml
+repos:
+  - repo: https://github.com/brandon-arrendondo/knots
+    rev: v1.4.0
+    hooks:
+      - id: knots          # fails on violations (default thresholds)
+      # - id: knots-verbose # same thresholds, shows per-function detail
+      # - id: knots-strict  # stricter thresholds (McCabe 10, Cognitive 10, ...)
 ```
+
+Then run:
+
+```bash
+pre-commit install
+```
+
+Custom thresholds can be set via `args`:
+
+```yaml
+      - id: knots
+        args:
+          - --mccabe-threshold=20
+          - --cognitive-threshold=15
+```
+
+See `example-pre-commit-config.yaml` in the repo for a full example with all options.
 
 ### Combining with Other Tools
 
@@ -641,8 +653,8 @@ cargo build
 cargo test
 
 # Run examples
-cargo run -- knots/examples/complex.c
-cargo run -- -r -m knots/examples/
+cargo run -- examples/complex.c
+cargo run -- -r -m examples/
 ```
 
 ## Dependencies
