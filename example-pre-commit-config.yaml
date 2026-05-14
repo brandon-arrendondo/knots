@@ -18,7 +18,7 @@ repos:
   # Code complexity checking with knots
   # pre-commit will automatically build and install knots when you run `pre-commit install`
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v0.3.0
+    rev: v1.4.1
     hooks:
       # Standard complexity check
       # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
