@@ -1,6 +1,33 @@
+[package]
+name = "knots"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Cyclomatic and cognitive complexity analysis for C/C++ code"
+
+[[bin]]
+name = "knots"
+path = "src/main.rs"
+
+[lib]
+name = "knots"
+path = "src/lib.rs"
+
+[dependencies]
+tree-sitter.workspace = true
+tree-sitter-c.workspace = true
+tree-sitter-cpp.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+walkdir.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+
 [workspace]
 members = [
-    "knots",
     "knots-test-complexity",
 ]
 resolver = "2"

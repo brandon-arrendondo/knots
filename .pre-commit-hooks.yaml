@@ -1,16 +1,15 @@
 # Pre-commit hooks for knots
 # See https://pre-commit.com for more information
 #
-# Note: these hooks use language: system — knots must be installed on PATH.
-# pre-commit's language: rust auto-install does not support Cargo virtual
-# workspaces. Install knots from GitHub releases or via cargo install.
+# These hooks use language: rust — pre-commit will automatically build and
+# install knots from this repo when users run `pre-commit install`.
 
 # Standard complexity check
 - id: knots
   name: Code Complexity Check
   description: Check C/C++ code complexity with default thresholds (McCabe 15, Cognitive 15, Nesting 5, SLOC 50, ABC 10.0, Returns 3)
   entry: knots --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
-  language: system
+  language: rust
   types_or: [c, c++]
 
 # Verbose variant - shows full per-function analysis for all files
@@ -18,7 +17,7 @@
   name: Code Complexity Check (Verbose)
   description: Show detailed per-function output; fails on same default thresholds
   entry: knots --verbose --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
-  language: system
+  language: rust
   types_or: [c, c++]
 
 # Strict variant - stricter thresholds
@@ -26,7 +25,7 @@
   name: Code Complexity Check (Strict)
   description: Strict thresholds (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
   entry: knots --mccabe-threshold=10 --cognitive-threshold=10 --nesting-threshold=3 --sloc-threshold=30 --abc-threshold=5.0 --return-threshold=3
-  language: system
+  language: rust
   types_or: [c, c++]
 
 # Test quality checker - validates tests have sufficient complexity and boundary coverage

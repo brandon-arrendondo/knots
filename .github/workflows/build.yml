@@ -139,7 +139,7 @@ jobs:
           cp README.md "${ARTIFACT_DIR}/" 2>/dev/null || true
           cp LICENSE "${ARTIFACT_DIR}/" 2>/dev/null || true
           cp THIRD_PARTY_LICENSES.txt "${ARTIFACT_DIR}/"
-          cp knots/knots.cdx.json "${ARTIFACT_DIR}/"
+          cp knots.cdx.json "${ARTIFACT_DIR}/"
           cp knots-test-complexity/knots-test-complexity.cdx.json "${ARTIFACT_DIR}/"
           cp knots-test-complexity/README.md "${ARTIFACT_DIR}/TEST_COMPLEXITY_README.md" 2>/dev/null || true
           cp hooks/README.md "${ARTIFACT_DIR}/HOOKS_README.md" 2>/dev/null || true
@@ -161,7 +161,7 @@ jobs:
           Copy-Item "README.md" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
           Copy-Item "LICENSE" -Destination $ARTIFACT_DIR -ErrorAction SilentlyContinue
           Copy-Item "THIRD_PARTY_LICENSES.txt" -Destination $ARTIFACT_DIR
-          Copy-Item "knots/knots.cdx.json" -Destination $ARTIFACT_DIR
+          Copy-Item "knots.cdx.json" -Destination $ARTIFACT_DIR
           Copy-Item "knots-test-complexity/knots-test-complexity.cdx.json" -Destination $ARTIFACT_DIR
           Copy-Item "knots-test-complexity/README.md" -Destination "$ARTIFACT_DIR/TEST_COMPLEXITY_README.md" -ErrorAction SilentlyContinue
           Copy-Item "hooks/README.md" -Destination "$ARTIFACT_DIR/HOOKS_README.md" -ErrorAction SilentlyContinue

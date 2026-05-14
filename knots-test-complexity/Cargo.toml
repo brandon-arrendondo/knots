@@ -13,7 +13,7 @@ name = "knots-test-complexity"
 path = "src/main.rs"
 
 [dependencies]
-knots = { path = "../knots" }
+knots = { path = ".." }
 tree-sitter.workspace = true
 tree-sitter-c.workspace = true
 tree-sitter-cpp.workspace = true
