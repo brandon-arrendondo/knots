@@ -1,0 +1,33 @@
+# Pre-commit hooks for knots
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt (auto-fix)
+        description: Format Rust code with rustfmt
+        entry: bash -c 'cargo fmt --all 2>&1 && echo "Formatting complete"'
+        language: system
+        pass_filenames: false
+        types: [rust]
+        verbose: true
+
+      - id: cargo-clippy
+        name: cargo clippy
+        description: Lint Rust code with Clippy - deny warnings (all targets including tests)
+        entry: bash -c 'cargo clippy --all-targets --all-features -- -D warnings 2>&1'
+        language: system
+        pass_filenames: false
+        types: [rust]
+        verbose: true
+
+      - id: cargo-test
+        name: cargo test
+        description: Run the test suite
+        entry: bash -c 'cargo test --workspace 2>&1'
+        language: system
+        pass_filenames: false
+        types: [rust]
+        verbose: true
