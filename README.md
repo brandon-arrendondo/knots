@@ -602,7 +602,7 @@ Knots integrates with the [pre-commit](https://pre-commit.com) framework. Add it
 ```yaml
 repos:
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v1.4.1
+    rev: v1.4.3
     hooks:
       - id: knots          # fails on violations (default thresholds)
       # - id: knots-verbose # same thresholds, shows per-function detail
