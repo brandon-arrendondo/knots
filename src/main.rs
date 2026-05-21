@@ -154,6 +154,13 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[command(name = "knots")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Analyzes C/C++ code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
+// Last-wins on repeated flags. The pre-commit hook entry bakes default
+// thresholds (e.g. `--abc-threshold=10.0`); a consumer overriding one
+// via the hook's `args:` field appends a second occurrence. Without
+// this, clap rejects it with "cannot be used multiple times"; with it,
+// the consumer's value wins — matching the README's documented `args:`
+// customization.
+#[command(args_override_self = true)]
 struct Args {
     /// Path(s) to C/C++ files or directories to analyze
     #[arg(value_name = "FILE", required_unless_present = "compile_commands", num_args = 1..)]
@@ -1226,6 +1233,22 @@ fn get_declarator_name(node: Node, source_code: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// args_override_self: the pre-commit hook entry bakes default
+    /// thresholds (e.g. --abc-threshold=10.0) and a consumer's `args:`
+    /// append their own, producing a duplicate. Verify the last value
+    /// wins instead of clap erroring "cannot be used multiple times".
+    #[test]
+    fn test_threshold_arg_override_last_wins() {
+        let args = Args::try_parse_from([
+            "knots",
+            "--abc-threshold=10.0",
+            "--abc-threshold=20.0",
+            "file.c",
+        ])
+        .expect("duplicate --abc-threshold should override, not error");
+        assert_eq!(args.abc_threshold, Some(20.0));
+    }
 
     /// Parse C++ code and collect discovered function names via visit_functions + get_function_name.
     fn discover_cpp_functions(code: &str) -> Vec<String> {
