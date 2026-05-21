@@ -171,7 +171,7 @@ struct Args {
     recursive: bool,
 
     /// Use compile_commands.json to get list of files to analyze
-    #[arg(long, value_name = "FILE", conflicts_with = "file")]
+    #[arg(long, value_name = "FILE", conflicts_with = "files")]
     compile_commands: Option<PathBuf>,
 
     /// Show detailed per-function analysis
@@ -1248,6 +1248,13 @@ mod tests {
         ])
         .expect("duplicate --abc-threshold should override, not error");
         assert_eq!(args.abc_threshold, Some(20.0));
+    }
+
+    #[test]
+    fn test_threshold_arg_single_occurrence_unchanged() {
+        let args = Args::try_parse_from(["knots", "--abc-threshold=10.0", "file.c"])
+            .expect("single --abc-threshold should parse normally");
+        assert_eq!(args.abc_threshold, Some(10.0));
     }
 
     /// Parse C++ code and collect discovered function names via visit_functions + get_function_name.
