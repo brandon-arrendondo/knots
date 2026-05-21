@@ -155,9 +155,9 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Analyzes C/C++ code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
 struct Args {
-    /// Path to the C/C++ file or directory to analyze
-    #[arg(value_name = "FILE", required_unless_present = "compile_commands")]
-    file: Option<PathBuf>,
+    /// Path(s) to C/C++ files or directories to analyze
+    #[arg(value_name = "FILE", required_unless_present = "compile_commands", num_args = 1..)]
+    files: Vec<PathBuf>,
 
     /// Recursively process all C/C++ source files in directories
     #[arg(short, long)]
@@ -335,9 +335,13 @@ fn main() -> Result<()> {
     let files = if let Some(compile_commands_path) = &args.compile_commands {
         // Load files from compile_commands.json
         load_compile_commands(compile_commands_path, &include_rules, &exclude_rules)?
-    } else if let Some(file_path) = &args.file {
-        // Use regular file/directory path
-        collect_files(file_path, args.recursive, &include_rules, &exclude_rules)?
+    } else if !args.files.is_empty() {
+        // One or more file/directory paths (supports pre-commit passing multiple staged files)
+        let mut collected = Vec::new();
+        for path in &args.files {
+            collected.extend(collect_files(path, args.recursive, &include_rules, &exclude_rules)?);
+        }
+        collected
     } else {
         anyhow::bail!("Either FILE or --compile-commands must be specified");
     };
