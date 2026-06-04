@@ -38,6 +38,7 @@ edition = "2021"
 license = "MIT"
 authors = ["Brandon Arrendondo <brandon@arrendondo.dev>"]
 repository = "https://github.com/brandon-arrendondo/knots"
+homepage = "https://github.com/brandon-arrendondo/knots"
 readme = "README.md"
 keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "cpp"]
 categories = ["development-tools", "command-line-utilities"]
