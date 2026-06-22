@@ -2,3 +2,6 @@ report.txt
 target/
 THIRD_PARTY_LICENSES.txt
 *.cdx.json
+
+.todo-sqlite-cli
+*.db
