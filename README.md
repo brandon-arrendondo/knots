@@ -679,7 +679,7 @@ Several tools measure code complexity for C/C++ and Rust. Here's how knots compa
 | 30+ other languages | ✗ | ✓ | ✓ | ✗ |
 | **Metrics** | | | | |
 | McCabe cyclomatic | ✓ | ✓ | ✓ | lint only |
-| Cognitive complexity | ✓ | ✓ | ✓ | lint only |
+| Cognitive complexity (Campbell spec) | ✓ | ✓ | ✓ | ✗ (see note) |
 | Nesting depth | ✓ | ✗ | ✗ | ✗ |
 | SLOC | ✓ | ✓ | ✓ | ✗ |
 | ABC complexity | ✓ | ✗ | ✗ | ✗ |
@@ -702,6 +702,27 @@ Several tools measure code complexity for C/C++ and Rust. Here's how knots compa
 | pmccabe-compatible output | ✓ | ✓ | ✗ | ✗ |
 | Tree-sitter based | ✓ | ✗ | ✗ | ✗ |
 
+### Cognitive Complexity: Algorithm Differences
+
+All four tools claim to measure "cognitive complexity," but they are **not computing the same thing**. This was validated empirically against 285k lines of Rust in a real-world codebase (11,365 functions).
+
+**knots and rust-code-analysis produce essentially identical scores** (mean ratio 1.004, median 1.000 across 17 matched complex functions). Both implement the [G. Ann Campbell cognitive complexity specification](https://www.sonarsource.com/resources/cognitive-complexity/): loops, conditionals, and match expressions each add `1 + nesting_level`, where nesting level accumulates through nested control flow including closures.
+
+**Clippy's `cognitive_complexity` lint uses a fundamentally different algorithm** that diverges from the Campbell spec in three major ways, sourced from the implementation in `clippy_lints/src/cognitive_complexity.rs`:
+
+| Aspect | Campbell spec / knots / RCA | Clippy |
+|---|---|---|
+| `for` / `while` / `loop` | +1 + nesting_level each | **not counted** |
+| Nesting penalty | accumulated per level | **no nesting penalty** |
+| Closures | increase nesting level for inner code | **analyzed as separate functions** |
+| `match` | +1 + nesting_level | +1 if >1 arms (flat, no nesting) |
+| Guard clauses | not counted separately | +1 per arm guard |
+| `return` statements | not counted | +1 (minus adjustment for Result types) |
+
+The practical result: **clippy reports 3–4× lower scores** than knots or rust-code-analysis for the same functions (mean 0.29×, range 0.16×–0.50×). A function that knots scores at ~75 will typically score ~25 in clippy — right at clippy's default threshold. This means clippy's threshold of 25 is roughly equivalent to a knots/RCA threshold of 75–100.
+
+Neither implementation is wrong in an absolute sense; they are measuring different things under the same name. Knots and rust-code-analysis follow the published spec; clippy's lint is a simplified heuristic tuned to fire at Rust-idiomatic complexity boundaries.
+
 ### When to choose knots
 
 - You need **AI cost signals** (AIRD/AICP) to gate AI-assisted workflows or identify functions that are expensive to modify with an LLM
@@ -715,7 +736,7 @@ Several tools measure code complexity for C/C++ and Rust. Here's how knots compa
 
 - **lizard**: you need 30+ language support, or you're already using it and don't need AI metrics
 - **rust-code-analysis**: you need Halstead metrics or Maintainability Index for Rust/Java/Python
-- **clippy**: you want deep Rust semantic analysis, idiomatic style enforcement, and unsafe lints rather than raw metric numbers
+- **clippy**: you want deep Rust semantic analysis, idiomatic style enforcement, and unsafe lints rather than raw metric numbers; note that its `cognitive_complexity` lint uses a simplified algorithm (see above)
 
 ## Troubleshooting
 
