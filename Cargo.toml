@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "C/C++ complexity analyzer with AI cost metrics (AIRD, AICP), SARIF/JSON/CSV output, and CI threshold enforcement"
+description = "C/C++/Rust complexity analyzer with AI cost metrics (AIRD, AICP), SARIF/JSON/CSV output, and CI threshold enforcement"
 
 [[bin]]
 name = "knots"
@@ -34,14 +34,14 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.5.0"
+version = "1.6.0"
 edition = "2021"
 license = "MIT"
 authors = ["Brandon Arrendondo <brandon.arrendondo@bissell.com>"]
 repository = "https://github.com/brandon-arrendondo/knots"
 homepage = "https://github.com/brandon-arrendondo/knots"
 readme = "README.md"
-keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "cpp"]
+keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "rust"]
 categories = ["development-tools", "command-line-utilities"]
 
 [workspace.dependencies]

@@ -1,6 +1,6 @@
-.TH KNOTS 1 "2026-06-22" "knots 1.5.0" "User Commands"
+.TH KNOTS 1 "2026-06-22" "knots 1.6.0" "User Commands"
 .SH NAME
-knots \- C/C++ code complexity analyzer with AI cost metrics
+knots \- C/C++/Rust code complexity analyzer with AI cost metrics
 .SH SYNOPSIS
 .B knots
 [\fIOPTIONS\fR] [\fIFILE\fR...]
@@ -9,7 +9,7 @@ knots \- C/C++ code complexity analyzer with AI cost metrics
 [\fIOPTIONS\fR] \fB\-\-compile\-commands\fR <\fIFILE\fR>
 .SH DESCRIPTION
 .B knots
-is a fast C/C++ code complexity analyzer built on tree-sitter.
+is a fast C/C++/Rust code complexity analyzer built on tree-sitter.
 It measures traditional complexity metrics alongside two AI-specific cost scores \(em
 .B AIRD
 (AI Reasoning Difficulty) and
@@ -65,7 +65,7 @@ Formula: (external_calls/20 \(mu 60) + (sloc/200 \(mu 40) \(mi (doc_score/10 \(m
 .SH OPTIONS
 .TP
 .BR \-r ", " \-\-recursive
-Recursively process all C/C++ source files in directories.
+Recursively process all C/C++/Rust source files in directories.
 When used, a
 .I report.txt
 file is generated with per-function details.
@@ -222,17 +222,24 @@ knots \-r src/ \-\-aird\-threshold 85
 .fi
 .RE
 .PP
+Analyze a Rust project:
+.RS
+.nf
+knots \-r src/
+.fi
+.RE
+.PP
 Corpus analysis \(em one JSON record per function, composable across files:
 .RS
 .nf
-find . \-name "*.c" | xargs knots \-\-format ndjson > metrics.ndjson
+find . \-name "*.c" \-o \-name "*.rs" | xargs knots \-\-format ndjson > metrics.ndjson
 .fi
 .RE
 .PP
 Filter high-AIRD functions via jq:
 .RS
 .nf
-find src/ \-name "*.c" | xargs knots \-\-format ndjson | jq 'select(.aird > 70)'
+find src/ \-name "*.rs" | xargs knots \-\-format ndjson | jq 'select(.aird > 70)'
 .fi
 .RE
 .PP
