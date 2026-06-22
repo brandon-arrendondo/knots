@@ -14,7 +14,7 @@ pub fn calculate_mccabe_complexity(node: Node, source_code: &[u8]) -> u32 {
 fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
     // Decision points that increase cyclomatic complexity
     match node.kind() {
-        // Conditional statements
+        // C/C++ conditional statements
         "if_statement" => *complexity += 1,
         "while_statement" => *complexity += 1,
         "do_statement" => *complexity += 1,
@@ -31,6 +31,12 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
 
         // Don't count individual case statements - handled by switch above
         // "case_statement" => *complexity += 1,
+
+        // Rust conditional / loop expressions
+        "if_expression" => *complexity += 1,
+        "while_expression" | "for_expression" | "loop_expression" => *complexity += 1,
+        // Rust match: same treatment as C switch (+1 for the whole expression)
+        "match_expression" => *complexity += 1,
 
         // Logical operators (each adds a path)
         "binary_expression" => {
@@ -75,37 +81,40 @@ fn visit_node_cognitive(
     parent_binary_op: Option<&str>,
 ) {
     match node.kind() {
-        // Control flow structures that increase complexity
-        "if_statement" => {
+        // Control flow structures that increase complexity (C/C++ and Rust share some names)
+        "if_statement" | "if_expression" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
 
-        // Else clause handling
+        // Else clause handling — used by both C/C++ (if_statement) and Rust (if_expression)
         "else_clause" => {
-            // Check if this is an "else if" by looking for if_statement as direct child
             let mut cursor = node.walk();
 
             for child in node.children(&mut cursor) {
-                if child.kind() == "if_statement" {
-                    // For else-if: +1 for the else-if itself (no nesting penalty).
-                    // But the body INSIDE the else-if IS nested — children get
-                    // nesting_level + 1 so that structures nested within the
-                    // else-if block are correctly penalized.
+                if child.kind() == "if_statement" || child.kind() == "if_expression" {
+                    // else-if: +1 flat (no nesting penalty), body gets nesting_level+1
                     *complexity += 1;
                     visit_children_cognitive(child, source_code, nesting_level, complexity, None);
                     return;
                 }
             }
 
-            // Regular else clause adds +1 without nesting increment
+            // Regular else: +1 without nesting increment
             *complexity += 1;
             visit_children_cognitive(node, source_code, nesting_level, complexity, None);
             return;
         }
 
         "while_statement" | "do_statement" | "for_statement" | "for_range_loop" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Rust loops
+        "while_expression" | "for_expression" | "loop_expression" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
@@ -118,10 +127,9 @@ fn visit_node_cognitive(
             return;
         }
 
-        // Lambda body is a nested scope — children get increased nesting.
-        // No +1 base cost: a lambda definition is not a decision point. Complexity
-        // comes from structures INSIDE the lambda, not the lambda itself.
-        "lambda_expression" => {
+        // Lambda / closure body is a nested scope — children get increased nesting.
+        // No +1 base cost: a closure is not itself a decision point.
+        "lambda_expression" | "closure_expression" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -132,8 +140,15 @@ fn visit_node_cognitive(
             return;
         }
 
+        // Rust match expression: same treatment as switch
+        "match_expression" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
         // Case statements do NOT add complexity in cognitive complexity
-        // (only the switch itself does)
+        // (only the switch itself does); same for Rust match arms
 
         // Catch blocks
         "catch_clause" => {
@@ -233,8 +248,12 @@ pub fn calculate_nesting_depth(node: Node) -> u32 {
 
 fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
     let new_depth = match node.kind() {
+        // C/C++ control structures
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
-        | "for_range_loop" | "switch_statement" | "catch_clause" | "lambda_expression" => {
+        | "for_range_loop" | "switch_statement" | "catch_clause" | "lambda_expression"
+        // Rust control structures
+        | "if_expression" | "while_expression" | "for_expression" | "loop_expression"
+        | "match_expression" | "closure_expression" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -383,16 +402,20 @@ fn visit_node_abc(
     conditions: &mut u32,
 ) {
     match node.kind() {
-        // Assignments
+        // Assignments (C/C++ and Rust share assignment_expression)
         "assignment_expression" => {
             *assignments += 1;
         }
         "update_expression" => {
-            // ++ and -- operators
+            // C/C++ ++ and -- operators
+            *assignments += 1;
+        }
+        "compound_assignment_expr" => {
+            // Rust +=, -=, *=, etc.
             *assignments += 1;
         }
 
-        // Branches (function calls)
+        // Branches (function calls — same node kind in C and Rust)
         "call_expression" => {
             *branches += 1;
         }
@@ -402,7 +425,7 @@ fn visit_node_abc(
             *branches += 1;
         }
 
-        // Conditions
+        // Conditions (C/C++)
         "if_statement"
         | "while_statement"
         | "do_statement"
@@ -410,6 +433,12 @@ fn visit_node_abc(
         | "for_range_loop"
         | "switch_statement"
         | "conditional_expression" => {
+            *conditions += 1;
+        }
+
+        // Conditions (Rust)
+        "if_expression" | "while_expression" | "for_expression" | "loop_expression"
+        | "match_expression" => {
             *conditions += 1;
         }
 
@@ -441,7 +470,7 @@ pub fn calculate_return_count(node: Node) -> u32 {
 }
 
 fn visit_node_returns(node: Node, count: &mut u32) {
-    if node.kind() == "return_statement" {
+    if node.kind() == "return_statement" || node.kind() == "return_expression" {
         *count += 1;
     }
 
@@ -842,9 +871,13 @@ fn visit_node_observability(
 fn calculate_documentation_score(node: Node, source_code: &[u8]) -> i32 {
     let mut score = 0;
 
-    // Look for comment before the function
+    // Look for comment before the function.
+    // C/C++ use "comment"; Rust uses "line_comment" (for // and ///) and "block_comment"
     if let Some(prev_sibling) = node.prev_sibling() {
-        if prev_sibling.kind() == "comment" {
+        if matches!(
+            prev_sibling.kind(),
+            "comment" | "line_comment" | "block_comment"
+        ) {
             if let Ok(comment_text) = prev_sibling.utf8_text(source_code) {
                 // Check for Doxygen-style documentation
                 if comment_text.contains("/**") || comment_text.contains("///") {

@@ -19,6 +19,7 @@ path = "src/lib.rs"
 tree-sitter.workspace = true
 tree-sitter-c.workspace = true
 tree-sitter-cpp.workspace = true
+tree-sitter-rust.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 walkdir.workspace = true
@@ -47,6 +48,7 @@ categories = ["development-tools", "command-line-utilities"]
 tree-sitter = "0.22"
 tree-sitter-c = "0.21"
 tree-sitter-cpp = "0.21"
+tree-sitter-rust = "0.21"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 colored = "2.0"

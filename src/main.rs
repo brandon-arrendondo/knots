@@ -154,7 +154,7 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[derive(Parser, Debug)]
 #[command(name = "knots")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(about = "Analyzes C/C++ code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
+#[command(about = "Analyzes C/C++/Rust code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
 // Last-wins on repeated flags. The pre-commit hook entry bakes default
 // thresholds (e.g. `--abc-threshold=10.0`); a consumer overriding one
 // via the hook's `args:` field appends a second occurrence. Without
@@ -163,7 +163,7 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 // customization.
 #[command(args_override_self = true)]
 struct Args {
-    /// Path(s) to C/C++ files or directories to analyze
+    /// Path(s) to C/C++/Rust files or directories to analyze
     #[arg(value_name = "FILE", required_unless_present = "compile_commands", num_args = 1..)]
     files: Vec<PathBuf>,
 
@@ -623,7 +623,7 @@ fn load_compile_commands(
     }
 
     if files.is_empty() {
-        anyhow::bail!("No C/C++ source files found in compile_commands.json");
+        anyhow::bail!("No supported source files found in compile_commands.json");
     }
 
     Ok(files)
@@ -652,8 +652,8 @@ fn collect_files(
             );
         }
 
-        // Recursive directory mode - only scan .c files by default
-        // (headers often contain inline/vendor code)
+        // Recursive directory mode - scan source files (not headers)
+        // Headers often contain inline/vendor code
         for entry in WalkDir::new(path)
             .follow_links(true)
             .into_iter()
@@ -674,7 +674,7 @@ fn collect_files(
 
         if files.is_empty() {
             anyhow::bail!(
-                "No C/C++ source files found in directory: {}",
+                "No supported source files found in directory: {}",
                 path.display()
             );
         }
@@ -719,11 +719,12 @@ fn collect_local_names(root: Node, source_code: &str) -> HashSet<String> {
 
 fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut HashSet<String>) {
     match node.kind() {
-        "function_definition" => {
+        "function_definition" | "function_item" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
         }
+        // C/C++ preprocessor macros
         "preproc_def" | "preproc_function_def" => {
             if let Some(name_node) = node.child_by_field_name("name") {
                 if let Ok(name) = name_node.utf8_text(source_code.as_bytes()) {
@@ -761,10 +762,16 @@ fn collect_external_calls_recursive(
     if node.kind() == "call_expression" {
         if let Some(func_node) = node.child_by_field_name("function") {
             if func_node.kind() == "identifier" {
+                // Simple name call: foo() — check against local definitions
                 if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
                     if !local_names.contains(name) {
                         external.insert(name.to_string());
                     }
+                }
+            } else if func_node.kind() == "scoped_identifier" {
+                // Rust path call: Foo::bar() or std::mem::swap() — always external
+                if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
+                    external.insert(name.to_string());
                 }
             }
         }
@@ -1608,7 +1615,7 @@ where
 {
     let node = cursor.node();
 
-    if node.kind() == "function_definition" {
+    if node.kind() == "function_definition" || node.kind() == "function_item" {
         callback(node, source_code);
     }
 
@@ -1624,6 +1631,15 @@ where
 }
 
 fn get_function_name(node: Node, source_code: &str) -> Option<String> {
+    // Rust function_item has a direct 'name' field (identifier or metavariable)
+    if node.kind() == "function_item" {
+        return node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string());
+    }
+
+    // C/C++ function_definition uses a declarator chain
     let mut cursor = node.walk();
 
     for child in node.children(&mut cursor) {
