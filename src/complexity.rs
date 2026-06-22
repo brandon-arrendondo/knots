@@ -907,14 +907,14 @@ pub fn calculate_aim(
     test_score: i32,
     doc_score: i32,
 ) -> u32 {
-    let cognitive_norm = (cognitive as f64 / 50.0).min(1.0);
-    let sloc_norm = (sloc as f64 / 100.0).min(1.0);
+    let cognitive_norm = (cognitive as f64 / 75.0).min(1.0);
+    let sloc_norm = (sloc as f64 / 200.0).min(1.0);
     let nesting_norm = (nesting as f64 / 8.0).min(1.0);
-    let test_norm = (test_score.max(0) as f64 / 40.0).min(1.0);
+    let test_norm = (test_score.max(0) as f64 / 20.0).min(1.0);
     let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
 
     let raw =
-        (cognitive_norm * 35.0) + (sloc_norm * 25.0) + (nesting_norm * 15.0) + (test_norm * 25.0)
+        (cognitive_norm * 45.0) + (sloc_norm * 25.0) + (nesting_norm * 15.0) + (test_norm * 15.0)
             - (doc_norm * 15.0);
 
     raw.round().clamp(0.0, 100.0) as u32
@@ -932,7 +932,7 @@ mod aim_tests {
 
     #[test]
     fn test_aim_complex_function() {
-        let aim = calculate_aim(45, 90, 7, 35, 0);
+        let aim = calculate_aim(80, 200, 7, 15, 0);
         assert!(aim > 70, "complex function AIM should be > 70, got {}", aim);
     }
 
