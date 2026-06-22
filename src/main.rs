@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -221,6 +222,10 @@ struct Args {
     /// Exit 1 if any function exceeds this AIM score (default: off, recommended: 85)
     #[arg(long, value_name = "N")]
     aim_threshold: Option<u32>,
+
+    /// Exit 1 if any function exceeds this external call count (default: off)
+    #[arg(long, value_name = "N")]
+    external_calls_threshold: Option<u32>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -256,6 +261,7 @@ struct Thresholds {
     abc: Option<f64>,
     returns: Option<u32>,
     aim: Option<u32>,
+    external_calls: Option<u32>,
 }
 
 impl Thresholds {
@@ -267,6 +273,7 @@ impl Thresholds {
             || self.abc.is_some()
             || self.returns.is_some()
             || self.aim.is_some()
+            || self.external_calls.is_some()
     }
 }
 
@@ -313,6 +320,11 @@ fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
         if let Some(limit) = t.aim {
             if func.aim > limit {
                 func_violations.push(format!("AIM {} > {}", func.aim, limit));
+            }
+        }
+        if let Some(limit) = t.external_calls {
+            if func.external_calls > limit {
+                func_violations.push(format!("ExternalCalls {} > {}", func.external_calls, limit));
             }
         }
 
@@ -384,6 +396,7 @@ fn main() -> Result<()> {
         abc: args.abc_threshold,
         returns: args.return_threshold,
         aim: args.aim_threshold,
+        external_calls: args.external_calls_threshold,
     };
 
     // Structured output modes: collect all metrics then emit and exit.
@@ -676,6 +689,72 @@ fn should_process_file(
 }
 
 /// Collect function metrics from a file
+/// Collects all function and macro names defined in this translation unit.
+/// Used to classify call sites as local vs. external.
+fn collect_local_names(root: Node, source_code: &str) -> HashSet<String> {
+    let mut names = HashSet::new();
+    collect_local_names_recursive(root, source_code, &mut names);
+    names
+}
+
+fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut HashSet<String>) {
+    match node.kind() {
+        "function_definition" => {
+            if let Some(name) = get_function_name(node, source_code) {
+                names.insert(name);
+            }
+        }
+        "preproc_def" | "preproc_function_def" => {
+            if let Some(name_node) = node.child_by_field_name("name") {
+                if let Ok(name) = name_node.utf8_text(source_code.as_bytes()) {
+                    names.insert(name.to_string());
+                }
+            }
+        }
+        _ => {}
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_local_names_recursive(child, source_code, names);
+    }
+}
+
+/// Counts unique external call targets in a function body — identifiers called
+/// via call_expression that are not defined in the same translation unit.
+/// Captures both out-of-file function calls and function-like macro invocations.
+fn calculate_external_calls(
+    func_node: Node,
+    source_code: &str,
+    local_names: &HashSet<String>,
+) -> u32 {
+    let mut external: HashSet<String> = HashSet::new();
+    collect_external_calls_recursive(func_node, source_code, local_names, &mut external);
+    external.len() as u32
+}
+
+fn collect_external_calls_recursive(
+    node: Node,
+    source_code: &str,
+    local_names: &HashSet<String>,
+    external: &mut HashSet<String>,
+) {
+    if node.kind() == "call_expression" {
+        if let Some(func_node) = node.child_by_field_name("function") {
+            if func_node.kind() == "identifier" {
+                if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
+                    if !local_names.contains(name) {
+                        external.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_external_calls_recursive(child, source_code, local_names, external);
+    }
+}
+
 fn collect_function_metrics(
     tree: &Tree,
     source_code: &str,
@@ -684,6 +763,7 @@ fn collect_function_metrics(
     exclude_rules: &Option<FilterRules>,
 ) -> Vec<FunctionMetrics> {
     let root_node = tree.root_node();
+    let local_names = collect_local_names(root_node, source_code);
     let mut cursor = root_node.walk();
     let mut metrics = Vec::new();
 
@@ -697,6 +777,7 @@ fn collect_function_metrics(
             let abc_magnitude = abc.magnitude();
             let return_count = calculate_return_count(node);
             let test_scoring = calculate_test_scoring(node, src.as_bytes());
+            let external_calls = calculate_external_calls(node, src, &local_names);
             let aim = calculate_aim(
                 cognitive,
                 sloc,
@@ -707,7 +788,6 @@ fn collect_function_metrics(
 
             let max_complexity = std::cmp::max(mccabe, cognitive);
 
-            // Apply filter rules
             if should_process_function(&name, max_complexity, include_rules, exclude_rules) {
                 let start_line = (node.start_position().row as u32) + 1;
                 let end_line = (node.end_position().row as u32) + 1;
@@ -724,6 +804,7 @@ fn collect_function_metrics(
                     return_count,
                     test_scoring,
                     aim,
+                    external_calls,
                 });
             }
         }
@@ -840,13 +921,15 @@ fn analyze_code(
                 func.test_scoring.documentation_score
             );
             println!("  AIM Score: {}", func.aim);
+            println!("  External Calls: {}", func.external_calls);
             println!("  Max Complexity: {}", func.max_complexity());
             println!();
         } else {
             println!(
-                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {})",
+                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}, ExtCalls: {})",
                 emoji, func.name, func.mccabe, func.cognitive, func.nesting, func.sloc,
-                func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim
+                func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim,
+                func.external_calls
             );
         }
     }
@@ -1064,7 +1147,8 @@ fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
                 "return_count": f.return_count,
                 "test_score": f.test_scoring.total_score,
                 "doc_score": f.test_scoring.documentation_score,
-                "aim": f.aim
+                "aim": f.aim,
+                "external_calls": f.external_calls
             })
         })
         .collect();
@@ -1083,7 +1167,7 @@ fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
 
     writeln!(
         handle,
-        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aim"
+        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aim,external_calls"
     )?;
 
     for f in all_metrics {
@@ -1095,7 +1179,7 @@ fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
         };
         writeln!(
             handle,
-            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{}",
             f.file_path,
             name,
             f.start_line,
@@ -1108,7 +1192,8 @@ fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
             f.return_count,
             f.test_scoring.total_score,
             f.test_scoring.documentation_score,
-            f.aim
+            f.aim,
+            f.external_calls
         )?;
     }
     Ok(())
@@ -1178,15 +1263,16 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Resu
                 func.test_scoring.documentation_score
             )?;
             writeln!(file, "  AIM Score: {}", func.aim)?;
+            writeln!(file, "  External Calls: {}", func.external_calls)?;
             writeln!(file, "  Max Complexity: {}", func.max_complexity())?;
             writeln!(file)?;
         } else {
             writeln!(
                 file,
-                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {})",
+                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}, ExtCalls: {})",
                 emoji, func.name, func.file_path, func.mccabe, func.cognitive, func.nesting,
                 func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score,
-                func.aim
+                func.aim, func.external_calls
             )?;
         }
     }
@@ -1208,8 +1294,8 @@ fn display_recursive_summary(
     for (i, func) in sorted.iter().take(5).enumerate() {
         let emoji = get_complexity_emoji(func.max_complexity());
         println!("{}. {} {} [{}]", i + 1, emoji, func.name, func.file_path);
-        println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}",
-            func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim
+        println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}, ExtCalls: {}",
+            func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim, func.external_calls
         );
     }
 
@@ -1306,6 +1392,7 @@ struct FunctionMetrics {
     return_count: u32,
     test_scoring: TestScoringMetric,
     aim: u32,
+    external_calls: u32,
 }
 
 impl FunctionMetrics {
