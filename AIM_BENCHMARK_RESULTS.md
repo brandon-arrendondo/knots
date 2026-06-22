@@ -171,6 +171,43 @@ resolution, not just token analysis.
 larger sample spanning AIM 30–70 from type-heavy codebases (Linux kernel, LLVM, OpenSSL)
 is needed before the mid-range behavior can be assessed or tuned.
 
+## external_calls Formula Analysis
+
+`external_calls` (unique identifier-form call targets not defined in the same translation unit)
+was added as a tracked metric in v1.4.3 and validated against the corpus. Global percentiles
+across 32,205 functions:
+
+| Metric | p75 | p90 | p95 | p99 | max |
+|--------|-----|-----|-----|-----|-----|
+| external_calls | 5 | 9 | 12 | 20 | 216 |
+
+p99=20 is consistent across all 6 corpora (range 15–20). The distribution is heavily
+right-skewed: ~55% of functions have ≤2 external calls; >1% have ≥21.
+
+**Mean by AIM band:** 2.74 (low, AIM<30) → 8.69 (mid, 30–75) → 17.40 (high, AIM>75).
+Monotonic separation, stronger than experiment self-rated difficulty scores.
+
+**Formula integration analysis (ceiling=20):** Modeled SLOC→ext weight transfers
+(s15e0 baseline through s5e10) against the three high-band experiment functions:
+
+| Variant | hostapd (FP) | whereLoop | luaV | hostapd−whereLoop gap |
+|---------|-------------|-----------|------|-----------------------|
+| v4 s15e0 | 93 | 90 | 87 | +3 |
+| s12e3 | 92 | 89 | 87 | +3 |
+| s10e5 | 92 | 88 | 87 | **+4** |
+| s8e7 | 92 | 87 | 87 | **+5** |
+| s5e10 | 91 | 86 | 87 | **+5** |
+
+**Decision: do not add external_calls to the AIM formula.** Every weight transfer
+increases the hostapd falsification gap. hostapd has slightly more external calls (17)
+than whereLoopAddBtreeIndex (12), so adding ext_calls weight pushes the scores in the
+wrong direction. luaV_execute is immune to any redistribution because its ext_calls (81)
+saturate the p99 ceiling just as its SLOC (751) saturates the SLOC ceiling — both inputs
+hit 1.0 regardless of weight.
+
+The metric remains valuable as a standalone diagnostic: `--external-calls-threshold` for
+flagging wide-dependency functions, and corpus exploration via `--format ndjson`.
+
 ## Pending Tasks
 
 - Mid-band empirical validation with AIM 30–70 functions from type-heavy corpora
