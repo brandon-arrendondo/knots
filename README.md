@@ -1,6 +1,6 @@
 # Knots
 
-A fast, powerful C/C++ code complexity analyzer built on tree-sitter. Knots measures
+A fast C/C++/Rust code complexity analyzer built on tree-sitter. Knots measures
 traditional complexity metrics alongside two AI-specific cost scores — AIRD (AI Reasoning
 Difficulty) and AICP (AI Context Pressure) — to help you identify which functions are
 genuinely expensive to modify with AI assistance.
@@ -9,6 +9,7 @@ genuinely expensive to modify with AI assistance.
 
 - 🎯 **Multiple Complexity Metrics**: McCabe, Cognitive, Nesting Depth, SLOC, ABC, Test Scoring
 - 🤖 **AI Cost Metrics**: AIRD (reasoning difficulty) and AICP (context pressure) — corpus-validated against 32,205 functions across 6 open-source C codebases
+- 🦀 **Multi-Language**: C, C++, and Rust — same metrics and thresholds across all three
 - 📊 **Testability Matrix**: Categorize functions by complexity and testability
 - 🔄 **Recursive Directory Scanning**: Analyze entire codebases at once
 - 🎨 **Visual Indicators**: Easy-to-understand emoji-based complexity ratings
@@ -82,10 +83,10 @@ Knots uses visual emoji indicators based on the maximum of McCabe and Cognitive 
 knots [OPTIONS] [FILE]...
 
 Arguments:
-  [FILE]...  Path(s) to C/C++ files or directories to analyze
+  [FILE]...  Path(s) to C/C++/Rust files or directories to analyze
 
 Options:
-  -r, --recursive                   Recursively process all C/C++ source files in directories
+  -r, --recursive                   Recursively process all C/C++/Rust source files in directories
   -v, --verbose                     Show detailed per-function analysis
   -m, --matrix                      Show testability matrix categorization
   --compile-commands <FILE>         Use compile_commands.json to get list of files to analyze
@@ -166,14 +167,14 @@ knots -r ~/projects/myproject/
 ```
 
 **Recursive mode automatically:**
-- Scans all `.c`/`.cpp`/`.cc`/`.cxx` files recursively (skips headers by default)
+- Scans all `.c`/`.cpp`/`.cc`/`.cxx`/`.rs` files recursively (skips headers by default)
 - Handles UTF-8 encoding errors gracefully (skips and warns)
 - Shows top 5 worst functions by complexity
 - Displays totals and averages across all files
 - Writes detailed per-function report to `report.txt`
 - Reports file processing statistics
 
-**Note:** Recursive mode only scans source files (`.c`, `.cpp`, `.cc`, `.cxx`) by default because header files often contain inline functions, vendor code, and simple utilities. You can still analyze a specific header file directly (e.g., `knots myheader.h`) or use filters to include headers if needed.
+**Note:** Recursive mode scans source files (`.c`, `.cpp`, `.cc`, `.cxx`, `.rs`) by default. C/C++ headers are excluded because they often contain inline functions, vendor code, and simple utilities. You can still analyze a specific header file directly (e.g., `knots myheader.h`) or use filters to include headers.
 
 **Example output:**
 ```
@@ -220,7 +221,7 @@ knots --compile-commands compile_commands.json --include filter.json
 
 **Compile commands mode automatically:**
 - Reads file paths from the compilation database
-- Only analyzes C/C++ source files (`.c`, `.cpp`, `.cc`, `.cxx`; skips headers and other file types)
+- Only analyzes supported source files (`.c`, `.cpp`, `.cc`, `.cxx`, `.rs`; skips headers and other file types)
 - Resolves relative paths using the `directory` field from each entry
 - Respects include/exclude filters if specified
 - Works with any standard `compile_commands.json` format
@@ -666,6 +667,56 @@ The McCabe complexity implementation has been validated against industry-standar
 - ✓ Correctly implements switch/case complexity
 - ✓ Handles nested structures and logical operators accurately
 
+## Alternatives Comparison
+
+Several tools measure code complexity for C/C++ and Rust. Here's how knots compares:
+
+| Feature | knots | [lizard](https://github.com/terryyin/lizard) | [rust-code-analysis](https://github.com/mozilla/rust-code-analysis) | [clippy](https://github.com/rust-lang/rust-clippy) |
+|---------|:-----:|:-----:|:-----:|:-----:|
+| **Languages** | | | | |
+| C / C++ | ✓ | ✓ | ✓ | ✗ |
+| Rust | ✓ | ✓ | ✓ | ✓ |
+| 30+ other languages | ✗ | ✓ | ✓ | ✗ |
+| **Metrics** | | | | |
+| McCabe cyclomatic | ✓ | ✓ | ✓ | lint only |
+| Cognitive complexity | ✓ | ✓ | ✓ | lint only |
+| Nesting depth | ✓ | ✗ | ✗ | ✗ |
+| SLOC | ✓ | ✓ | ✓ | ✗ |
+| ABC complexity | ✓ | ✗ | ✗ | ✗ |
+| Halstead / MI | ✗ | ✗ | ✓ | ✗ |
+| Test scoring | ✓ | ✗ | ✗ | ✗ |
+| AIRD (AI reasoning difficulty) | ✓ | ✗ | ✗ | ✗ |
+| AICP (AI context pressure) | ✓ | ✗ | ✗ | ✗ |
+| External call count | ✓ | ✗ | ✗ | ✗ |
+| **Output** | | | | |
+| Human-readable text | ✓ | ✓ | ✓ | ✓ |
+| JSON | ✓ | ✓ | ✓ | ✗ |
+| NDJSON (find/xargs composable) | ✓ | ✗ | ✗ | ✗ |
+| CSV | ✓ | ✓ | ✗ | ✗ |
+| SARIF (VS Code / GitHub) | ✓ | ✗ | ✗ | ✓ |
+| Testability matrix | ✓ | ✗ | ✗ | ✗ |
+| **Integration** | | | | |
+| CI threshold flags | ✓ | ✓ | partial | ✓ |
+| Pre-commit hook (native) | ✓ | manual | ✗ | manual |
+| No compiler / build required | ✓ | ✓ | ✗ | ✗ |
+| pmccabe-compatible output | ✓ | ✓ | ✗ | ✗ |
+| Tree-sitter based | ✓ | ✗ | ✗ | ✗ |
+
+### When to choose knots
+
+- You need **AI cost signals** (AIRD/AICP) to gate AI-assisted workflows or identify functions that are expensive to modify with an LLM
+- You want **CI threshold enforcement** with `--aird-threshold 85`, `--cognitive-threshold`, etc. across C, C++, and Rust in one pass
+- You want **SARIF output** to surface complexity findings as PR annotations in GitHub Code Scanning
+- You want **NDJSON corpus analysis** — `find . -name "*.c" | xargs knots --format ndjson` composable without array merging
+- You want a **pre-commit hook** that works out of the box without manual shim scripts
+- You want **test quality enforcement** alongside complexity via the companion `knots-test-complexity` tool
+
+### When to choose an alternative
+
+- **lizard**: you need 30+ language support, or you're already using it and don't need AI metrics
+- **rust-code-analysis**: you need Halstead metrics or Maintainability Index for Rust/Java/Python
+- **clippy**: you want deep Rust semantic analysis, idiomatic style enforcement, and unsafe lints rather than raw metric numbers
+
 ## Troubleshooting
 
 ### "Path is a directory. Use -r/--recursive"
@@ -686,10 +737,10 @@ iconv -f ISO-8859-1 -t UTF-8 file.c > file_utf8.c
 knots -r . --exclude exclude-encoding-issues.json
 ```
 
-### "No C/C++ source files found in directory"
+### "No supported source files found in directory"
 
 Check:
-- File extensions are `.c`, `.cpp`, `.cc`, or `.cxx` (recursive mode only scans source files, not headers)
+- File extensions are `.c`, `.cpp`, `.cc`, `.cxx`, or `.rs` (recursive mode only scans source files, not headers)
 - You're in the right directory
 - Files aren't filtered out by include/exclude rules
 
@@ -769,6 +820,7 @@ cargo run -- -r -m examples/
 - `tree-sitter` - Parser generator and incremental parsing
 - `tree-sitter-c` - C language grammar
 - `tree-sitter-cpp` - C++ language grammar
+- `tree-sitter-rust` - Rust language grammar
 - `clap` - Command-line argument parsing
 - `anyhow` - Error handling
 - `serde` / `serde_json` - JSON filter support
@@ -791,7 +843,7 @@ MIT License. See LICENSE file.
 
 ## Acknowledgments
 
-- Built with [tree-sitter](https://tree-sitter.github.io/) for accurate C/C++ parsing
+- Built with [tree-sitter](https://tree-sitter.github.io/) for accurate C/C++/Rust parsing
 - Implements standard complexity metrics from software engineering research
 - Cognitive Complexity based on [SonarSource specification](https://www.sonarsource.com/resources/cognitive-complexity/)
-- Inspired by tools like pmccabe, Lizard, CodeClimate, and SonarQube
+- Inspired by pmccabe, lizard, rust-code-analysis, CodeClimate, and SonarQube
