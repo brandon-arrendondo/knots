@@ -1779,4 +1779,45 @@ mod tests {
         let names = discover_cpp_functions(r#"class Foo { ~Foo() { int x = 0; } };"#);
         assert_eq!(names, vec!["~Foo"]);
     }
+
+    // ---- Rust function discovery tests ----
+
+    fn discover_rust_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_rust::language()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_rust_discover_simple_function() {
+        let names = discover_rust_functions("fn simple() { let x = 1; }");
+        assert_eq!(names, vec!["simple"]);
+    }
+
+    #[test]
+    fn test_rust_discover_multiple_functions() {
+        let names = discover_rust_functions("fn foo() {} fn bar() {} fn baz() {}");
+        assert_eq!(names, vec!["foo", "bar", "baz"]);
+    }
+
+    #[test]
+    fn test_rust_discover_function_with_params() {
+        let names = discover_rust_functions("fn add(a: i32, b: i32) -> i32 { a + b }");
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_rust_discover_impl_method() {
+        let names =
+            discover_rust_functions("struct Foo; impl Foo { fn method(&self) -> i32 { 0 } }");
+        assert_eq!(names, vec!["method"]);
+    }
 }

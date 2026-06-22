@@ -1491,4 +1491,231 @@ mod tests {
         // Outer if: +1, inner if: +1 (base) +1 (nesting) = 3
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
     }
+
+    // ---- Rust parser/metric tests ----
+
+    fn parse_rust(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_rust::language()).unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    // McCabe
+
+    #[test]
+    fn test_rust_simple_mccabe() {
+        let code = "fn simple() { let x = 1; }";
+        let tree = parse_rust(code);
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
+    }
+
+    #[test]
+    fn test_rust_if_expression_mccabe() {
+        let code = "fn f(x: i32) { if x > 0 { let y = 1; } }";
+        let tree = parse_rust(code);
+        // base 1 + 1 if_expression = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_rust_while_expression_mccabe() {
+        let code = "fn f() { let mut i = 0; while i < 10 { i += 1; } }";
+        let tree = parse_rust(code);
+        // base 1 + 1 while_expression = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_rust_for_expression_mccabe() {
+        let code = "fn f(items: &[i32]) { for item in items { let _ = item; } }";
+        let tree = parse_rust(code);
+        // base 1 + 1 for_expression = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_rust_loop_expression_mccabe() {
+        let code = "fn f() { loop { break; } }";
+        let tree = parse_rust(code);
+        // base 1 + 1 loop_expression = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_rust_match_expression_mccabe() {
+        let code = "fn f(x: i32) -> i32 { match x { 0 => 0, _ => 1 } }";
+        let tree = parse_rust(code);
+        // base 1 + 1 match (arms don't count) = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    // Cognitive
+
+    #[test]
+    fn test_rust_if_expression_cognitive() {
+        let code = "fn f(x: i32) { if x > 0 { let y = 1; } }";
+        let tree = parse_rust(code);
+        // if_expression at nesting 0: +1
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
+    }
+
+    #[test]
+    fn test_rust_nested_if_cognitive() {
+        let code = "fn f(x: i32, y: i32) { if x > 0 { if y > 0 { let z = 1; } } }";
+        let tree = parse_rust(code);
+        // outer if: +1 (nesting 0); inner if: +1+1 (nesting 1) = 3
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    #[test]
+    fn test_rust_else_if_cognitive() {
+        let code = "fn f(x: i32) { if x > 0 { } else if x < 0 { } }";
+        let tree = parse_rust(code);
+        // if: +1; else-if: +1 (flat, no nesting penalty) = 2
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_rust_match_cognitive() {
+        let code = "fn f(x: i32) { match x { 0 => {}, _ => {} } }";
+        let tree = parse_rust(code);
+        // match at nesting 0: +1+0 = 1
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
+    }
+
+    #[test]
+    fn test_rust_closure_nesting_cognitive() {
+        let code = "fn f() { let _g = |x: i32| { if x > 0 { 1 } else { 0 } }; }";
+        let tree = parse_rust(code);
+        // closure: +0 base, enters nesting_level 1
+        // if inside closure (nesting=1): +1+1=2; else: +1
+        // Total: 3
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    #[test]
+    fn test_rust_for_with_if_cognitive() {
+        let code = "fn f(items: &[i32]) { for item in items { if *item > 0 { } } }";
+        let tree = parse_rust(code);
+        // for at nesting 0: +1; if inside for (nesting=1): +1+1=2 → total 3
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    // Nesting depth
+
+    #[test]
+    fn test_rust_nesting_simple_if() {
+        let code = "fn f(x: i32) { if x > 0 { let y = 1; } }";
+        let tree = parse_rust(code);
+        assert_eq!(calculate_nesting_depth(tree.root_node()), 1);
+    }
+
+    #[test]
+    fn test_rust_nesting_nested_loops() {
+        let code = "fn f(a: &[i32], b: &[i32]) { for x in a { for _y in b { let _ = x; } } }";
+        let tree = parse_rust(code);
+        assert_eq!(calculate_nesting_depth(tree.root_node()), 2);
+    }
+
+    #[test]
+    fn test_rust_nesting_match() {
+        let code = "fn f(x: i32) { match x { 0 => {}, _ => {} } }";
+        let tree = parse_rust(code);
+        assert_eq!(calculate_nesting_depth(tree.root_node()), 1);
+    }
+
+    #[test]
+    fn test_rust_nesting_closure_with_if() {
+        let code = "fn f() { let _g = |x: i32| { if x > 0 { 1 } else { 0 } }; }";
+        let tree = parse_rust(code);
+        // closure = depth 1, if inside closure = depth 2
+        assert_eq!(calculate_nesting_depth(tree.root_node()), 2);
+    }
+
+    // ABC
+
+    #[test]
+    fn test_rust_compound_assignment_abc() {
+        let code = "fn f() { let mut x = 0; x += 1; x -= 2; }";
+        let tree = parse_rust(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.assignments, 2, "two compound_assignment_expr nodes");
+    }
+
+    #[test]
+    fn test_rust_if_condition_abc() {
+        let code = "fn f(x: i32) { if x > 0 { } }";
+        let tree = parse_rust(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.conditions, 1);
+    }
+
+    #[test]
+    fn test_rust_for_condition_abc() {
+        let code = "fn f(items: &[i32]) { for _ in items { } }";
+        let tree = parse_rust(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.conditions, 1);
+    }
+
+    #[test]
+    fn test_rust_match_condition_abc() {
+        let code = "fn f(x: i32) { match x { 0 => {}, _ => {} } }";
+        let tree = parse_rust(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.conditions, 1);
+    }
+
+    // Return count
+
+    #[test]
+    fn test_rust_return_expression() {
+        let code = "fn f(x: i32) -> i32 { if x > 0 { return x; } return 0; }";
+        let tree = parse_rust(code);
+        assert_eq!(calculate_return_count(tree.root_node()), 2);
+    }
+
+    #[test]
+    fn test_rust_implicit_return_not_counted() {
+        let code = "fn f(x: i32) -> i32 { x + 1 }";
+        let tree = parse_rust(code);
+        // Implicit return (expression tail, no return keyword) counts 0
+        assert_eq!(calculate_return_count(tree.root_node()), 0);
+    }
 }
