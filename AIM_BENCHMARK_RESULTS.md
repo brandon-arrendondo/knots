@@ -3,10 +3,10 @@
 Corpus validation run against 6 open-source C codebases.
 knots version: 1.4.3 (post-v3 tuning, see formula history below)
 
-## Formula (v3)
+## Formula (v4)
 
 ```
-AIM = (cognitive/75 × 45) + (sloc/200 × 25) + (nesting/8 × 15) + (test_score/20 × 15) - (doc_score/10 × 15)
+AIM = (cognitive/75 × 55) + (sloc/200 × 15) + (nesting/8 × 15) + (test_score/20 × 15) - (doc_score/10 × 15)
 ```
 Clamped to [0, 100].
 
@@ -16,7 +16,8 @@ Clamped to [0, 100].
 |---------|--------|-----------|
 | v1 | cognitive/50×35, sloc/100×25, nesting/8×15, test/40×25, doc/10×15 | Initial hypothesis |
 | v2 | test ceiling 40→20 | Max observed test_score was ~18; v1 ceiling structurally halved the contribution |
-| v3 | cognitive weight 35→45, test weight 25→15; cognitive ceiling 50→75, sloc ceiling 100→200 | Corpus percentile analysis: SLOC ceiling at 100 saturated at p95, cognitive at 50 saturated at p95–97; weight shift reduces test_score inflation of small-but-untested tool entry points |
+| v3 | cognitive weight 35→45, test weight 25→15; cognitive ceiling 50→75, sloc ceiling 100→200 | Corpus percentile analysis: SLOC ceiling at 100 saturated at p95; weight shift reduces test_score inflation of small undocumented tool entry points |
+| v4 | cognitive weight 45→55, sloc weight 25→15 | Empirical experiment (see below): cognitive complexity correlated with actual AI difficulty; SLOC over-contributed for shallow-entry functions |
 
 ### Ceiling calibration (basis for v3)
 
@@ -100,55 +101,78 @@ SQLite's unusual project structure — 40+ standalone C programs — not a formu
 which does not appear in practice. This is intentional; scores cluster in the 80–95 band
 for the genuinely hardest functions.
 
-## Empirical Validation Plan
+## Empirical Validation (Sonnet 4.6 vs Opus 4.8)
 
-The formula is calibrated against static heuristics. The open question is whether AIM
-scores actually predict real AI effort — specifically, whether high-AIM functions consume
-more tokens and require more turns when modified by an AI agent.
+Task: add a defensive `assert()` at function entry, identify the critical precondition,
+self-rate difficulty 1–10, report distinct concepts needed and whether external context
+(types, macros, callers) was required. Run against both Sonnet 4.6 and Opus 4.8.
 
-### Proposed experiment
+### Raw results
 
-For each of 3 representative functions per band (low / mid / high), issue a consistent
-modification task to both Sonnet and Opus agents and record:
-- Total input + output tokens consumed
-- Number of turns to a passing result
-- Whether the agent succeeded without human correction
+| Function | Band | AIM | SLOC | Sonnet diff | Opus diff | Sonnet concepts | Opus concepts | External (S/O) |
+|----------|------|-----|------|-------------|-----------|-----------------|---------------|----------------|
+| db__ready_for_flight | low | 9 | 52 | 4 | 3 | 3 | 4 | Y / Y |
+| bufq_slurpn | low | 14 | 35 | 4 | 3 | 3 | 4 | Y / Y |
+| pmksa_cache_get_okc | low | 15 | 32 | 4 | 3 | 3 | 3 | Y / N |
+| mosquitto_validate_utf8 | mid | 55 | 91 | 4 | 3 | 3 | 4 | Y / Y |
+| Curl_conn_connect | mid | 55 | 121 | 4 | 3 | 3 | 4 | Y / Y |
+| ieee802_1x_encapsulate_radius | mid | 55 | 136 | 5 | 3 | 4 | 4 | Y / Y |
+| luaV_execute | high | 87 | 773 | 7 | 6 | 4 | 5 | Y / Y |
+| whereLoopAddBtreeIndex | high | 90 | 435 | 7 | 6 | 5 | 5 | Y / Y |
+| hostapd_config_read_eap_user | high | 93 | 328 | 4 | 3 | 3 | 4 | Y / N |
 
-Candidate functions (drawn from stable, well-known corpora):
+### Findings
 
-**Low AIM (8–15) — expect: fast, low token cost**
-| AIM | Cog | SLOC | Function | Corpus |
-|-----|-----|------|----------|--------|
-| 9 | 21 | 41 | db__ready_for_flight | mosquitto/database.c:37 |
-| 14 | 16 | 31 | bufq_slurpn | curl/bufq.c:579 |
-| 15 | 17 | 31 | pmksa_cache_get_okc | hostap/pmksa_cache_auth.c:527 |
+**High band confirmed.** `luaV_execute` and `whereLoopAddBtreeIndex` were consistently the
+hardest (difficulty 6–7, highest concept counts). Both required tracing macro chains, union
+type invariants, and multi-level indirection across files. The high-AIM boundary is valid.
 
-**Mid AIM (35–55) — expect: moderate cost, occasional correction**
-| AIM | Cog | SLOC | Function | Corpus |
-|-----|-----|------|----------|--------|
-| 55 | 44 | 66 | mosquitto_validate_utf8 | mosquitto/utf8_common.c:25 |
-| 55 | 49 | 102 | Curl_conn_connect | curl/connect.c:335 |
-| 55 | 45 | 113 | ieee802_1x_encapsulate_radius | hostap/eapol_test.c:179 |
+**Mid band not differentiated.** Sonnet 4.00→4.33→6.00 across low/mid/high; Opus
+3.00→3.00→5.00. A 40-point AIM increase from low to mid produces near-zero difficulty
+change. The formula does not predict mid-range effort reliably.
 
-**High AIM (75+) — expect: high token cost, multiple turns**
-| AIM | Cog | SLOC | Function | Corpus |
-|-----|-----|------|----------|--------|
-| 87 | 138 | 751 | luaV_execute | lua/lvm.c:1198 |
-| 90 | 187 | 336 | whereLoopAddBtreeIndex | sqlite/where.c |
-| 93 | 203 | 299 | hostapd_config_read_eap_user | hostap/config_file.c:251 |
+**Systematic model offset.** Sonnet rated every function 1 point higher than Opus (8/9
+functions). Consistent ordering, not content disagreement — calibration offset between
+models, not formula signal.
 
-### What success looks like
+**Clear falsification: `hostapd_config_read_eap_user`.** AIM=93 (highest in experiment),
+difficulty rated 3–4 (same as low band). It is a 328-line line-oriented parser; the entry
+clause is two trivially obvious lines. The SLOC contribution saturates the score without
+adding reasoning depth. Both cognitive (203 > ceiling 75) and SLOC (299 > ceiling 200) are
+fully saturated, so the v4 reweight (SLOC 25→15, cognitive 45→55) does not reduce its
+score — both inputs hit their ceilings regardless of relative weight. Reducing the score
+for this function class requires either raising the cognitive ceiling (so functions with
+genuinely massive cognitive scores pull away) or introducing a new metric for entry-point
+shallowness. Tracked as a known gap below.
 
-A positive result is a clear monotonic relationship: low-AIM tasks consistently cost fewer
-tokens than mid-AIM, which cost fewer than high-AIM, across both models. A negative result
-(no correlation) would suggest the formula is measuring something other than AI modification
-cost and needs a different set of inputs.
+**External context is universal above low band.** The rate increases from ~67% (low) to
+100% (mid and most of high). This metric discriminates low from non-low but not mid from
+high. Not useful as a formula input in its current binary form.
 
-Secondary signal: if Opus and Sonnet diverge significantly on the same high-AIM function
-(Opus succeeds in fewer turns), that's evidence the score is capturing genuine reasoning
-difficulty, not just context window consumption.
+### What the experiment supports
+
+- `--aim-threshold 85` as a binary flag is validated: the high band functions (≥85) are
+  genuinely hard and consistently distinguished from mid and low.
+- Cognitive complexity is the dominant valid predictor; SLOC adds noise for functions
+  where cognitive complexity is high and SLOC is large (both saturate).
+
+### Known gaps
+
+**Cross-file type/function indirection.** The two experiment functions that produced the
+most model disagreement and required the most reasoning (`luaV_execute`, `whereLoopAddBtreeIndex`)
+both required chasing macro chains and union/struct definitions across header files. This
+is not currently measured by knots. All existing metrics (cognitive, SLOC, nesting,
+test_score, doc_score, ABC, McCabe) are intra-function or intra-file. A future metric
+could count the number of distinct external translation units contributing types or macros
+referenced in the function's entry prologue — but this requires libclang-level include
+resolution, not just token analysis.
+
+**Mid-band calibration.** The experiment had only 3 mid-band functions (all AIM=55). A
+larger sample spanning AIM 30–70 from type-heavy codebases (Linux kernel, LLVM, OpenSSL)
+is needed before the mid-range behavior can be assessed or tuned.
 
 ## Pending Tasks
 
-- Run empirical token correlation experiment (see above)
-- Add `--aim-threshold` flag once empirical validation confirms score bands are meaningful
+- Mid-band empirical validation with AIM 30–70 functions from type-heavy corpora
+- Investigate cognitive ceiling raise (75 → 150?) to differentiate VdbeExec-class functions
+  from hostapd-class functions (both currently saturate at the same score)

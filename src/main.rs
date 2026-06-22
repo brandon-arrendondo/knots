@@ -217,6 +217,10 @@ struct Args {
     /// Exit 1 if any function exceeds this return count (default: off)
     #[arg(long, value_name = "N")]
     return_threshold: Option<u32>,
+
+    /// Exit 1 if any function exceeds this AIM score (default: off, recommended: 85)
+    #[arg(long, value_name = "N")]
+    aim_threshold: Option<u32>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -251,6 +255,7 @@ struct Thresholds {
     sloc: Option<u32>,
     abc: Option<f64>,
     returns: Option<u32>,
+    aim: Option<u32>,
 }
 
 impl Thresholds {
@@ -261,6 +266,7 @@ impl Thresholds {
             || self.sloc.is_some()
             || self.abc.is_some()
             || self.returns.is_some()
+            || self.aim.is_some()
     }
 }
 
@@ -302,6 +308,11 @@ fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
         if let Some(limit) = t.returns {
             if func.return_count > limit {
                 func_violations.push(format!("Returns {} > {}", func.return_count, limit));
+            }
+        }
+        if let Some(limit) = t.aim {
+            if func.aim > limit {
+                func_violations.push(format!("AIM {} > {}", func.aim, limit));
             }
         }
 
@@ -372,6 +383,7 @@ fn main() -> Result<()> {
         sloc: args.sloc_threshold,
         abc: args.abc_threshold,
         returns: args.return_threshold,
+        aim: args.aim_threshold,
     };
 
     // Structured output modes: collect all metrics then emit and exit.

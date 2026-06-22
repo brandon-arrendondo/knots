@@ -914,7 +914,7 @@ pub fn calculate_aim(
     let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
 
     let raw =
-        (cognitive_norm * 45.0) + (sloc_norm * 25.0) + (nesting_norm * 15.0) + (test_norm * 15.0)
+        (cognitive_norm * 55.0) + (sloc_norm * 15.0) + (nesting_norm * 15.0) + (test_norm * 15.0)
             - (doc_norm * 15.0);
 
     raw.round().clamp(0.0, 100.0) as u32
