@@ -888,11 +888,11 @@ fn calculate_documentation_score(node: Node, source_code: &[u8]) -> i32 {
     score.min(10)
 }
 
-/// Calculates AI Modification score (AIM): a normalized 0-100 estimate of how
-/// expensive a function is to modify with AI assistance.
+/// Calculates AI Reasoning Difficulty (AIRD): a normalized 0-100 estimate of how
+/// much reasoning effort an AI model requires to safely modify a function.
 ///
-/// Higher = more AI effort required. Weights are initial hypotheses; tune
-/// against a corpus before setting enforcement thresholds.
+/// Higher = more AI reasoning required. Weights calibrated against corpus percentile
+/// analysis and empirical validation (see AIM_BENCHMARK_RESULTS.md).
 ///
 /// Inputs:
 ///   cognitive    - primary driver (reasoning steps needed)
@@ -900,7 +900,7 @@ fn calculate_documentation_score(node: Node, source_code: &[u8]) -> i32 {
 ///   nesting      - structural confusion penalty
 ///   test_score   - iteration cost (low testability = more turns to validate)
 ///   doc_score    - documentation reduces ambiguity (negative contributor)
-pub fn calculate_aim(
+pub fn calculate_aird(
     cognitive: u32,
     sloc: u32,
     nesting: u32,
@@ -920,44 +920,122 @@ pub fn calculate_aim(
     raw.round().clamp(0.0, 100.0) as u32
 }
 
+/// Calculates AI Context Pressure (AICP): a normalized 0-100 estimate of how much
+/// context an AI model must load to understand a function, independent of reasoning depth.
+///
+/// Higher = more tokens consumed gathering external context before the model can act.
+/// Complements AIRD: a function can be cheap to load but hard to reason about, or
+/// expensive to load but trivial once context is assembled.
+///
+/// Inputs:
+///   external_calls - unique call targets not defined in this translation unit (p99=20)
+///   sloc           - raw function size (context volume)
+///   doc_score      - documentation reduces load (negative contributor)
+pub fn calculate_aicp(external_calls: u32, sloc: u32, doc_score: i32) -> u32 {
+    let ext_norm = (external_calls as f64 / 20.0).min(1.0);
+    let sloc_norm = (sloc as f64 / 200.0).min(1.0);
+    let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
+
+    let raw = (ext_norm * 60.0) + (sloc_norm * 40.0) - (doc_norm * 15.0);
+
+    raw.round().clamp(0.0, 100.0) as u32
+}
+
 #[cfg(test)]
-mod aim_tests {
+mod aird_tests {
     use super::*;
 
     #[test]
-    fn test_aim_trivial_function() {
-        let aim = calculate_aim(1, 5, 1, 2, 8);
-        assert!(aim < 15, "trivial function AIM should be < 15, got {}", aim);
+    fn test_aird_trivial_function() {
+        let aird = calculate_aird(1, 5, 1, 2, 8);
+        assert!(
+            aird < 15,
+            "trivial function AIRD should be < 15, got {}",
+            aird
+        );
     }
 
     #[test]
-    fn test_aim_complex_function() {
-        let aim = calculate_aim(80, 200, 7, 15, 0);
-        assert!(aim > 70, "complex function AIM should be > 70, got {}", aim);
+    fn test_aird_complex_function() {
+        let aird = calculate_aird(80, 200, 7, 15, 0);
+        assert!(
+            aird > 70,
+            "complex function AIRD should be > 70, got {}",
+            aird
+        );
     }
 
     #[test]
-    fn test_aim_doc_reduces_score() {
-        let without_docs = calculate_aim(20, 40, 3, 15, 0);
-        let with_docs = calculate_aim(20, 40, 3, 15, 10);
+    fn test_aird_doc_reduces_score() {
+        let without_docs = calculate_aird(20, 40, 3, 15, 0);
+        let with_docs = calculate_aird(20, 40, 3, 15, 10);
         assert!(
             with_docs < without_docs,
-            "documentation should reduce AIM: {} vs {}",
+            "documentation should reduce AIRD: {} vs {}",
             with_docs,
             without_docs
         );
     }
 
     #[test]
-    fn test_aim_clamps_to_100() {
-        let aim = calculate_aim(1000, 1000, 1000, 1000, 0);
-        assert_eq!(aim, 100);
+    fn test_aird_clamps_to_100() {
+        let aird = calculate_aird(1000, 1000, 1000, 1000, 0);
+        assert_eq!(aird, 100);
     }
 
     #[test]
-    fn test_aim_clamps_to_0() {
-        let aim = calculate_aim(0, 0, 0, 0, 10);
-        assert_eq!(aim, 0);
+    fn test_aird_clamps_to_0() {
+        let aird = calculate_aird(0, 0, 0, 0, 10);
+        assert_eq!(aird, 0);
+    }
+}
+
+#[cfg(test)]
+mod aicp_tests {
+    use super::*;
+
+    #[test]
+    fn test_aicp_trivial_function() {
+        let aicp = calculate_aicp(2, 30, 0);
+        assert!(
+            aicp < 20,
+            "trivial function AICP should be < 20, got {}",
+            aicp
+        );
+    }
+
+    #[test]
+    fn test_aicp_high_pressure_function() {
+        let aicp = calculate_aicp(25, 300, 0);
+        assert!(
+            aicp > 70,
+            "high-pressure function AICP should be > 70, got {}",
+            aicp
+        );
+    }
+
+    #[test]
+    fn test_aicp_doc_reduces_score() {
+        let without_docs = calculate_aicp(10, 100, 0);
+        let with_docs = calculate_aicp(10, 100, 10);
+        assert!(
+            with_docs < without_docs,
+            "documentation should reduce AICP: {} vs {}",
+            with_docs,
+            without_docs
+        );
+    }
+
+    #[test]
+    fn test_aicp_clamps_to_100() {
+        let aicp = calculate_aicp(1000, 1000, 0);
+        assert_eq!(aicp, 100);
+    }
+
+    #[test]
+    fn test_aicp_clamps_to_0() {
+        let aicp = calculate_aicp(0, 0, 10);
+        assert_eq!(aicp, 0);
     }
 }
 

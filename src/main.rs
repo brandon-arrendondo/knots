@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 
 mod complexity;
 use complexity::{
-    calculate_abc_complexity, calculate_aim, calculate_cognitive_complexity,
+    calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_cognitive_complexity,
     calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
     calculate_test_scoring, TestScoringMetric,
 };
@@ -219,9 +219,13 @@ struct Args {
     #[arg(long, value_name = "N")]
     return_threshold: Option<u32>,
 
-    /// Exit 1 if any function exceeds this AIM score (default: off, recommended: 85)
+    /// Exit 1 if any function exceeds this AIRD score (default: off, recommended: 85)
     #[arg(long, value_name = "N")]
-    aim_threshold: Option<u32>,
+    aird_threshold: Option<u32>,
+
+    /// Exit 1 if any function exceeds this AICP score (default: off)
+    #[arg(long, value_name = "N")]
+    aicp_threshold: Option<u32>,
 
     /// Exit 1 if any function exceeds this external call count (default: off)
     #[arg(long, value_name = "N")]
@@ -262,7 +266,8 @@ struct Thresholds {
     sloc: Option<u32>,
     abc: Option<f64>,
     returns: Option<u32>,
-    aim: Option<u32>,
+    aird: Option<u32>,
+    aicp: Option<u32>,
     external_calls: Option<u32>,
 }
 
@@ -274,7 +279,8 @@ impl Thresholds {
             || self.sloc.is_some()
             || self.abc.is_some()
             || self.returns.is_some()
-            || self.aim.is_some()
+            || self.aird.is_some()
+            || self.aicp.is_some()
             || self.external_calls.is_some()
     }
 }
@@ -319,9 +325,14 @@ fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
                 func_violations.push(format!("Returns {} > {}", func.return_count, limit));
             }
         }
-        if let Some(limit) = t.aim {
-            if func.aim > limit {
-                func_violations.push(format!("AIM {} > {}", func.aim, limit));
+        if let Some(limit) = t.aird {
+            if func.aird > limit {
+                func_violations.push(format!("AIRD {} > {}", func.aird, limit));
+            }
+        }
+        if let Some(limit) = t.aicp {
+            if func.aicp > limit {
+                func_violations.push(format!("AICP {} > {}", func.aicp, limit));
             }
         }
         if let Some(limit) = t.external_calls {
@@ -397,7 +408,8 @@ fn main() -> Result<()> {
         sloc: args.sloc_threshold,
         abc: args.abc_threshold,
         returns: args.return_threshold,
-        aim: args.aim_threshold,
+        aird: args.aird_threshold,
+        aicp: args.aicp_threshold,
         external_calls: args.external_calls_threshold,
     };
 
@@ -786,13 +798,14 @@ fn collect_function_metrics(
             let return_count = calculate_return_count(node);
             let test_scoring = calculate_test_scoring(node, src.as_bytes());
             let external_calls = calculate_external_calls(node, src, &local_names);
-            let aim = calculate_aim(
+            let aird = calculate_aird(
                 cognitive,
                 sloc,
                 nesting,
                 test_scoring.total_score,
                 test_scoring.documentation_score,
             );
+            let aicp = calculate_aicp(external_calls, sloc, test_scoring.documentation_score);
 
             let max_complexity = std::cmp::max(mccabe, cognitive);
 
@@ -811,7 +824,8 @@ fn collect_function_metrics(
                     abc_magnitude,
                     return_count,
                     test_scoring,
-                    aim,
+                    aird,
+                    aicp,
                     external_calls,
                 });
             }
@@ -890,7 +904,8 @@ fn analyze_code(
     let mut total_abc_magnitude = 0.0;
     let mut total_return_count = 0;
     let mut total_test_score: i64 = 0;
-    let mut total_aim: u64 = 0;
+    let mut total_aird: u64 = 0;
+    let mut total_aicp: u64 = 0;
 
     for func in &metrics {
         total_mccabe += func.mccabe;
@@ -900,7 +915,8 @@ fn analyze_code(
         total_abc_magnitude += func.abc_magnitude;
         total_return_count += func.return_count;
         total_test_score += func.test_scoring.total_score as i64;
-        total_aim += func.aim as u64;
+        total_aird += func.aird as u64;
+        total_aicp += func.aicp as u64;
 
         let emoji = get_complexity_emoji(func.max_complexity());
 
@@ -928,16 +944,17 @@ fn analyze_code(
                 "    - Documentation: {}",
                 func.test_scoring.documentation_score
             );
-            println!("  AIM Score: {}", func.aim);
+            println!("  AIRD Score: {}", func.aird);
+            println!("  AICP Score: {}", func.aicp);
             println!("  External Calls: {}", func.external_calls);
             println!("  Max Complexity: {}", func.max_complexity());
             println!();
         } else {
             println!(
-                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}, ExtCalls: {})",
+                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
                 emoji, func.name, func.mccabe, func.cognitive, func.nesting, func.sloc,
-                func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim,
-                func.external_calls
+                func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aird,
+                func.aicp, func.external_calls
             );
         }
     }
@@ -955,7 +972,8 @@ fn analyze_code(
     println!("  Total ABC Magnitude: {:.2}", total_abc_magnitude);
     println!("  Total Return Count: {}", total_return_count);
     println!("  Total Test Score: {}", total_test_score);
-    println!("  Total AIM Score: {}", total_aim);
+    println!("  Total AIRD Score: {}", total_aird);
+    println!("  Total AICP Score: {}", total_aicp);
 
     if function_count > 0 {
         println!(
@@ -987,8 +1005,12 @@ fn analyze_code(
             total_test_score as f64 / function_count as f64
         );
         println!(
-            "  Average AIM Score: {:.2}",
-            total_aim as f64 / function_count as f64
+            "  Average AIRD Score: {:.2}",
+            total_aird as f64 / function_count as f64
+        );
+        println!(
+            "  Average AICP Score: {:.2}",
+            total_aicp as f64 / function_count as f64
         );
     }
 
@@ -1155,7 +1177,8 @@ fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
                 "return_count": f.return_count,
                 "test_score": f.test_scoring.total_score,
                 "doc_score": f.test_scoring.documentation_score,
-                "aim": f.aim,
+                "aird": f.aird,
+                "aicp": f.aicp,
                 "external_calls": f.external_calls
             })
         })
@@ -1188,7 +1211,8 @@ fn emit_ndjson(all_metrics: &[FunctionMetrics]) -> Result<()> {
             "return_count": f.return_count,
             "test_score": f.test_scoring.total_score,
             "doc_score": f.test_scoring.documentation_score,
-            "aim": f.aim,
+            "aird": f.aird,
+            "aicp": f.aicp,
             "external_calls": f.external_calls
         });
         serde_json::to_writer(&mut handle, &record).context("Failed to write NDJSON")?;
@@ -1204,7 +1228,7 @@ fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
 
     writeln!(
         handle,
-        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aim,external_calls"
+        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aird,aicp,external_calls"
     )?;
 
     for f in all_metrics {
@@ -1216,7 +1240,7 @@ fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
         };
         writeln!(
             handle,
-            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{},{}",
             f.file_path,
             name,
             f.start_line,
@@ -1229,7 +1253,8 @@ fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
             f.return_count,
             f.test_scoring.total_score,
             f.test_scoring.documentation_score,
-            f.aim,
+            f.aird,
+            f.aicp,
             f.external_calls
         )?;
     }
@@ -1299,17 +1324,18 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Resu
                 "    - Documentation: {}",
                 func.test_scoring.documentation_score
             )?;
-            writeln!(file, "  AIM Score: {}", func.aim)?;
+            writeln!(file, "  AIRD Score: {}", func.aird)?;
+            writeln!(file, "  AICP Score: {}", func.aicp)?;
             writeln!(file, "  External Calls: {}", func.external_calls)?;
             writeln!(file, "  Max Complexity: {}", func.max_complexity())?;
             writeln!(file)?;
         } else {
             writeln!(
                 file,
-                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}, ExtCalls: {})",
+                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
                 emoji, func.name, func.file_path, func.mccabe, func.cognitive, func.nesting,
                 func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score,
-                func.aim, func.external_calls
+                func.aird, func.aicp, func.external_calls
             )?;
         }
     }
@@ -1331,8 +1357,8 @@ fn display_recursive_summary(
     for (i, func) in sorted.iter().take(5).enumerate() {
         let emoji = get_complexity_emoji(func.max_complexity());
         println!("{}. {} {} [{}]", i + 1, emoji, func.name, func.file_path);
-        println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}, ExtCalls: {}",
-            func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim, func.external_calls
+        println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {}",
+            func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aird, func.aicp, func.external_calls
         );
     }
 
@@ -1344,7 +1370,8 @@ fn display_recursive_summary(
     let mut total_abc_magnitude = 0.0;
     let mut total_return_count: u64 = 0;
     let mut total_test_score: i64 = 0;
-    let mut total_aim: u64 = 0;
+    let mut total_aird: u64 = 0;
+    let mut total_aicp: u64 = 0;
 
     for func in all_metrics {
         total_mccabe += func.mccabe as u64;
@@ -1354,7 +1381,8 @@ fn display_recursive_summary(
         total_abc_magnitude += func.abc_magnitude;
         total_return_count += func.return_count as u64;
         total_test_score += func.test_scoring.total_score as i64;
-        total_aim += func.aim as u64;
+        total_aird += func.aird as u64;
+        total_aicp += func.aicp as u64;
     }
 
     let function_count = all_metrics.len();
@@ -1368,7 +1396,8 @@ fn display_recursive_summary(
     println!("  Total ABC Magnitude: {:.2}", total_abc_magnitude);
     println!("  Total Return Count: {}", total_return_count);
     println!("  Total Test Score: {}", total_test_score);
-    println!("  Total AIM Score: {}", total_aim);
+    println!("  Total AIRD Score: {}", total_aird);
+    println!("  Total AICP Score: {}", total_aicp);
 
     if function_count > 0 {
         println!();
@@ -1401,8 +1430,12 @@ fn display_recursive_summary(
             total_test_score as f64 / function_count as f64
         );
         println!(
-            "  Average AIM Score: {:.2}",
-            total_aim as f64 / function_count as f64
+            "  Average AIRD Score: {:.2}",
+            total_aird as f64 / function_count as f64
+        );
+        println!(
+            "  Average AICP Score: {:.2}",
+            total_aicp as f64 / function_count as f64
         );
     }
 
@@ -1428,7 +1461,8 @@ struct FunctionMetrics {
     abc_magnitude: f64,
     return_count: u32,
     test_scoring: TestScoringMetric,
-    aim: u32,
+    aird: u32,
+    aicp: u32,
     external_calls: u32,
 }
 
