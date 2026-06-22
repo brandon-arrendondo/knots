@@ -888,6 +888,79 @@ fn calculate_documentation_score(node: Node, source_code: &[u8]) -> i32 {
     score.min(10)
 }
 
+/// Calculates AI Modification score (AIM): a normalized 0-100 estimate of how
+/// expensive a function is to modify with AI assistance.
+///
+/// Higher = more AI effort required. Weights are initial hypotheses; tune
+/// against a corpus before setting enforcement thresholds.
+///
+/// Inputs:
+///   cognitive    - primary driver (reasoning steps needed)
+///   sloc         - context window consumption
+///   nesting      - structural confusion penalty
+///   test_score   - iteration cost (low testability = more turns to validate)
+///   doc_score    - documentation reduces ambiguity (negative contributor)
+pub fn calculate_aim(
+    cognitive: u32,
+    sloc: u32,
+    nesting: u32,
+    test_score: i32,
+    doc_score: i32,
+) -> u32 {
+    let cognitive_norm = (cognitive as f64 / 50.0).min(1.0);
+    let sloc_norm = (sloc as f64 / 100.0).min(1.0);
+    let nesting_norm = (nesting as f64 / 8.0).min(1.0);
+    let test_norm = (test_score.max(0) as f64 / 40.0).min(1.0);
+    let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
+
+    let raw =
+        (cognitive_norm * 35.0) + (sloc_norm * 25.0) + (nesting_norm * 15.0) + (test_norm * 25.0)
+            - (doc_norm * 15.0);
+
+    raw.round().clamp(0.0, 100.0) as u32
+}
+
+#[cfg(test)]
+mod aim_tests {
+    use super::*;
+
+    #[test]
+    fn test_aim_trivial_function() {
+        let aim = calculate_aim(1, 5, 1, 2, 8);
+        assert!(aim < 15, "trivial function AIM should be < 15, got {}", aim);
+    }
+
+    #[test]
+    fn test_aim_complex_function() {
+        let aim = calculate_aim(45, 90, 7, 35, 0);
+        assert!(aim > 70, "complex function AIM should be > 70, got {}", aim);
+    }
+
+    #[test]
+    fn test_aim_doc_reduces_score() {
+        let without_docs = calculate_aim(20, 40, 3, 15, 0);
+        let with_docs = calculate_aim(20, 40, 3, 15, 10);
+        assert!(
+            with_docs < without_docs,
+            "documentation should reduce AIM: {} vs {}",
+            with_docs,
+            without_docs
+        );
+    }
+
+    #[test]
+    fn test_aim_clamps_to_100() {
+        let aim = calculate_aim(1000, 1000, 1000, 1000, 0);
+        assert_eq!(aim, 100);
+    }
+
+    #[test]
+    fn test_aim_clamps_to_0() {
+        let aim = calculate_aim(0, 0, 0, 0, 10);
+        assert_eq!(aim, 0);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

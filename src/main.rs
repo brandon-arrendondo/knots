@@ -10,9 +10,9 @@ use walkdir::WalkDir;
 
 mod complexity;
 use complexity::{
-    calculate_abc_complexity, calculate_cognitive_complexity, calculate_mccabe_complexity,
-    calculate_nesting_depth, calculate_return_count, calculate_sloc, calculate_test_scoring,
-    TestScoringMetric,
+    calculate_abc_complexity, calculate_aim, calculate_cognitive_complexity,
+    calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
+    calculate_test_scoring, TestScoringMetric,
 };
 use knots::{is_source_extension, language_for_file};
 
@@ -666,6 +666,13 @@ fn collect_function_metrics(
             let abc_magnitude = abc.magnitude();
             let return_count = calculate_return_count(node);
             let test_scoring = calculate_test_scoring(node, src.as_bytes());
+            let aim = calculate_aim(
+                cognitive,
+                sloc,
+                nesting,
+                test_scoring.total_score,
+                test_scoring.documentation_score,
+            );
 
             let max_complexity = std::cmp::max(mccabe, cognitive);
 
@@ -685,6 +692,7 @@ fn collect_function_metrics(
                     abc_magnitude,
                     return_count,
                     test_scoring,
+                    aim,
                 });
             }
         }
@@ -762,6 +770,7 @@ fn analyze_code(
     let mut total_abc_magnitude = 0.0;
     let mut total_return_count = 0;
     let mut total_test_score: i64 = 0;
+    let mut total_aim: u64 = 0;
 
     for func in &metrics {
         total_mccabe += func.mccabe;
@@ -771,6 +780,7 @@ fn analyze_code(
         total_abc_magnitude += func.abc_magnitude;
         total_return_count += func.return_count;
         total_test_score += func.test_scoring.total_score as i64;
+        total_aim += func.aim as u64;
 
         let emoji = get_complexity_emoji(func.max_complexity());
 
@@ -798,12 +808,14 @@ fn analyze_code(
                 "    - Documentation: {}",
                 func.test_scoring.documentation_score
             );
+            println!("  AIM Score: {}", func.aim);
             println!("  Max Complexity: {}", func.max_complexity());
             println!();
         } else {
             println!(
-                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {})",
-                emoji, func.name, func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score
+                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {})",
+                emoji, func.name, func.mccabe, func.cognitive, func.nesting, func.sloc,
+                func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim
             );
         }
     }
@@ -821,6 +833,7 @@ fn analyze_code(
     println!("  Total ABC Magnitude: {:.2}", total_abc_magnitude);
     println!("  Total Return Count: {}", total_return_count);
     println!("  Total Test Score: {}", total_test_score);
+    println!("  Total AIM Score: {}", total_aim);
 
     if function_count > 0 {
         println!(
@@ -850,6 +863,10 @@ fn analyze_code(
         println!(
             "  Average Test Score: {:.2}",
             total_test_score as f64 / function_count as f64
+        );
+        println!(
+            "  Average AIM Score: {:.2}",
+            total_aim as f64 / function_count as f64
         );
     }
 
@@ -1060,13 +1077,16 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Resu
                 "    - Documentation: {}",
                 func.test_scoring.documentation_score
             )?;
+            writeln!(file, "  AIM Score: {}", func.aim)?;
             writeln!(file, "  Max Complexity: {}", func.max_complexity())?;
             writeln!(file)?;
         } else {
             writeln!(
                 file,
-                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {})",
-                emoji, func.name, func.file_path, func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score
+                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {})",
+                emoji, func.name, func.file_path, func.mccabe, func.cognitive, func.nesting,
+                func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score,
+                func.aim
             )?;
         }
     }
@@ -1088,8 +1108,8 @@ fn display_recursive_summary(
     for (i, func) in sorted.iter().take(5).enumerate() {
         let emoji = get_complexity_emoji(func.max_complexity());
         println!("{}. {} {} [{}]", i + 1, emoji, func.name, func.file_path);
-        println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}",
-            func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score
+        println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIM: {}",
+            func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aim
         );
     }
 
@@ -1101,6 +1121,7 @@ fn display_recursive_summary(
     let mut total_abc_magnitude = 0.0;
     let mut total_return_count: u64 = 0;
     let mut total_test_score: i64 = 0;
+    let mut total_aim: u64 = 0;
 
     for func in all_metrics {
         total_mccabe += func.mccabe as u64;
@@ -1110,6 +1131,7 @@ fn display_recursive_summary(
         total_abc_magnitude += func.abc_magnitude;
         total_return_count += func.return_count as u64;
         total_test_score += func.test_scoring.total_score as i64;
+        total_aim += func.aim as u64;
     }
 
     let function_count = all_metrics.len();
@@ -1123,6 +1145,7 @@ fn display_recursive_summary(
     println!("  Total ABC Magnitude: {:.2}", total_abc_magnitude);
     println!("  Total Return Count: {}", total_return_count);
     println!("  Total Test Score: {}", total_test_score);
+    println!("  Total AIM Score: {}", total_aim);
 
     if function_count > 0 {
         println!();
@@ -1154,6 +1177,10 @@ fn display_recursive_summary(
             "  Average Test Score: {:.2}",
             total_test_score as f64 / function_count as f64
         );
+        println!(
+            "  Average AIM Score: {:.2}",
+            total_aim as f64 / function_count as f64
+        );
     }
 
     println!("\nDetailed per-function output written to report.txt");
@@ -1178,6 +1205,7 @@ struct FunctionMetrics {
     abc_magnitude: f64,
     return_count: u32,
     test_scoring: TestScoringMetric,
+    aim: u32,
 }
 
 impl FunctionMetrics {
