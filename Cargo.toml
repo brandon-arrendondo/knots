@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Cyclomatic and cognitive complexity analysis for C/C++ code"
+description = "C/C++ complexity analyzer with AI cost metrics (AIRD, AICP), SARIF/JSON/CSV output, and CI threshold enforcement"
 
 [[bin]]
 name = "knots"

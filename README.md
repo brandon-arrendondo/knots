@@ -1,15 +1,20 @@
 # Knots
 
-A fast, powerful C/C++ code complexity analyzer with visual indicators, built on tree-sitter. Knots helps you identify problematic code patterns, prioritize refactoring efforts, and understand testability concerns across your codebase.
+A fast, powerful C/C++ code complexity analyzer built on tree-sitter. Knots measures
+traditional complexity metrics alongside two AI-specific cost scores — AIRD (AI Reasoning
+Difficulty) and AICP (AI Context Pressure) — to help you identify which functions are
+genuinely expensive to modify with AI assistance.
 
 ## Features
 
 - 🎯 **Multiple Complexity Metrics**: McCabe, Cognitive, Nesting Depth, SLOC, ABC, Test Scoring
+- 🤖 **AI Cost Metrics**: AIRD (reasoning difficulty) and AICP (context pressure) — corpus-validated against 32,205 functions across 6 open-source C codebases
 - 📊 **Testability Matrix**: Categorize functions by complexity and testability
 - 🔄 **Recursive Directory Scanning**: Analyze entire codebases at once
 - 🎨 **Visual Indicators**: Easy-to-understand emoji-based complexity ratings
 - 🔍 **Flexible Filtering**: Include/exclude files and functions with JSON-based rules
 - ⚡ **Fast & Accurate**: Built on tree-sitter for reliable AST-based analysis
+- 📤 **Multiple Output Formats**: text, SARIF, JSON, NDJSON (find/xargs-composable), CSV
 - 📝 **Detailed Reports**: Generate comprehensive reports with `report.txt`
 - ✅ **Validated**: McCabe complexity matches pmccabe output exactly (100% accuracy)
 
@@ -52,8 +57,11 @@ knots -v path/to/file.c
 # Display testability matrix
 knots -m path/to/file.c
 
-# Combine recursive and matrix modes
-knots -r -m path/to/project/
+# CI gate: fail if any function has AIRD > 85 (high AI reasoning difficulty)
+knots -r src/ --aird-threshold 85
+
+# Corpus analysis: one JSON record per function, composable via find/xargs
+find . -name "*.c" | xargs knots --format ndjson > metrics.ndjson
 
 # Filter analysis
 knots -r . --include filter.json --exclude exclude.json
@@ -71,21 +79,35 @@ Knots uses visual emoji indicators based on the maximum of McCabe and Cognitive 
 ## Command-Line Options
 
 ```
-knots [OPTIONS] <FILE>
+knots [OPTIONS] [FILE]...
 
 Arguments:
-  <FILE>  Path to the C/C++ file or directory to analyze
+  [FILE]...  Path(s) to C/C++ files or directories to analyze
 
 Options:
-  -r, --recursive               Recursively process all C/C++ source files in directories
-  -v, --verbose                 Show detailed per-function analysis
-  -m, --matrix                  Show testability matrix categorization
-  --compile-commands <FILE>     Use compile_commands.json to get list of files to analyze
-  --include <FILE>              Include filter rules from JSON file (whitelist)
-  --exclude <FILE>              Exclude filter rules from JSON file (blacklist)
-  --format <FORMAT>             Output format: text (default) or sarif
-  -h, --help                    Print help
-  -V, --version                 Print version
+  -r, --recursive                   Recursively process all C/C++ source files in directories
+  -v, --verbose                     Show detailed per-function analysis
+  -m, --matrix                      Show testability matrix categorization
+  --compile-commands <FILE>         Use compile_commands.json to get list of files to analyze
+  --include <FILE>                  Include filter rules from JSON file (whitelist)
+  --exclude <FILE>                  Exclude filter rules from JSON file (blacklist)
+  --format <FORMAT>                 Output format [default: text]
+                                      text   — human-readable (default)
+                                      sarif  — SARIF 2.1.0 for VS Code / GitHub Code Scanning
+                                      json   — JSON array of per-function metrics
+                                      ndjson — one record per line; composable via find/xargs
+                                      csv    — header + rows
+  --mccabe-threshold <N>            Exit 1 if any function exceeds this McCabe complexity
+  --cognitive-threshold <N>         Exit 1 if any function exceeds this cognitive complexity
+  --nesting-threshold <N>           Exit 1 if any function exceeds this nesting depth
+  --sloc-threshold <N>              Exit 1 if any function exceeds this SLOC count
+  --abc-threshold <F>               Exit 1 if any function exceeds this ABC magnitude
+  --return-threshold <N>            Exit 1 if any function exceeds this return count
+  --aird-threshold <N>              Exit 1 if any function exceeds this AIRD score (recommended: 85)
+  --aicp-threshold <N>              Exit 1 if any function exceeds this AICP score
+  --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
+  -h, --help                        Print help
+  -V, --version                     Print version
 ```
 
 ## Usage
@@ -98,12 +120,14 @@ knots src/main.c
 
 Output shows per-function metrics:
 ```
-😊 init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5)
-😠 process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18)
+😊 init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
+😠 process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
 
 Summary:
   Total Functions: 2
   Average McCabe Complexity: 15.50
+  Average AIRD Score: 45.50
+  Average AICP Score: 40.00
   ...
 ```
 
@@ -128,6 +152,9 @@ Function: process_data 😠
     - Observable: 2
     - Implementation: 8
     - Documentation: 0
+  AIRD Score: 87
+  AICP Score: 72
+  External Calls: 14
   Max Complexity: 45
 ```
 
@@ -310,24 +337,58 @@ knots -r . --include include.json --exclude exclude.json
 
 All fields are optional. See [FILTERS.md](FILTERS.md) for comprehensive documentation.
 
-### SARIF Output (editor & CI integration)
+### Structured Output Formats
 
-Knots can emit [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) JSON, which is consumed by VS Code (via the SARIF Viewer extension), GitHub Code Scanning, and other static-analysis tooling.
+All structured formats suppress text output — only the data goes to stdout.
+
+#### JSON
 
 ```bash
-# Single file
+knots --format json src/main.c > metrics.json
+knots -r --format json src/ > metrics.json
+```
+
+Emits a pretty-printed JSON array of per-function records. Each record contains all 15
+fields: `file`, `function`, `start_line`, `end_line`, `mccabe`, `cognitive`, `nesting`,
+`sloc`, `abc_magnitude`, `return_count`, `test_score`, `doc_score`, `aird`, `aicp`,
+`external_calls`.
+
+#### NDJSON (newline-delimited JSON)
+
+```bash
+# Composable across files — no array merging needed
+find . -name "*.c" | xargs knots --format ndjson > all_metrics.ndjson
+
+# Pipe directly to jq
+find src/ -name "*.c" | xargs knots --format ndjson | jq 'select(.aird > 70)'
+
+# Per-file analysis in parallel
+find . -name "*.c" | xargs -P4 -I{} sh -c 'knots --format ndjson {} >> metrics.ndjson'
+```
+
+One JSON object per line. Unlike `--format json`, output from multiple invocations
+concatenates cleanly without array merging.
+
+#### CSV
+
+```bash
+knots --format csv src/ > metrics.csv
+```
+
+Header + one row per function. Column order matches the JSON field order.
+
+#### SARIF (editor & CI integration)
+
+Knots can emit [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) JSON for VS Code (SARIF Viewer extension), GitHub Code Scanning, and other static-analysis tooling.
+
+```bash
 knots --format sarif src/main.c > knots.sarif
-
-# Whole project
 knots -r --format sarif src/ > knots.sarif
-
-# From a compile_commands.json
 knots --compile-commands compile_commands.json --format sarif > knots.sarif
 ```
 
-In SARIF mode the JSON document is the *only* output on stdout — text/matrix output is suppressed so the result can be piped or redirected directly to a file.
-
-**What gets reported:** one SARIF result per function whose maximum of McCabe and cognitive complexity exceeds 10 (the healthy threshold). Severity follows the same buckets as the emoji indicators:
+One SARIF result per function whose max(McCabe, cognitive) exceeds 10. Severity follows
+the emoji thresholds:
 
 | Max complexity | SARIF level | Emoji |
 |----------------|-------------|-------|
@@ -336,11 +397,13 @@ In SARIF mode the JSON document is the *only* output on stdout — text/matrix o
 | 21–49          | `warning`   | 😠    |
 | 50+            | `error`     | 😢    |
 
-Each result includes a `physicalLocation` (file URI + start/end line) and a `properties` bag carrying every metric (mccabe, cognitive, nesting, sloc, abcMagnitude, returnCount, testScore) so downstream tools can filter or sort on individual values.
+Each result carries a `properties` bag with all metrics so downstream tools can filter
+on individual values.
 
-**GitHub Code Scanning:** upload the SARIF file from a workflow with `github/codeql-action/upload-sarif@v3` to surface findings as PR annotations.
+**GitHub Code Scanning:** upload with `github/codeql-action/upload-sarif@v3` to surface
+findings as PR annotations.
 
-**VS Code:** install the *SARIF Viewer* extension and open `knots.sarif` to navigate findings inline with the source.
+**VS Code:** install the *SARIF Viewer* extension and open `knots.sarif`.
 
 **Example Filters:**
 
@@ -423,6 +486,50 @@ Multi-dimensional metric assessing automated testing difficulty:
 - **31+**: Complex, requires detailed specifications
 
 See [test_scoring.md](test_scoring.md) for complete specification.
+
+### AIRD — AI Reasoning Difficulty
+
+Normalized 0–100 score predicting how much reasoning effort an AI model needs to safely
+modify a function. Higher = more AI reasoning required.
+
+```
+AIRD = (cognitive/75 × 55) + (sloc/200 × 15) + (nesting/8 × 15) + (test_score/20 × 15) - (doc_score/10 × 15)
+```
+
+Ceilings are set at the p99 of the observed distribution across 32,205 functions from 6
+open-source C codebases (mosquitto, SQLite, curl, hostap, Lua, libcrc). Cognitive
+complexity is the dominant driver; SLOC, nesting, and testability are secondary.
+
+**Recommended CI threshold:** `--aird-threshold 85` — validated empirically against
+Sonnet 4.6 and Opus 4.8; functions scoring ≥85 were consistently rated significantly
+harder to modify than mid-band or low-band functions.
+
+**Distribution:** heavily right-skewed — 67–88% of functions in mature codebases score
+≤10. The ≥76 bucket accounts for 1–2% of functions across all corpora.
+
+### AICP — AI Context Pressure
+
+Normalized 0–100 score predicting how much context an AI model must load before it can
+act. Complements AIRD: a function can be cheap to load but hard to reason about, or
+expensive to load but trivial once context is assembled.
+
+```
+AICP = (external_calls/20 × 60) + (sloc/200 × 40) - (doc_score/10 × 15)
+```
+
+External call breadth (unique call targets not defined in the same translation unit) is
+the primary driver. The p99 ceiling of 20 external calls is consistent across all 6
+corpora.
+
+### External Calls
+
+Count of unique identifier-form call targets in a function that are not defined in the
+same translation unit (covers out-of-file functions and function-like macros). Measures
+the breadth of external dependency a function pulls in.
+
+- **Threshold flag:** `--external-calls-threshold <N>`
+- **p99 across corpus:** 20; p90: 9; p75: 5
+- **Mean by AIRD band:** 2.74 (low) → 8.69 (mid) → 17.40 (high)
 
 ## Test Quality Analysis (knots-test-complexity)
 
