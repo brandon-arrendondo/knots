@@ -225,6 +225,10 @@ enum OutputFormat {
     Text,
     /// SARIF 2.1.0 JSON output for editor/CI integration
     Sarif,
+    /// JSON array of per-function metrics
+    Json,
+    /// CSV with per-function metrics (header + rows)
+    Csv,
 }
 
 /// Parse a source file into a tree-sitter Tree, selecting the grammar by extension.
@@ -370,13 +374,28 @@ fn main() -> Result<()> {
         returns: args.return_threshold,
     };
 
-    // SARIF mode: collect metrics across all files and emit a SARIF 2.1.0 log.
-    // This bypasses text/matrix output so the JSON is the only thing on stdout.
-    if args.format == OutputFormat::Sarif {
-        let (all_metrics, _skipped_files) =
-            collect_all_metrics(&files, &include_rules, &exclude_rules);
-        emit_sarif(&all_metrics)?;
-        return Ok(());
+    // Structured output modes: collect all metrics then emit and exit.
+    // These bypass text/matrix output so only the structured data goes to stdout.
+    match args.format {
+        OutputFormat::Sarif => {
+            let (all_metrics, _skipped_files) =
+                collect_all_metrics(&files, &include_rules, &exclude_rules);
+            emit_sarif(&all_metrics)?;
+            return Ok(());
+        }
+        OutputFormat::Json => {
+            let (all_metrics, _skipped_files) =
+                collect_all_metrics(&files, &include_rules, &exclude_rules);
+            emit_json(&all_metrics)?;
+            return Ok(());
+        }
+        OutputFormat::Csv => {
+            let (all_metrics, _skipped_files) =
+                collect_all_metrics(&files, &include_rules, &exclude_rules);
+            emit_csv(&all_metrics)?;
+            return Ok(());
+        }
+        OutputFormat::Text => {}
     }
 
     // For matrix mode
@@ -1011,6 +1030,75 @@ fn emit_sarif(all_metrics: &[FunctionMetrics]) -> Result<()> {
     let mut handle = stdout.lock();
     serde_json::to_writer_pretty(&mut handle, &log).context("Failed to write SARIF JSON")?;
     writeln!(handle)?;
+    Ok(())
+}
+
+fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
+    use serde_json::json;
+
+    let records: Vec<_> = all_metrics
+        .iter()
+        .map(|f| {
+            json!({
+                "file": f.file_path,
+                "function": f.name,
+                "start_line": f.start_line,
+                "end_line": f.end_line,
+                "mccabe": f.mccabe,
+                "cognitive": f.cognitive,
+                "nesting": f.nesting,
+                "sloc": f.sloc,
+                "abc_magnitude": f.abc_magnitude,
+                "return_count": f.return_count,
+                "test_score": f.test_scoring.total_score,
+                "doc_score": f.test_scoring.documentation_score,
+                "aim": f.aim
+            })
+        })
+        .collect();
+
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    serde_json::to_writer_pretty(&mut handle, &records).context("Failed to write JSON")?;
+    writeln!(handle)?;
+    Ok(())
+}
+
+fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+
+    writeln!(
+        handle,
+        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aim"
+    )?;
+
+    for f in all_metrics {
+        // Escape function names that might contain commas (e.g. C++ templates)
+        let name = if f.name.contains(',') {
+            format!("\"{}\"", f.name.replace('"', "\"\""))
+        } else {
+            f.name.clone()
+        };
+        writeln!(
+            handle,
+            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{}",
+            f.file_path,
+            name,
+            f.start_line,
+            f.end_line,
+            f.mccabe,
+            f.cognitive,
+            f.nesting,
+            f.sloc,
+            f.abc_magnitude,
+            f.return_count,
+            f.test_scoring.total_score,
+            f.test_scoring.documentation_score,
+            f.aim
+        )?;
+    }
     Ok(())
 }
 
