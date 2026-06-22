@@ -1,19 +1,21 @@
-.TH KNOTS 1 "2026-04-01" "knots 1.2.0" "User Commands"
+.TH KNOTS 1 "2026-06-22" "knots 1.5.0" "User Commands"
 .SH NAME
-knots \- C/C++ code complexity analyzer
+knots \- C/C++ code complexity analyzer with AI cost metrics
 .SH SYNOPSIS
 .B knots
-[\fIOPTIONS\fR] <\fIFILE\fR>
+[\fIOPTIONS\fR] [\fIFILE\fR...]
 .br
 .B knots
 [\fIOPTIONS\fR] \fB\-\-compile\-commands\fR <\fIFILE\fR>
 .SH DESCRIPTION
 .B knots
-is a fast, powerful C/C++ code complexity analyzer with visual indicators,
-built on tree-sitter.
-It analyzes code complexity patterns, identifies problematic code,
-helps prioritize refactoring efforts, and assesses testability concerns
-across codebases.
+is a fast C/C++ code complexity analyzer built on tree-sitter.
+It measures traditional complexity metrics alongside two AI-specific cost scores \(em
+.B AIRD
+(AI Reasoning Difficulty) and
+.B AICP
+(AI Context Pressure) \(em to identify which functions are genuinely expensive to
+modify with AI assistance.
 .PP
 .B knots
 computes the following metrics for each function:
@@ -34,7 +36,7 @@ Maximum nesting level of control structures.
 Source lines of code (non-blank, non-comment).
 .TP
 .B ABC Complexity
-Assignment, Branch, Condition magnitude: sqrt(A^2 + B^2 + C^2).
+Assignment, Branch, Condition magnitude: sqrt(A\(S2 + B\(S2 + C\(S2).
 .TP
 .B Return Count
 Number of return statements in a function.
@@ -42,6 +44,24 @@ Number of return statements in a function.
 .B Test Scoring
 Multi-dimensional test difficulty metric across signature, dependency,
 observable, implementation, and documentation axes.
+.TP
+.B External Calls
+Count of unique identifier-form call targets not defined in the same translation
+unit. Measures external dependency breadth (out-of-file functions and
+function-like macros).
+.TP
+.B AIRD \(em AI Reasoning Difficulty
+Normalized 0\(en100 score predicting how much reasoning effort an AI model needs
+to safely modify a function.
+Formula: (cognitive/75 \(mu 55) + (sloc/200 \(mu 15) + (nesting/8 \(mu 15) +
+(test_score/20 \(mu 15) \(mi (doc_score/10 \(mu 15).
+Corpus-validated; recommended CI threshold: 85.
+.TP
+.B AICP \(em AI Context Pressure
+Normalized 0\(en100 score predicting how much context an AI model must load before
+it can act. Complements AIRD: a function can be cheap to load but hard to reason
+about, or expensive to load but trivial once context is assembled.
+Formula: (external_calls/20 \(mu 60) + (sloc/200 \(mu 40) \(mi (doc_score/10 \(mu 15).
 .SH OPTIONS
 .TP
 .BR \-r ", " \-\-recursive
@@ -49,7 +69,7 @@ Recursively process all C/C++ source files in directories.
 When used, a
 .I report.txt
 file is generated with per-function details.
-Header files (.h, .hpp, .hxx) are skipped by default in recursive mode.
+Header files (.h, .hpp, .hxx) are skipped by default.
 .TP
 .BR \-v ", " \-\-verbose
 Show detailed per-function analysis.
@@ -79,6 +99,54 @@ Exclude filter rules from a JSON file (blacklist).
 See
 .BR FILTERS
 below.
+.TP
+.BI \-\-format " FORMAT"
+Output format. One of:
+.RS
+.TP
+.B text
+Human-readable output (default).
+.TP
+.B sarif
+SARIF 2.1.0 JSON for VS Code / GitHub Code Scanning.
+.TP
+.B json
+JSON array of per-function metrics.
+.TP
+.B ndjson
+Newline-delimited JSON \(em one record per line, composable via find/xargs.
+.TP
+.B csv
+CSV with header row.
+.RE
+.TP
+.BI \-\-mccabe\-threshold " N"
+Exit 1 if any function exceeds this McCabe complexity.
+.TP
+.BI \-\-cognitive\-threshold " N"
+Exit 1 if any function exceeds this cognitive complexity.
+.TP
+.BI \-\-nesting\-threshold " N"
+Exit 1 if any function exceeds this nesting depth.
+.TP
+.BI \-\-sloc\-threshold " N"
+Exit 1 if any function exceeds this SLOC count.
+.TP
+.BI \-\-abc\-threshold " F"
+Exit 1 if any function exceeds this ABC magnitude.
+.TP
+.BI \-\-return\-threshold " N"
+Exit 1 if any function exceeds this return count.
+.TP
+.BI \-\-aird\-threshold " N"
+Exit 1 if any function exceeds this AIRD score.
+Recommended value: 85 (empirically validated against Sonnet 4.6 and Opus 4.8).
+.TP
+.BI \-\-aicp\-threshold " N"
+Exit 1 if any function exceeds this AICP score.
+.TP
+.BI \-\-external\-calls\-threshold " N"
+Exit 1 if any function exceeds this external call count.
 .TP
 .BR \-h ", " \-\-help
 Print help message.
@@ -127,10 +195,11 @@ Cognitive complexity:
 .SH EXIT STATUS
 .TP
 .B 0
-Successful analysis.
+Successful analysis, no threshold violations.
 .TP
 .B 1
-Error occurred (file not found, parse error, invalid arguments).
+Error occurred (file not found, parse error, invalid arguments), or one or more
+threshold violations were detected (when any \fB\-\-*\-threshold\fR flag is set).
 .SH EXAMPLES
 Analyze a single file:
 .RS
@@ -146,6 +215,27 @@ knots \-r path/to/project/
 .fi
 .RE
 .PP
+CI gate \(em fail if any function has AIRD > 85:
+.RS
+.nf
+knots \-r src/ \-\-aird\-threshold 85
+.fi
+.RE
+.PP
+Corpus analysis \(em one JSON record per function, composable across files:
+.RS
+.nf
+find . \-name "*.c" | xargs knots \-\-format ndjson > metrics.ndjson
+.fi
+.RE
+.PP
+Filter high-AIRD functions via jq:
+.RS
+.nf
+find src/ \-name "*.c" | xargs knots \-\-format ndjson | jq 'select(.aird > 70)'
+.fi
+.RE
+.PP
 Analyze files from a compilation database:
 .RS
 .nf
@@ -153,17 +243,10 @@ knots \-\-compile\-commands build/compile_commands.json
 .fi
 .RE
 .PP
-Show detailed analysis with testability matrix:
+SARIF output for GitHub Code Scanning:
 .RS
 .nf
-knots \-v \-m path/to/file.c
-.fi
-.RE
-.PP
-Filter to high-complexity functions only:
-.RS
-.nf
-knots \-r . \-\-include high\-complexity.json
+knots \-r \-\-format sarif src/ > knots.sarif
 .fi
 .RE
 .SH FILES
@@ -175,7 +258,7 @@ Contains per-function complexity details.
 .I compile_commands.json
 Compilation database used with \fB\-\-compile\-commands\fR.
 .SH AUTHORS
-Brandon Arrendondo <brandon@arrendondo.dev>
+Brandon Arrendondo <brandon.arrendondo@bissell.com>
 .SH BUGS
 Report bugs at: https://github.com/brandon-arrendondo/knots/issues
 .SH SEE ALSO
