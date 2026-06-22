@@ -29,13 +29,14 @@
   types_or: [c, c++]
 
 # Test quality checker - validates tests have sufficient complexity and boundary coverage
-# Designed for Ceedling framework - parses TEST_SOURCE_FILE macro to find source files
+# Default discovery: naming convention (test_foo.c / foo_test.c -> foo.c)
+# Ceedling users: add --framework=ceedling to use TEST_SOURCE_FILE macro instead
 - id: test-complexity
   name: Test Quality Check (Complexity & Boundaries)
-  description: Validate unit tests have sufficient cyclomatic complexity and boundary coverage
+  description: Validate unit tests have sufficient cyclomatic complexity and boundary coverage. Discovers source files via naming convention by default; use --framework=ceedling for Ceedling projects.
   entry: hooks/test-complexity-wrapper.sh
   language: script
-  files: ^Test/test_.*\.c$
+  files: (^|/)(test_[^/]+|[^/]+_test)\.(c|cpp|cc|cxx)$
   pass_filenames: true
   require_serial: false
   stages: [commit]

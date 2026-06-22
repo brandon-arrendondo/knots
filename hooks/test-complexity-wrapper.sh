@@ -3,8 +3,9 @@
 # Pre-commit wrapper for knots-test-complexity
 # Analyzes test files and their corresponding source files for quality
 #
-# Supports test frameworks:
-#   - ceedling: Uses TEST_SOURCE_FILE macro to find source files
+# Source file discovery strategies (--framework):
+#   - convention (default): naming convention (test_foo.c / foo_test.c -> foo.c)
+#   - ceedling: parses TEST_SOURCE_FILE macro
 #
 # Called by pre-commit framework with list of test files to check
 #
@@ -16,7 +17,7 @@ LEVEL="warn"
 CHECK_BOUNDARIES=true
 VERBOSE=false
 TOOL_PATH=${TOOL_PATH:-knots-test-complexity}
-FRAMEWORK="ceedling"
+FRAMEWORK="convention"
 TEST_DIR="Test"
 
 # Colors
@@ -94,9 +95,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate framework
-if [ "$FRAMEWORK" != "ceedling" ]; then
+if [ "$FRAMEWORK" != "convention" ] && [ "$FRAMEWORK" != "ceedling" ]; then
     echo -e "${RED}Error: Unsupported framework '$FRAMEWORK'${NC}"
-    echo "Currently supported frameworks: ceedling"
+    echo "Supported frameworks: convention (default), ceedling"
     exit 1
 fi
 
@@ -111,6 +112,44 @@ fi
 if [ ${#FILES[@]} -eq 0 ]; then
     exit 0
 fi
+
+# Function to find source file via naming conventions:
+#   test_foo.c -> foo.c
+#   foo_test.c -> foo.c
+find_source_file_convention() {
+    local test_file="$1"
+    local base
+    base=$(basename "$test_file")
+    local ext="${base##*.}"
+    local stem="${base%.*}"
+
+    # Derive candidate source stem by stripping test_ prefix or _test suffix
+    local source_stem=""
+    if [[ "$stem" == test_* ]]; then
+        source_stem="${stem#test_}"
+    elif [[ "$stem" == *_test ]]; then
+        source_stem="${stem%_test}"
+    else
+        return 1
+    fi
+
+    local source_name="${source_stem}.${ext}"
+
+    # Search project for matching source file, excluding test directories
+    local found
+    found=$(find . -name "$source_name" -type f 2>/dev/null \
+        | grep -v "/$TEST_DIR/" \
+        | grep -v "/test/" \
+        | grep -v "/tests/" \
+        | head -1)
+
+    if [ -n "$found" ]; then
+        echo "$found"
+        return 0
+    fi
+
+    return 1
+}
 
 # Function to find source file for Ceedling framework
 # Parses TEST_SOURCE_FILE("path/to/source.c") from test file
@@ -154,11 +193,21 @@ for test_file in "${FILES[@]}"; do
 
     # Find source file based on framework
     case "$FRAMEWORK" in
+        convention)
+            source_file=$(find_source_file_convention "$test_file")
+            if [ -z "$source_file" ]; then
+                echo -e "${YELLOW}⚠ $test_file: Cannot find source file via naming convention${NC}"
+                echo "  Expected: test_foo.c or foo_test.c -> foo.c"
+                echo "  Or use --framework=ceedling and add TEST_SOURCE_FILE(\"path/to/source.c\")"
+                continue
+            fi
+            ;;
         ceedling)
             source_file=$(find_source_file_ceedling "$test_file")
             if [ -z "$source_file" ]; then
                 echo -e "${YELLOW}⚠ $test_file: Cannot find TEST_SOURCE_FILE macro or source file${NC}"
                 echo "  Add TEST_SOURCE_FILE(\"path/to/source.c\") to your test file"
+                echo "  Or use --framework=convention for naming-convention based discovery"
                 continue
             fi
             ;;

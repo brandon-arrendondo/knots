@@ -24,7 +24,7 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         "throw_statement" => *complexity += 1,
 
         // Switch statement: pmccabe compatibility - count as +1 regardless of cases
-        // This matches pmccabe's simpler approach 
+        // This matches pmccabe's simpler approach
         "switch_statement" => {
             *complexity += 1;
         }
@@ -59,8 +59,6 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
     }
 }
 
-
-
 /// Calculates cognitive complexity for a function
 /// Based on the Cognitive Complexity specification by SonarSource
 pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
@@ -69,7 +67,13 @@ pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
     complexity
 }
 
-fn visit_node_cognitive(node: Node, source_code: &[u8], nesting_level: u32, complexity: &mut u32, parent_binary_op: Option<&str>) {
+fn visit_node_cognitive(
+    node: Node,
+    source_code: &[u8],
+    nesting_level: u32,
+    complexity: &mut u32,
+    parent_binary_op: Option<&str>,
+) {
     match node.kind() {
         // Control flow structures that increase complexity
         "if_statement" => {
@@ -154,7 +158,13 @@ fn visit_node_cognitive(node: Node, source_code: &[u8], nesting_level: u32, comp
                             *complexity += 1;
                         }
                         // Pass this operator as parent to children
-                        visit_children_cognitive_with_op(node, source_code, nesting_level, complexity, Some(op_text));
+                        visit_children_cognitive_with_op(
+                            node,
+                            source_code,
+                            nesting_level,
+                            complexity,
+                            Some(op_text),
+                        );
                         return;
                     }
                 }
@@ -163,25 +173,54 @@ fn visit_node_cognitive(node: Node, source_code: &[u8], nesting_level: u32, comp
 
         // Recursive calls (identified by looking for function calls)
         // This is a simplified heuristic - in practice, you'd need to track function names
-
         _ => {}
     }
 
     // Visit children with current nesting level for non-control-flow nodes
-    visit_children_cognitive(node, source_code, nesting_level, complexity, parent_binary_op);
+    visit_children_cognitive(
+        node,
+        source_code,
+        nesting_level,
+        complexity,
+        parent_binary_op,
+    );
 }
 
-fn visit_children_cognitive(node: Node, source_code: &[u8], nesting_level: u32, complexity: &mut u32, parent_binary_op: Option<&str>) {
+fn visit_children_cognitive(
+    node: Node,
+    source_code: &[u8],
+    nesting_level: u32,
+    complexity: &mut u32,
+    parent_binary_op: Option<&str>,
+) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_cognitive(child, source_code, nesting_level, complexity, parent_binary_op);
+        visit_node_cognitive(
+            child,
+            source_code,
+            nesting_level,
+            complexity,
+            parent_binary_op,
+        );
     }
 }
 
-fn visit_children_cognitive_with_op(node: Node, source_code: &[u8], nesting_level: u32, complexity: &mut u32, parent_binary_op: Option<&str>) {
+fn visit_children_cognitive_with_op(
+    node: Node,
+    source_code: &[u8],
+    nesting_level: u32,
+    complexity: &mut u32,
+    parent_binary_op: Option<&str>,
+) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_cognitive(child, source_code, nesting_level, complexity, parent_binary_op);
+        visit_node_cognitive(
+            child,
+            source_code,
+            nesting_level,
+            complexity,
+            parent_binary_op,
+        );
     }
 }
 
@@ -195,15 +234,14 @@ pub fn calculate_nesting_depth(node: Node) -> u32 {
 fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
     let new_depth = match node.kind() {
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
-        | "for_range_loop" | "switch_statement" | "catch_clause"
-        | "lambda_expression" => {
+        | "for_range_loop" | "switch_statement" | "catch_clause" | "lambda_expression" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
             }
             depth
         }
-        _ => current_depth
+        _ => current_depth,
     };
 
     let mut cursor = node.walk();
@@ -293,13 +331,7 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         return None;
     }
 
-    for i in 0..=(haystack.len() - needle.len()) {
-        if &haystack[i..i + needle.len()] == needle {
-            return Some(i);
-        }
-    }
-
-    None
+    (0..=(haystack.len() - needle.len())).find(|&i| &haystack[i..i + needle.len()] == needle)
 }
 
 /// Represents ABC complexity components
@@ -328,7 +360,13 @@ pub fn calculate_abc_complexity(node: Node, source_code: &[u8]) -> AbcComplexity
     let mut branches = 0;
     let mut conditions = 0;
 
-    visit_node_abc(node, source_code, &mut assignments, &mut branches, &mut conditions);
+    visit_node_abc(
+        node,
+        source_code,
+        &mut assignments,
+        &mut branches,
+        &mut conditions,
+    );
 
     AbcComplexity {
         assignments,
@@ -337,7 +375,13 @@ pub fn calculate_abc_complexity(node: Node, source_code: &[u8]) -> AbcComplexity
     }
 }
 
-fn visit_node_abc(node: Node, source_code: &[u8], assignments: &mut u32, branches: &mut u32, conditions: &mut u32) {
+fn visit_node_abc(
+    node: Node,
+    source_code: &[u8],
+    assignments: &mut u32,
+    branches: &mut u32,
+    conditions: &mut u32,
+) {
     match node.kind() {
         // Assignments
         "assignment_expression" => {
@@ -359,8 +403,13 @@ fn visit_node_abc(node: Node, source_code: &[u8], assignments: &mut u32, branche
         }
 
         // Conditions
-        "if_statement" | "while_statement" | "do_statement" | "for_statement"
-        | "for_range_loop" | "switch_statement" | "conditional_expression" => {
+        "if_statement"
+        | "while_statement"
+        | "do_statement"
+        | "for_statement"
+        | "for_range_loop"
+        | "switch_statement"
+        | "conditional_expression" => {
             *conditions += 1;
         }
 
@@ -452,7 +501,8 @@ pub fn calculate_test_scoring(node: Node, source_code: &[u8]) -> TestScoringMetr
 
     let documentation = calculate_documentation_score(node, source_code);
 
-    let total = signature as i32 + dependency as i32 + observable as i32 + implementation as i32 - documentation;
+    let total = signature as i32 + dependency as i32 + observable as i32 + implementation as i32
+        - documentation;
 
     TestScoringMetric {
         signature_score: signature,
@@ -467,10 +517,10 @@ pub fn calculate_test_scoring(node: Node, source_code: &[u8]) -> TestScoringMetr
 /// Maps cyclomatic complexity to implementation score (0-10 scale)
 fn map_cyclomatic_to_implementation_score(cyclomatic: u32) -> u32 {
     match cyclomatic {
-        1..=5 => (cyclomatic - 1) / 2,      // 1-5 -> 0-2
-        6..=10 => 3 + (cyclomatic - 6) / 2, // 6-10 -> 3-5
+        1..=5 => (cyclomatic - 1) / 2,        // 1-5 -> 0-2
+        6..=10 => 3 + (cyclomatic - 6) / 2,   // 6-10 -> 3-5
         11..=20 => 6 + (cyclomatic - 11) / 5, // 11-20 -> 6-8
-        _ => 9.min(10), // 20+ -> 9-10
+        _ => 9,                               // 20+ -> 9-10
     }
 }
 
@@ -579,8 +629,14 @@ fn calculate_dependency_score(node: Node, source_code: &[u8]) -> u32 {
     let mut has_system_calls = false;
     let mut modifies_globals = false;
 
-    visit_node_dependencies(node, source_code, &mut has_io, &mut has_allocation,
-                           &mut has_system_calls, &mut modifies_globals);
+    visit_node_dependencies(
+        node,
+        source_code,
+        &mut has_io,
+        &mut has_allocation,
+        &mut has_system_calls,
+        &mut modifies_globals,
+    );
 
     // Check for global state access (simplified heuristic)
     if modifies_globals {
@@ -605,27 +661,64 @@ fn calculate_dependency_score(node: Node, source_code: &[u8]) -> u32 {
     score.min(10)
 }
 
-fn visit_node_dependencies(node: Node, source_code: &[u8], has_io: &mut bool,
-                          has_allocation: &mut bool, has_system_calls: &mut bool,
-                          modifies_globals: &mut bool) {
+fn visit_node_dependencies(
+    node: Node,
+    source_code: &[u8],
+    has_io: &mut bool,
+    has_allocation: &mut bool,
+    has_system_calls: &mut bool,
+    modifies_globals: &mut bool,
+) {
     if node.kind() == "call_expression" {
         if let Some(function) = node.child_by_field_name("function") {
             if let Ok(func_name) = function.utf8_text(source_code) {
                 // File I/O functions
-                if matches!(func_name, "fopen" | "fclose" | "fread" | "fwrite" | "fprintf" |
-                           "fscanf" | "fgets" | "fputs" | "fseek" | "ftell" | "rewind" |
-                           "printf" | "scanf" | "puts" | "getc" | "putc") {
+                if matches!(
+                    func_name,
+                    "fopen"
+                        | "fclose"
+                        | "fread"
+                        | "fwrite"
+                        | "fprintf"
+                        | "fscanf"
+                        | "fgets"
+                        | "fputs"
+                        | "fseek"
+                        | "ftell"
+                        | "rewind"
+                        | "printf"
+                        | "scanf"
+                        | "puts"
+                        | "getc"
+                        | "putc"
+                ) {
                     *has_io = true;
                 }
 
                 // Memory allocation
-                if matches!(func_name, "malloc" | "calloc" | "realloc" | "free" | "aligned_alloc") {
+                if matches!(
+                    func_name,
+                    "malloc" | "calloc" | "realloc" | "free" | "aligned_alloc"
+                ) {
                     *has_allocation = true;
                 }
 
                 // System calls
-                if matches!(func_name, "time" | "clock" | "rand" | "srand" | "getpid" |
-                           "fork" | "exec" | "system" | "signal" | "kill" | "wait" | "pipe") {
+                if matches!(
+                    func_name,
+                    "time"
+                        | "clock"
+                        | "rand"
+                        | "srand"
+                        | "getpid"
+                        | "fork"
+                        | "exec"
+                        | "system"
+                        | "signal"
+                        | "kill"
+                        | "wait"
+                        | "pipe"
+                ) {
                     *has_system_calls = true;
                 }
             }
@@ -653,8 +746,14 @@ fn visit_node_dependencies(node: Node, source_code: &[u8], has_io: &mut bool,
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_dependencies(child, source_code, has_io, has_allocation,
-                               has_system_calls, modifies_globals);
+        visit_node_dependencies(
+            child,
+            source_code,
+            has_io,
+            has_allocation,
+            has_system_calls,
+            modifies_globals,
+        );
     }
 }
 
@@ -679,7 +778,13 @@ fn calculate_observable_behavior_score(node: Node, source_code: &[u8]) -> u32 {
     }
 
     // Check for I/O, randomness, time dependencies
-    visit_node_observability(node, source_code, &mut has_io, &mut has_random, &mut has_time);
+    visit_node_observability(
+        node,
+        source_code,
+        &mut has_io,
+        &mut has_random,
+        &mut has_time,
+    );
 
     if has_io {
         score += 2;
@@ -694,13 +799,27 @@ fn calculate_observable_behavior_score(node: Node, source_code: &[u8]) -> u32 {
     score.min(10)
 }
 
-fn visit_node_observability(node: Node, source_code: &[u8], has_io: &mut bool,
-                            has_random: &mut bool, has_time: &mut bool) {
+fn visit_node_observability(
+    node: Node,
+    source_code: &[u8],
+    has_io: &mut bool,
+    has_random: &mut bool,
+    has_time: &mut bool,
+) {
     if node.kind() == "call_expression" {
         if let Some(function) = node.child_by_field_name("function") {
             if let Ok(func_name) = function.utf8_text(source_code) {
-                if matches!(func_name, "fopen" | "fclose" | "fread" | "fwrite" | "fprintf" |
-                           "printf" | "scanf" | "puts") {
+                if matches!(
+                    func_name,
+                    "fopen"
+                        | "fclose"
+                        | "fread"
+                        | "fwrite"
+                        | "fprintf"
+                        | "printf"
+                        | "scanf"
+                        | "puts"
+                ) {
                     *has_io = true;
                 }
                 if matches!(func_name, "rand" | "srand" | "random") {

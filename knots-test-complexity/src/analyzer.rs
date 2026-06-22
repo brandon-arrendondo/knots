@@ -1,7 +1,7 @@
-use anyhow::Result;
-use tree_sitter::{Node, Parser};
 use crate::boundary::{BoundaryAnalysis, BoundaryDetector};
-use knots::{calculate_mccabe_complexity, calculate_cognitive_complexity};
+use anyhow::Result;
+use knots::{calculate_cognitive_complexity, calculate_mccabe_complexity};
+use tree_sitter::{Node, Parser};
 
 #[derive(Debug, Clone)]
 pub struct FunctionMetrics {
@@ -124,7 +124,11 @@ impl TestQualityAnalyzer {
 
         let mut recommendations = Vec::new();
         if !passed {
-            self.generate_recommendations(&mut recommendations, cyclomatic_ratio, &boundary_analysis);
+            self.generate_recommendations(
+                &mut recommendations,
+                cyclomatic_ratio,
+                &boundary_analysis,
+            );
         }
 
         AnalysisResult {
@@ -152,16 +156,25 @@ impl TestQualityAnalyzer {
         detector.analyze_test_coverage(&self.test_analysis.file_path)
     }
 
-    fn generate_recommendations(&self, recommendations: &mut Vec<String>, cyclomatic_ratio: f64, boundary_analysis: &Option<BoundaryAnalysis>) {
+    fn generate_recommendations(
+        &self,
+        recommendations: &mut Vec<String>,
+        cyclomatic_ratio: f64,
+        boundary_analysis: &Option<BoundaryAnalysis>,
+    ) {
         // Only generate complexity recommendations if complexity ratio failed
         if cyclomatic_ratio < self.threshold {
             let gap_percent = ((self.threshold - cyclomatic_ratio) * 100.0) as i32;
 
             // Use average of both target complexities
-            let target_cyclomatic = (self.source_analysis.total_cyclomatic_complexity as f64 * self.threshold) as u32;
-            let target_cognitive = (self.source_analysis.total_cognitive_complexity as f64 * self.threshold) as u32;
-            let missing_cyclomatic = target_cyclomatic.saturating_sub(self.test_analysis.total_cyclomatic_complexity);
-            let missing_cognitive = target_cognitive.saturating_sub(self.test_analysis.total_cognitive_complexity);
+            let target_cyclomatic =
+                (self.source_analysis.total_cyclomatic_complexity as f64 * self.threshold) as u32;
+            let target_cognitive =
+                (self.source_analysis.total_cognitive_complexity as f64 * self.threshold) as u32;
+            let missing_cyclomatic =
+                target_cyclomatic.saturating_sub(self.test_analysis.total_cyclomatic_complexity);
+            let missing_cognitive =
+                target_cognitive.saturating_sub(self.test_analysis.total_cognitive_complexity);
             let avg_missing = (missing_cyclomatic + missing_cognitive) / 2;
 
             recommendations.push(format!(
@@ -170,14 +183,20 @@ impl TestQualityAnalyzer {
             ));
 
             recommendations.push("Consider adding:".to_string());
-            recommendations.push("  - Edge case tests (boundary values, overflow scenarios)".to_string());
-            recommendations.push("  - Error path tests (invalid inputs, error conditions)".to_string());
-            recommendations.push("  - State transition tests (different initial conditions)".to_string());
+            recommendations
+                .push("  - Edge case tests (boundary values, overflow scenarios)".to_string());
+            recommendations
+                .push("  - Error path tests (invalid inputs, error conditions)".to_string());
+            recommendations
+                .push("  - State transition tests (different initial conditions)".to_string());
             recommendations.push("  - Parametrized tests or loops in test code".to_string());
         }
 
         // Identify high-complexity source functions that might need more testing
-        let mut high_complexity_funcs: Vec<_> = self.source_analysis.functions.iter()
+        let mut high_complexity_funcs: Vec<_> = self
+            .source_analysis
+            .functions
+            .iter()
             .filter(|f| f.cyclomatic_complexity > 5)
             .collect();
         high_complexity_funcs.sort_by_key(|f| std::cmp::Reverse(f.cyclomatic_complexity));
@@ -187,10 +206,7 @@ impl TestQualityAnalyzer {
             for func in high_complexity_funcs.iter().take(5) {
                 recommendations.push(format!(
                     "  - {}() [complexity: {}] at lines {}-{}",
-                    func.function_name,
-                    func.cyclomatic_complexity,
-                    func.line_start,
-                    func.line_end
+                    func.function_name, func.cyclomatic_complexity, func.line_start, func.line_end
                 ));
             }
         }
@@ -203,7 +219,10 @@ impl TestQualityAnalyzer {
                     recommendations.push(format!("  {}. {}", i + 1, missing));
                 }
                 if boundary.missing_boundaries.len() > 5 {
-                    recommendations.push(format!("  ... and {} more", boundary.missing_boundaries.len() - 5));
+                    recommendations.push(format!(
+                        "  ... and {} more",
+                        boundary.missing_boundaries.len() - 5
+                    ));
                 }
             }
         }
@@ -220,7 +239,8 @@ pub fn analyze_file(file_path: &str) -> Result<FileAnalysis> {
     let language = knots::language_for_file(std::path::Path::new(file_path));
     parser.set_language(&language)?;
 
-    let tree = parser.parse(&source_code, None)
+    let tree = parser
+        .parse(&source_code, None)
         .ok_or_else(|| anyhow::anyhow!("Failed to parse file: {}", file_path))?;
 
     let root_node = tree.root_node();

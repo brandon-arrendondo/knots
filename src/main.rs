@@ -18,10 +18,10 @@ use knots::{is_source_extension, language_for_file};
 
 fn get_complexity_emoji(complexity: u32) -> &'static str {
     match complexity {
-        1..=10 => "😊",   // Smiley - good complexity
-        11..=20 => "😐",  // Neutral - okay complexity
-        21..=49 => "😠",  // Angry - bad complexity
-        _ => "😢",        // Sad - worst complexity (50+)
+        1..=10 => "😊",  // Smiley - good complexity
+        11..=20 => "😐", // Neutral - okay complexity
+        21..=49 => "😠", // Angry - bad complexity
+        _ => "😢",       // Sad - worst complexity (50+)
     }
 }
 
@@ -316,7 +316,10 @@ fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
         for v in &violations {
             eprintln!("{}", v);
         }
-        anyhow::bail!("{} function(s) exceeded complexity thresholds", violations.len());
+        anyhow::bail!(
+            "{} function(s) exceeded complexity thresholds",
+            violations.len()
+        );
     }
 
     Ok(())
@@ -346,7 +349,12 @@ fn main() -> Result<()> {
         // One or more file/directory paths (supports pre-commit passing multiple staged files)
         let mut collected = Vec::new();
         for path in &args.files {
-            collected.extend(collect_files(path, args.recursive, &include_rules, &exclude_rules)?);
+            collected.extend(collect_files(
+                path,
+                args.recursive,
+                &include_rules,
+                &exclude_rules,
+            )?);
         }
         collected
     } else {
@@ -365,7 +373,8 @@ fn main() -> Result<()> {
     // SARIF mode: collect metrics across all files and emit a SARIF 2.1.0 log.
     // This bypasses text/matrix output so the JSON is the only thing on stdout.
     if args.format == OutputFormat::Sarif {
-        let (all_metrics, _skipped_files) = collect_all_metrics(&files, &include_rules, &exclude_rules);
+        let (all_metrics, _skipped_files) =
+            collect_all_metrics(&files, &include_rules, &exclude_rules);
         emit_sarif(&all_metrics)?;
         return Ok(());
     }
@@ -399,12 +408,21 @@ fn main() -> Result<()> {
                 }
             };
 
-            let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""), &include_rules, &exclude_rules);
+            let metrics = collect_function_metrics(
+                &tree,
+                &source_code,
+                file.to_str().unwrap_or(""),
+                &include_rules,
+                &exclude_rules,
+            );
             all_metrics.extend(metrics);
         }
 
         if all_metrics.is_empty() {
-            anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
+            anyhow::bail!(
+                "No functions found in any files (skipped {} files)",
+                skipped_files
+            );
         }
 
         display_testability_matrix(&all_metrics, files.len(), skipped_files);
@@ -420,8 +438,20 @@ fn main() -> Result<()> {
 
         let tree = parse_file(file, &source_code)?;
 
-        analyze_code(&tree, &source_code, args.verbose, &include_rules, &exclude_rules)?;
-        let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""), &include_rules, &exclude_rules);
+        analyze_code(
+            &tree,
+            &source_code,
+            args.verbose,
+            &include_rules,
+            &exclude_rules,
+        )?;
+        let metrics = collect_function_metrics(
+            &tree,
+            &source_code,
+            file.to_str().unwrap_or(""),
+            &include_rules,
+            &exclude_rules,
+        );
         check_thresholds(&metrics, &thresholds)?;
         return Ok(());
     }
@@ -449,12 +479,21 @@ fn main() -> Result<()> {
             }
         };
 
-        let metrics = collect_function_metrics(&tree, &source_code, file.to_str().unwrap_or(""), &include_rules, &exclude_rules);
+        let metrics = collect_function_metrics(
+            &tree,
+            &source_code,
+            file.to_str().unwrap_or(""),
+            &include_rules,
+            &exclude_rules,
+        );
         all_metrics.extend(metrics);
     }
 
     if all_metrics.is_empty() {
-        anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
+        anyhow::bail!(
+            "No functions found in any files (skipped {} files)",
+            skipped_files
+        );
     }
 
     // Write detailed report to file
@@ -473,11 +512,19 @@ fn load_compile_commands(
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
 ) -> Result<Vec<PathBuf>> {
-    let content = fs::read_to_string(compile_commands_path)
-        .with_context(|| format!("Failed to read compile_commands.json: {}", compile_commands_path.display()))?;
+    let content = fs::read_to_string(compile_commands_path).with_context(|| {
+        format!(
+            "Failed to read compile_commands.json: {}",
+            compile_commands_path.display()
+        )
+    })?;
 
-    let commands: Vec<CompileCommand> = serde_json::from_str(&content)
-        .with_context(|| format!("Failed to parse compile_commands.json: {}", compile_commands_path.display()))?;
+    let commands: Vec<CompileCommand> = serde_json::from_str(&content).with_context(|| {
+        format!(
+            "Failed to parse compile_commands.json: {}",
+            compile_commands_path.display()
+        )
+    })?;
 
     let mut files = Vec::new();
 
@@ -562,7 +609,10 @@ fn collect_files(
         }
 
         if files.is_empty() {
-            anyhow::bail!("No C/C++ source files found in directory: {}", path.display());
+            anyhow::bail!(
+                "No C/C++ source files found in directory: {}",
+                path.display()
+            );
         }
     } else {
         anyhow::bail!("Path '{}' does not exist", path.display());
@@ -663,13 +713,18 @@ fn should_process_function(
     // Check exclude rules (blacklist) - if it matches exclude, DON'T process
     // Only apply function/complexity filters if they're actually specified
     if let Some(rules) = exclude_rules {
-        let matches_func = !rules.function_patterns.is_empty() && rules.matches_function(function_name);
-        let matches_complexity = (rules.min_complexity.is_some() || rules.max_complexity.is_some()) && rules.matches_complexity(complexity);
+        let matches_func =
+            !rules.function_patterns.is_empty() && rules.matches_function(function_name);
+        let matches_complexity = (rules.min_complexity.is_some() || rules.max_complexity.is_some())
+            && rules.matches_complexity(complexity);
 
         // If no function patterns specified, only check complexity
         // If no complexity bounds specified, only check function patterns
         // If both specified, require both to match
-        let should_exclude = if rules.function_patterns.is_empty() && rules.min_complexity.is_none() && rules.max_complexity.is_none() {
+        let should_exclude = if rules.function_patterns.is_empty()
+            && rules.min_complexity.is_none()
+            && rules.max_complexity.is_none()
+        {
             // No function-level filters, don't exclude based on function criteria
             false
         } else if rules.function_patterns.is_empty() {
@@ -727,12 +782,22 @@ fn analyze_code(
             println!("  SLOC: {}", func.sloc);
             println!("  ABC Magnitude: {:.2}", func.abc_magnitude);
             println!("  Return Count: {}", func.return_count);
-            println!("  Test Scoring: {} ({})", func.test_scoring.total_score, func.test_scoring.classification());
+            println!(
+                "  Test Scoring: {} ({})",
+                func.test_scoring.total_score,
+                func.test_scoring.classification()
+            );
             println!("    - Signature: {}", func.test_scoring.signature_score);
             println!("    - Dependency: {}", func.test_scoring.dependency_score);
             println!("    - Observable: {}", func.test_scoring.observable_score);
-            println!("    - Implementation: {}", func.test_scoring.implementation_score);
-            println!("    - Documentation: {}", func.test_scoring.documentation_score);
+            println!(
+                "    - Implementation: {}",
+                func.test_scoring.implementation_score
+            );
+            println!(
+                "    - Documentation: {}",
+                func.test_scoring.documentation_score
+            );
             println!("  Max Complexity: {}", func.max_complexity());
             println!();
         } else {
@@ -758,13 +823,34 @@ fn analyze_code(
     println!("  Total Test Score: {}", total_test_score);
 
     if function_count > 0 {
-        println!("  Average McCabe Complexity: {:.2}", total_mccabe as f64 / function_count as f64);
-        println!("  Average Cognitive Complexity: {:.2}", total_cognitive as f64 / function_count as f64);
-        println!("  Average Nesting Depth: {:.2}", total_nesting as f64 / function_count as f64);
-        println!("  Average SLOC: {:.2}", total_sloc as f64 / function_count as f64);
-        println!("  Average ABC Magnitude: {:.2}", total_abc_magnitude / function_count as f64);
-        println!("  Average Return Count: {:.2}", total_return_count as f64 / function_count as f64);
-        println!("  Average Test Score: {:.2}", total_test_score as f64 / function_count as f64);
+        println!(
+            "  Average McCabe Complexity: {:.2}",
+            total_mccabe as f64 / function_count as f64
+        );
+        println!(
+            "  Average Cognitive Complexity: {:.2}",
+            total_cognitive as f64 / function_count as f64
+        );
+        println!(
+            "  Average Nesting Depth: {:.2}",
+            total_nesting as f64 / function_count as f64
+        );
+        println!(
+            "  Average SLOC: {:.2}",
+            total_sloc as f64 / function_count as f64
+        );
+        println!(
+            "  Average ABC Magnitude: {:.2}",
+            total_abc_magnitude / function_count as f64
+        );
+        println!(
+            "  Average Return Count: {:.2}",
+            total_return_count as f64 / function_count as f64
+        );
+        println!(
+            "  Average Test Score: {:.2}",
+            total_test_score as f64 / function_count as f64
+        );
     }
 
     Ok(())
@@ -926,26 +1012,54 @@ fn path_to_sarif_uri(file_path: &str) -> String {
 
 /// Write detailed report to report.txt for recursive analysis
 fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Result<()> {
-    let mut file = fs::File::create("report.txt")
-        .context("Failed to create report.txt")?;
+    let mut file = fs::File::create("report.txt").context("Failed to create report.txt")?;
 
     for func in all_metrics {
         let emoji = get_complexity_emoji(func.max_complexity());
 
         if verbose {
-            writeln!(file, "Function: {} {} [{}]", func.name, emoji, func.file_path)?;
+            writeln!(
+                file,
+                "Function: {} {} [{}]",
+                func.name, emoji, func.file_path
+            )?;
             writeln!(file, "  McCabe Complexity: {}", func.mccabe)?;
             writeln!(file, "  Cognitive Complexity: {}", func.cognitive)?;
             writeln!(file, "  Nesting Depth: {}", func.nesting)?;
             writeln!(file, "  SLOC: {}", func.sloc)?;
             writeln!(file, "  ABC Magnitude: {:.2}", func.abc_magnitude)?;
             writeln!(file, "  Return Count: {}", func.return_count)?;
-            writeln!(file, "  Test Scoring: {} ({})", func.test_scoring.total_score, func.test_scoring.classification())?;
-            writeln!(file, "    - Signature: {}", func.test_scoring.signature_score)?;
-            writeln!(file, "    - Dependency: {}", func.test_scoring.dependency_score)?;
-            writeln!(file, "    - Observable: {}", func.test_scoring.observable_score)?;
-            writeln!(file, "    - Implementation: {}", func.test_scoring.implementation_score)?;
-            writeln!(file, "    - Documentation: {}", func.test_scoring.documentation_score)?;
+            writeln!(
+                file,
+                "  Test Scoring: {} ({})",
+                func.test_scoring.total_score,
+                func.test_scoring.classification()
+            )?;
+            writeln!(
+                file,
+                "    - Signature: {}",
+                func.test_scoring.signature_score
+            )?;
+            writeln!(
+                file,
+                "    - Dependency: {}",
+                func.test_scoring.dependency_score
+            )?;
+            writeln!(
+                file,
+                "    - Observable: {}",
+                func.test_scoring.observable_score
+            )?;
+            writeln!(
+                file,
+                "    - Implementation: {}",
+                func.test_scoring.implementation_score
+            )?;
+            writeln!(
+                file,
+                "    - Documentation: {}",
+                func.test_scoring.documentation_score
+            )?;
             writeln!(file, "  Max Complexity: {}", func.max_complexity())?;
             writeln!(file)?;
         } else {
@@ -961,21 +1075,19 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Resu
 }
 
 /// Display summary with top 5 worst functions and totals/averages
-fn display_recursive_summary(all_metrics: &[FunctionMetrics], total_files: usize, skipped_files: usize) {
+fn display_recursive_summary(
+    all_metrics: &[FunctionMetrics],
+    total_files: usize,
+    skipped_files: usize,
+) {
     // Sort by worst complexity (max of McCabe and Cognitive)
     let mut sorted = all_metrics.to_vec();
-    sorted.sort_by(|a, b| b.max_complexity().cmp(&a.max_complexity()));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.max_complexity()));
 
     println!("\n=== TOP 5 WORST FUNCTIONS ===\n");
     for (i, func) in sorted.iter().take(5).enumerate() {
         let emoji = get_complexity_emoji(func.max_complexity());
-        println!(
-            "{}. {} {} [{}]",
-            i + 1,
-            emoji,
-            func.name,
-            func.file_path
-        );
+        println!("{}. {} {} [{}]", i + 1, emoji, func.name, func.file_path);
         println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}",
             func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score
         );
@@ -1014,13 +1126,34 @@ fn display_recursive_summary(all_metrics: &[FunctionMetrics], total_files: usize
 
     if function_count > 0 {
         println!();
-        println!("  Average McCabe Complexity: {:.2}", total_mccabe as f64 / function_count as f64);
-        println!("  Average Cognitive Complexity: {:.2}", total_cognitive as f64 / function_count as f64);
-        println!("  Average Nesting Depth: {:.2}", total_nesting as f64 / function_count as f64);
-        println!("  Average SLOC: {:.2}", total_sloc as f64 / function_count as f64);
-        println!("  Average ABC Magnitude: {:.2}", total_abc_magnitude / function_count as f64);
-        println!("  Average Return Count: {:.2}", total_return_count as f64 / function_count as f64);
-        println!("  Average Test Score: {:.2}", total_test_score as f64 / function_count as f64);
+        println!(
+            "  Average McCabe Complexity: {:.2}",
+            total_mccabe as f64 / function_count as f64
+        );
+        println!(
+            "  Average Cognitive Complexity: {:.2}",
+            total_cognitive as f64 / function_count as f64
+        );
+        println!(
+            "  Average Nesting Depth: {:.2}",
+            total_nesting as f64 / function_count as f64
+        );
+        println!(
+            "  Average SLOC: {:.2}",
+            total_sloc as f64 / function_count as f64
+        );
+        println!(
+            "  Average ABC Magnitude: {:.2}",
+            total_abc_magnitude / function_count as f64
+        );
+        println!(
+            "  Average Return Count: {:.2}",
+            total_return_count as f64 / function_count as f64
+        );
+        println!(
+            "  Average Test Score: {:.2}",
+            total_test_score as f64 / function_count as f64
+        );
     }
 
     println!("\nDetailed per-function output written to report.txt");
@@ -1054,7 +1187,11 @@ impl FunctionMetrics {
 }
 
 /// Display testability matrix for all functions
-fn display_testability_matrix(all_metrics: &[FunctionMetrics], total_files: usize, skipped_files: usize) {
+fn display_testability_matrix(
+    all_metrics: &[FunctionMetrics],
+    total_files: usize,
+    skipped_files: usize,
+) {
     // Categorize functions into quadrants
     let mut quick_wins = Vec::new();
     let mut invest_tests = Vec::new();
@@ -1083,9 +1220,15 @@ fn display_testability_matrix(all_metrics: &[FunctionMetrics], total_files: usiz
     } else {
         for func in &quick_wins {
             if func.file_path.is_empty() {
-                println!("  ✓ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  ✓ {} (McCabe: {}, TestScore: {})",
+                    func.name, func.mccabe, func.test_scoring.total_score
+                );
             } else {
-                println!("  ✓ {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  ✓ {} [{}] (McCabe: {}, TestScore: {})",
+                    func.name, func.file_path, func.mccabe, func.test_scoring.total_score
+                );
             }
         }
     }
@@ -1098,9 +1241,15 @@ fn display_testability_matrix(all_metrics: &[FunctionMetrics], total_files: usiz
     } else {
         for func in &invest_tests {
             if func.file_path.is_empty() {
-                println!("  → {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  → {} (McCabe: {}, TestScore: {})",
+                    func.name, func.mccabe, func.test_scoring.total_score
+                );
             } else {
-                println!("  → {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  → {} [{}] (McCabe: {}, TestScore: {})",
+                    func.name, func.file_path, func.mccabe, func.test_scoring.total_score
+                );
             }
         }
     }
@@ -1113,9 +1262,15 @@ fn display_testability_matrix(all_metrics: &[FunctionMetrics], total_files: usiz
     } else {
         for func in &add_docs {
             if func.file_path.is_empty() {
-                println!("  ⚠ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  ⚠ {} (McCabe: {}, TestScore: {})",
+                    func.name, func.mccabe, func.test_scoring.total_score
+                );
             } else {
-                println!("  ⚠ {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  ⚠ {} [{}] (McCabe: {}, TestScore: {})",
+                    func.name, func.file_path, func.mccabe, func.test_scoring.total_score
+                );
             }
         }
     }
@@ -1128,9 +1283,15 @@ fn display_testability_matrix(all_metrics: &[FunctionMetrics], total_files: usiz
     } else {
         for func in &refactor {
             if func.file_path.is_empty() {
-                println!("  ⛔ {} (McCabe: {}, TestScore: {})", func.name, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  ⛔ {} (McCabe: {}, TestScore: {})",
+                    func.name, func.mccabe, func.test_scoring.total_score
+                );
             } else {
-                println!("  ⛔ {} [{}] (McCabe: {}, TestScore: {})", func.name, func.file_path, func.mccabe, func.test_scoring.total_score);
+                println!(
+                    "  ⛔ {} [{}] (McCabe: {}, TestScore: {})",
+                    func.name, func.file_path, func.mccabe, func.test_scoring.total_score
+                );
             }
         }
     }
@@ -1214,8 +1375,11 @@ fn get_declarator_name(node: Node, source_code: &str) -> Option<String> {
 
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "identifier" | "qualified_identifier" | "destructor_name"
-            | "operator_name" | "field_identifier" => {
+            "identifier"
+            | "qualified_identifier"
+            | "destructor_name"
+            | "operator_name"
+            | "field_identifier" => {
                 return Some(child.utf8_text(source_code.as_bytes()).ok()?.to_string());
             }
             "pointer_declarator" | "function_declarator" => {
@@ -1260,9 +1424,7 @@ mod tests {
     /// Parse C++ code and collect discovered function names via visit_functions + get_function_name.
     fn discover_cpp_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&tree_sitter_cpp::language())
-            .unwrap();
+        parser.set_language(&tree_sitter_cpp::language()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -1276,50 +1438,43 @@ mod tests {
 
     #[test]
     fn test_cpp_discover_namespace_function() {
-        let names = discover_cpp_functions(
-            r#"namespace myns { void func() { int x = 0; } }"#,
-        );
+        let names = discover_cpp_functions(r#"namespace myns { void func() { int x = 0; } }"#);
         assert_eq!(names, vec!["func"]);
     }
 
     #[test]
     fn test_cpp_discover_class_method() {
-        let names = discover_cpp_functions(
-            r#"class Foo { void method() { int x = 0; } };"#,
-        );
+        let names = discover_cpp_functions(r#"class Foo { void method() { int x = 0; } };"#);
         assert_eq!(names, vec!["method"]);
     }
 
     #[test]
     fn test_cpp_discover_template_function() {
-        let names = discover_cpp_functions(
-            r#"template<typename T> T add(T a, T b) { return a + b; }"#,
-        );
+        let names =
+            discover_cpp_functions(r#"template<typename T> T add(T a, T b) { return a + b; }"#);
         assert_eq!(names, vec!["add"]);
     }
 
     #[test]
     fn test_cpp_discover_qualified_name() {
-        let names = discover_cpp_functions(
-            r#"void Foo::bar() { int x = 0; }"#,
-        );
+        let names = discover_cpp_functions(r#"void Foo::bar() { int x = 0; }"#);
         assert_eq!(names, vec!["Foo::bar"]);
     }
 
     #[test]
     fn test_cpp_discover_operator() {
-        let names = discover_cpp_functions(
-            r#"Foo operator+(Foo a, Foo b) { return a; }"#,
-        );
+        let names = discover_cpp_functions(r#"Foo operator+(Foo a, Foo b) { return a; }"#);
         assert_eq!(names.len(), 1);
-        assert!(names[0].contains("operator+"), "Expected operator+, got: {}", names[0]);
+        assert!(
+            names[0].contains("operator+"),
+            "Expected operator+, got: {}",
+            names[0]
+        );
     }
 
     #[test]
     fn test_cpp_discover_destructor() {
-        let names = discover_cpp_functions(
-            r#"class Foo { ~Foo() { int x = 0; } };"#,
-        );
+        let names = discover_cpp_functions(r#"class Foo { ~Foo() { int x = 0; } };"#);
         assert_eq!(names, vec!["~Foo"]);
     }
 }

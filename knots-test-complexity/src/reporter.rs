@@ -1,5 +1,5 @@
-use colored::*;
 use crate::analyzer::AnalysisResult;
+use colored::*;
 use std::path::Path;
 
 pub struct Reporter {
@@ -30,15 +30,27 @@ impl Reporter {
         println!("{}", "Source File:".bold());
         println!("  File: {}", source_name);
         println!("  Functions: {}", result.source_function_count);
-        println!("  Total Cyclomatic Complexity: {}", result.source_cyclomatic_complexity);
-        println!("  Total Cognitive Complexity: {}", result.source_cognitive_complexity);
+        println!(
+            "  Total Cyclomatic Complexity: {}",
+            result.source_cyclomatic_complexity
+        );
+        println!(
+            "  Total Cognitive Complexity: {}",
+            result.source_cognitive_complexity
+        );
 
         // Test metrics
         println!("\n{}", "Test File:".bold());
         println!("  File: {}", test_name);
         println!("  Functions: {}", result.test_function_count);
-        println!("  Total Cyclomatic Complexity: {}", result.test_cyclomatic_complexity);
-        println!("  Total Cognitive Complexity: {}", result.test_cognitive_complexity);
+        println!(
+            "  Total Cyclomatic Complexity: {}",
+            result.test_cyclomatic_complexity
+        );
+        println!(
+            "  Total Cognitive Complexity: {}",
+            result.test_cognitive_complexity
+        );
 
         // Ratio analysis
         println!("\n{}", "Complexity Analysis:".bold());
@@ -51,9 +63,18 @@ impl Reporter {
             format!("{}% ✗", cyclomatic_percent).red()
         };
 
-        println!("  Test/Source Ratio: {} (threshold: {}%)", status, threshold_percent);
-        println!("  Test Cyclomatic Complexity: {}", result.test_cyclomatic_complexity);
-        println!("  Source Cyclomatic Complexity: {}", result.source_cyclomatic_complexity);
+        println!(
+            "  Test/Source Ratio: {} (threshold: {}%)",
+            status, threshold_percent
+        );
+        println!(
+            "  Test Cyclomatic Complexity: {}",
+            result.test_cyclomatic_complexity
+        );
+        println!(
+            "  Source Cyclomatic Complexity: {}",
+            result.source_cyclomatic_complexity
+        );
 
         if self.verbose {
             println!("\n  Cognitive Complexity (informational):");
@@ -67,37 +88,73 @@ impl Reporter {
             println!("\n{}", "Boundary Analysis:".bold());
             let boundary_count = boundary.required_boundaries.len();
 
-            if boundary_count > 0 {
-                println!("  Boundary Values Detected: {}", boundary_count);
+            let pointer_count = boundary.pointer_boundaries.len();
+            if boundary_count > 0 || pointer_count > 0 {
+                println!("  Integer Boundaries Detected: {}", boundary_count);
+                println!("  Pointer Boundaries Detected: {}", pointer_count);
 
                 let boundary_threshold_percent = (result.boundary_threshold * 100.0) as i32;
-                let coverage_status = if boundary.coverage_percent >= (result.boundary_threshold * 100.0) {
-                    format!("{:.0}% ✓", boundary.coverage_percent).green()
-                } else {
-                    format!("{:.0}% ✗", boundary.coverage_percent).red()
-                };
+                let coverage_status =
+                    if boundary.coverage_percent >= (result.boundary_threshold * 100.0) {
+                        format!("{:.0}% ✓", boundary.coverage_percent).green()
+                    } else {
+                        format!("{:.0}% ✗", boundary.coverage_percent).red()
+                    };
 
-                println!("  Boundary Test Coverage: {} (threshold: {}%)", coverage_status, boundary_threshold_percent);
+                println!(
+                    "  Boundary Test Coverage: {} (threshold: {}%)",
+                    coverage_status, boundary_threshold_percent
+                );
                 println!("  Test Values Found: {}", boundary.found_test_values.len());
 
                 // Show sample boundary values detected
-                if self.verbose && !boundary.required_boundaries.is_empty() {
-                    println!("\n  Detected Boundaries:");
-                    for (i, bv) in boundary.required_boundaries.iter().take(5).enumerate() {
-                        println!("    {}. {} ({}) - range: {} to {}",
-                            i + 1,
-                            bv.variable_name,
-                            bv.type_name,
-                            bv.min_value,
-                            bv.max_value
-                        );
+                if self.verbose {
+                    if !boundary.required_boundaries.is_empty() {
+                        println!("\n  Detected Integer Boundaries:");
+                        for (i, bv) in boundary.required_boundaries.iter().take(5).enumerate() {
+                            println!(
+                                "    {}. {} ({}) - range: {} to {}",
+                                i + 1,
+                                bv.variable_name,
+                                bv.type_name,
+                                bv.min_value,
+                                bv.max_value
+                            );
+                        }
+                        if boundary.required_boundaries.len() > 5 {
+                            println!(
+                                "    ... and {} more",
+                                boundary.required_boundaries.len() - 5
+                            );
+                        }
                     }
-                    if boundary.required_boundaries.len() > 5 {
-                        println!("    ... and {} more", boundary.required_boundaries.len() - 5);
+                    if !boundary.pointer_boundaries.is_empty() {
+                        println!("\n  Detected Pointer Boundaries:");
+                        for (i, pb) in boundary.pointer_boundaries.iter().take(5).enumerate() {
+                            let null_status = if boundary.null_tested { "✓" } else { "✗" };
+                            let empty_status = if boundary.empty_string_tested {
+                                "✓"
+                            } else {
+                                "✗"
+                            };
+                            println!(
+                                "    {}. {} ({}) - sentinels: NULL {} , \"\" {}",
+                                i + 1,
+                                pb.variable_name,
+                                pb.type_name,
+                                null_status,
+                                empty_status
+                            );
+                        }
+                        if boundary.pointer_boundaries.len() > 5 {
+                            println!("    ... and {} more", boundary.pointer_boundaries.len() - 5);
+                        }
                     }
                 }
             } else {
-                println!("  No boundary values detected in source (no integer type variables)");
+                println!(
+                    "  No boundary values detected in source (no integer or pointer variables)"
+                );
             }
         }
 

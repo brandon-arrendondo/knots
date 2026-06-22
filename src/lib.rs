@@ -3,7 +3,7 @@
 pub mod complexity;
 
 // Re-export complexity functions for use by workspace members
-pub use complexity::{calculate_mccabe_complexity, calculate_cognitive_complexity};
+pub use complexity::{calculate_cognitive_complexity, calculate_mccabe_complexity};
 
 // Re-export tree-sitter for convenience
 pub use tree_sitter;
@@ -21,8 +21,7 @@ const CPP_HEADER_EXTENSIONS: &[&str] = &["hpp", "hxx"];
 pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext)
-            if CPP_SOURCE_EXTENSIONS.contains(&ext)
-                || CPP_HEADER_EXTENSIONS.contains(&ext) =>
+            if CPP_SOURCE_EXTENSIONS.contains(&ext) || CPP_HEADER_EXTENSIONS.contains(&ext) =>
         {
             tree_sitter_cpp::language()
         }
