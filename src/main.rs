@@ -236,6 +236,8 @@ enum OutputFormat {
     Sarif,
     /// JSON array of per-function metrics
     Json,
+    /// Newline-delimited JSON (one record per line) — composable across files via find/xargs
+    Ndjson,
     /// CSV with per-function metrics (header + rows)
     Csv,
 }
@@ -412,6 +414,12 @@ fn main() -> Result<()> {
             let (all_metrics, _skipped_files) =
                 collect_all_metrics(&files, &include_rules, &exclude_rules);
             emit_json(&all_metrics)?;
+            return Ok(());
+        }
+        OutputFormat::Ndjson => {
+            let (all_metrics, _skipped_files) =
+                collect_all_metrics(&files, &include_rules, &exclude_rules);
+            emit_ndjson(&all_metrics)?;
             return Ok(());
         }
         OutputFormat::Csv => {
@@ -1157,6 +1165,35 @@ fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
     let mut handle = stdout.lock();
     serde_json::to_writer_pretty(&mut handle, &records).context("Failed to write JSON")?;
     writeln!(handle)?;
+    Ok(())
+}
+
+fn emit_ndjson(all_metrics: &[FunctionMetrics]) -> Result<()> {
+    use serde_json::json;
+    use std::io::Write;
+
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    for f in all_metrics {
+        let record = json!({
+            "file": f.file_path,
+            "function": f.name,
+            "start_line": f.start_line,
+            "end_line": f.end_line,
+            "mccabe": f.mccabe,
+            "cognitive": f.cognitive,
+            "nesting": f.nesting,
+            "sloc": f.sloc,
+            "abc_magnitude": f.abc_magnitude,
+            "return_count": f.return_count,
+            "test_score": f.test_scoring.total_score,
+            "doc_score": f.test_scoring.documentation_score,
+            "aim": f.aim,
+            "external_calls": f.external_calls
+        });
+        serde_json::to_writer(&mut handle, &record).context("Failed to write NDJSON")?;
+        writeln!(handle)?;
+    }
     Ok(())
 }
 
