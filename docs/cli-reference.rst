@@ -46,14 +46,19 @@ Options
 ``--format <FORMAT>``
     Output format. One of:
 
-    =========  =========================================================
-    ``text``   Human-readable output (default).
-    ``sarif``  SARIF 2.1.0 JSON for VS Code / GitHub Code Scanning.
-    ``json``   JSON array of per-function metrics.
-    ``ndjson`` Newline-delimited JSON — one record per line, composable
-               via ``find``/``xargs``.
-    ``csv``    CSV with header row.
-    =========  =========================================================
+    .. list-table::
+       :widths: 12 88
+
+       * - ``text``
+         - Human-readable output (default).
+       * - ``sarif``
+         - SARIF 2.1.0 JSON for VS Code / GitHub Code Scanning.
+       * - ``json``
+         - JSON array of per-function metrics.
+       * - ``ndjson``
+         - Newline-delimited JSON — one record per line; composable via ``find``/``xargs``.
+       * - ``csv``
+         - CSV with header row.
 
 Threshold Flags
 ---------------

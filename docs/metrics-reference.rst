@@ -67,13 +67,13 @@ Test Scoring
 Multi-dimensional metric assessing how difficult a function is to test
 automatically. Five sub-axes, each 0–10:
 
-============  ====================================================================
-Signature     Parameter complexity — count, types, pointer depth
-Dependency    External dependencies called or referenced
-Observable    Side effects, I/O, global state — how hard to observe outputs
+==============  ==================================================================
+Signature       Parameter complexity — count, types, pointer depth
+Dependency      External dependencies called or referenced
+Observable      Side effects, I/O, global state — how hard to observe outputs
 Implementation  Internal control flow and structure — McCabe-derived
-Documentation  Comment quality (-10 to 0, reduces the total score)
-============  ====================================================================
+Documentation   Comment quality (-10 to 0, reduces the total score)
+==============  ==================================================================
 
 **Score ranges:**
 

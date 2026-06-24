@@ -478,3 +478,24 @@ jobs:
             artifacts/*.deb
             artifacts/*.rpm
             artifacts/*.AppImage
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Sphinx and theme
+        run: pip install sphinx sphinx-rtd-theme
+
+      - name: Build HTML docs
+        run: sphinx-build -W -b html docs docs/_build/html
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_build/html
