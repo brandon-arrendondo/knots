@@ -68,4 +68,4 @@
   files: (^|/)(test_[^/]+|[^/]+_test)\.(c|cpp|cc|cxx)$
   pass_filenames: true
   require_serial: false
-  stages: [commit]
+  stages: [pre-commit]
