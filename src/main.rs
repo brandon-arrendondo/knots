@@ -13,7 +13,7 @@ mod complexity;
 use complexity::{
     calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_cognitive_complexity,
     calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
-    calculate_test_scoring, TestScoringMetric,
+    calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
 };
 use knots::{is_source_extension, language_for_file};
 
@@ -154,7 +154,7 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[derive(Parser, Debug)]
 #[command(name = "knots")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(about = "Analyzes C/C++/Rust code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
+#[command(about = "Analyzes C/C++/Rust/Python code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
 // Last-wins on repeated flags. The pre-commit hook entry bakes default
 // thresholds (e.g. `--abc-threshold=10.0`); a consumer overriding one
 // via the hook's `args:` field appends a second occurrence. Without
@@ -163,7 +163,7 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 // customization.
 #[command(args_override_self = true)]
 struct Args {
-    /// Path(s) to C/C++/Rust files or directories to analyze
+    /// Path(s) to C/C++/Rust/Python files or directories to analyze
     #[arg(value_name = "FILE", required_unless_present = "compile_commands", num_args = 1..)]
     files: Vec<PathBuf>,
 
@@ -759,7 +759,7 @@ fn collect_external_calls_recursive(
     local_names: &HashSet<String>,
     external: &mut HashSet<String>,
 ) {
-    if node.kind() == "call_expression" {
+    if node.kind() == "call_expression" || node.kind() == "call" {
         if let Some(func_node) = node.child_by_field_name("function") {
             if func_node.kind() == "identifier" {
                 // Simple name call: foo() — check against local definitions
@@ -770,6 +770,11 @@ fn collect_external_calls_recursive(
                 }
             } else if func_node.kind() == "scoped_identifier" {
                 // Rust path call: Foo::bar() or std::mem::swap() — always external
+                if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
+                    external.insert(name.to_string());
+                }
+            } else if func_node.kind() == "attribute" {
+                // Python attribute call: obj.method() or module.func() — always external
                 if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
                     external.insert(name.to_string());
                 }
@@ -794,12 +799,17 @@ fn collect_function_metrics(
     let mut cursor = root_node.walk();
     let mut metrics = Vec::new();
 
+    let is_python = file_path.ends_with(".py");
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         if let Some(name) = get_function_name(node, src) {
             let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
             let cognitive = calculate_cognitive_complexity(node, src.as_bytes());
             let nesting = calculate_nesting_depth(node);
-            let sloc = calculate_sloc(node, src.as_bytes());
+            let sloc = if is_python {
+                calculate_sloc_python(node, src.as_bytes())
+            } else {
+                calculate_sloc(node, src.as_bytes())
+            };
             let abc = calculate_abc_complexity(node, src.as_bytes());
             let abc_magnitude = abc.magnitude();
             let return_count = calculate_return_count(node);
@@ -1631,12 +1641,24 @@ where
 }
 
 fn get_function_name(node: Node, source_code: &str) -> Option<String> {
-    // Rust function_item has a direct 'name' field (identifier or metavariable)
+    // Rust function_item has a direct 'name' field
     if node.kind() == "function_item" {
         return node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
             .map(|s| s.to_string());
+    }
+
+    // Python function_definition also has a direct 'name' field.
+    // C/C++ function_definition uses 'declarator' instead, so child_by_field_name("name")
+    // returns None for them and we fall through to the declarator chain below.
+    if node.kind() == "function_definition" {
+        if let Some(name_node) = node.child_by_field_name("name") {
+            return name_node
+                .utf8_text(source_code.as_bytes())
+                .ok()
+                .map(|s| s.to_string());
+        }
     }
 
     // C/C++ function_definition uses a declarator chain
@@ -1819,5 +1841,58 @@ mod tests {
         let names =
             discover_rust_functions("struct Foo; impl Foo { fn method(&self) -> i32 { 0 } }");
         assert_eq!(names, vec!["method"]);
+    }
+
+    // ---- Python function discovery tests ----
+
+    fn discover_python_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_python::language())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_python_discover_simple_function() {
+        let names = discover_python_functions("def simple(x):\n    return x\n");
+        assert_eq!(names, vec!["simple"]);
+    }
+
+    #[test]
+    fn test_python_discover_multiple_functions() {
+        let names = discover_python_functions("def foo():\n    pass\ndef bar():\n    pass\n");
+        assert_eq!(names, vec!["foo", "bar"]);
+    }
+
+    #[test]
+    fn test_python_discover_class_method() {
+        let names = discover_python_functions(
+            "class Foo:\n    def method(self):\n        pass\n    def other(self):\n        pass\n",
+        );
+        assert_eq!(names, vec!["method", "other"]);
+    }
+
+    #[test]
+    fn test_python_discover_nested_function() {
+        let names = discover_python_functions(
+            "def outer():\n    def inner():\n        pass\n    return inner\n",
+        );
+        assert!(names.contains(&"outer".to_string()));
+        assert!(names.contains(&"inner".to_string()));
+    }
+
+    #[test]
+    fn test_python_discover_decorated_function() {
+        let names = discover_python_functions("@decorator\ndef decorated(x):\n    return x\n");
+        assert_eq!(names, vec!["decorated"]);
     }
 }

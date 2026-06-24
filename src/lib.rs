@@ -9,7 +9,9 @@ pub use complexity::{
 
 // Re-export tree-sitter for convenience
 pub use tree_sitter;
+pub use tree_sitter_c;
 pub use tree_sitter_cpp;
+pub use tree_sitter_python;
 pub use tree_sitter_rust;
 
 /// C++ source file extensions (not headers)
@@ -20,7 +22,7 @@ const CPP_HEADER_EXTENSIONS: &[&str] = &["hpp", "hxx"];
 /// Returns the appropriate tree-sitter language for a file based on extension.
 /// `.h` defaults to C; C++ headers should use `.hpp`/`.hxx`.
 /// @brief Select tree-sitter language grammar by file extension
-/// @version 3
+/// @version 4
 pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext)
@@ -29,16 +31,17 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
             tree_sitter_cpp::language()
         }
         Some("rs") => tree_sitter_rust::language(),
+        Some("py") => tree_sitter_python::language(),
         _ => tree_sitter_c::language(),
     }
 }
 
-/// Returns true if the extension is a C/C++/Rust source file (not a header).
+/// Returns true if the extension is a C/C++/Rust/Python source file (not a header).
 /// @brief Check if file extension is a supported source extension
-/// @version 3
+/// @version 4
 pub fn is_source_extension(ext: &std::ffi::OsStr) -> bool {
     match ext.to_str() {
-        Some("c") | Some("rs") => true,
+        Some("c") | Some("rs") | Some("py") => true,
         Some(e) => CPP_SOURCE_EXTENSIONS.contains(&e),
         None => false,
     }

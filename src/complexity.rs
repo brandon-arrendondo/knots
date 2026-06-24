@@ -38,6 +38,13 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Rust match: same treatment as C switch (+1 for the whole expression)
         "match_expression" => *complexity += 1,
 
+        // Python elif: each elif clause is an additional branch
+        "elif_clause" => *complexity += 1,
+        // Python except: like catch, creates an alternative path
+        "except_clause" => *complexity += 1,
+        // Python match_statement (3.10+): like switch
+        "match_statement" => *complexity += 1,
+
         // Logical operators (each adds a path)
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
@@ -49,8 +56,19 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
             }
         }
 
-        // Ternary operator
+        // Ternary operator (C/C++) and Python ternary (x if cond else y)
         "conditional_expression" => *complexity += 1,
+
+        // Python boolean operators: and/or each add a path (like && / ||)
+        "boolean_operator" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if op_text == "and" || op_text == "or" {
+                        *complexity += 1;
+                    }
+                }
+            }
+        }
 
         // goto/continue/break can create additional paths
         "goto_statement" => *complexity += 1,
@@ -85,6 +103,13 @@ fn visit_node_cognitive(
         "if_statement" | "if_expression" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Python elif: flat +1 (no nesting penalty), same semantics as C else-if
+        "elif_clause" => {
+            *complexity += 1;
+            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
             return;
         }
 
@@ -129,7 +154,8 @@ fn visit_node_cognitive(
 
         // Lambda / closure body is a nested scope — children get increased nesting.
         // No +1 base cost: a closure is not itself a decision point.
-        "lambda_expression" | "closure_expression" => {
+        // "lambda" covers Python lambdas; "lambda_expression"/"closure_expression" cover C++/Rust.
+        "lambda_expression" | "closure_expression" | "lambda" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -140,8 +166,8 @@ fn visit_node_cognitive(
             return;
         }
 
-        // Rust match expression: same treatment as switch
-        "match_expression" => {
+        // Rust match expression / Python match_statement: same treatment as switch
+        "match_expression" | "match_statement" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
@@ -150,8 +176,8 @@ fn visit_node_cognitive(
         // Case statements do NOT add complexity in cognitive complexity
         // (only the switch itself does); same for Rust match arms
 
-        // Catch blocks
-        "catch_clause" => {
+        // Catch/except blocks — C++ uses catch_clause, Python uses except_clause
+        "catch_clause" | "except_clause" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
@@ -162,17 +188,35 @@ fn visit_node_cognitive(
             *complexity += 1;
         }
 
-        // Binary logical operators - only count if not same as parent operator
+        // Binary logical operators (C/C++/Rust: && ||) — count once per contiguous sequence
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
                     if op_text == "&&" || op_text == "||" {
-                        // Only add complexity if this operator is different from parent
-                        // This ensures we only count once per sequence of same operators
                         if parent_binary_op != Some(op_text) {
                             *complexity += 1;
                         }
-                        // Pass this operator as parent to children
+                        visit_children_cognitive_with_op(
+                            node,
+                            source_code,
+                            nesting_level,
+                            complexity,
+                            Some(op_text),
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Python boolean operators (and / or) — same chain-counting logic as binary_expression
+        "boolean_operator" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if op_text == "and" || op_text == "or" {
+                        if parent_binary_op != Some(op_text) {
+                            *complexity += 1;
+                        }
                         visit_children_cognitive_with_op(
                             node,
                             source_code,
@@ -247,13 +291,22 @@ pub fn calculate_nesting_depth(node: Node) -> u32 {
 }
 
 fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
+    // Skip anonymous/terminal nodes (e.g. keyword tokens). In Python, the `lambda` keyword
+    // token and the `lambda` expression node share the same kind string; without this guard
+    // nesting depth would be double-counted for lambda expressions.
+    if !node.is_named() {
+        return;
+    }
+
     let new_depth = match node.kind() {
         // C/C++ control structures
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
         | "for_range_loop" | "switch_statement" | "catch_clause" | "lambda_expression"
         // Rust control structures
         | "if_expression" | "while_expression" | "for_expression" | "loop_expression"
-        | "match_expression" | "closure_expression" => {
+        | "match_expression" | "closure_expression"
+        // Python control structures
+        | "except_clause" | "match_statement" | "lambda" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -269,8 +322,17 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
     }
 }
 
-/// Calculates Source Lines of Code (SLOC) - non-comment, non-blank lines
+/// Calculates Source Lines of Code (SLOC) - non-comment, non-blank lines (C/C++/Rust).
 pub fn calculate_sloc(node: Node, source_code: &[u8]) -> u32 {
+    calculate_sloc_inner(node, source_code, false)
+}
+
+/// Calculates SLOC for Python source — additionally skips lines beginning with `#`.
+pub fn calculate_sloc_python(node: Node, source_code: &[u8]) -> u32 {
+    calculate_sloc_inner(node, source_code, true)
+}
+
+fn calculate_sloc_inner(node: Node, source_code: &[u8], skip_hash_comments: bool) -> u32 {
     let start_byte = node.start_byte();
     let end_byte = node.end_byte();
 
@@ -289,7 +351,7 @@ pub fn calculate_sloc(node: Node, source_code: &[u8]) -> u32 {
             continue;
         }
 
-        // Handle multi-line comments
+        // Handle multi-line comments (C/C++/Rust /* ... */)
         if in_multiline_comment {
             if let Some(pos) = find_bytes(trimmed, b"*/") {
                 in_multiline_comment = false;
@@ -298,6 +360,11 @@ pub fn calculate_sloc(node: Node, source_code: &[u8]) -> u32 {
                     sloc += 1;
                 }
             }
+            continue;
+        }
+
+        // Python # comments (# in C/C++/Rust is a preprocessor directive, not a comment)
+        if skip_hash_comments && trimmed.starts_with(b"#") {
             continue;
         }
 
@@ -319,7 +386,7 @@ pub fn calculate_sloc(node: Node, source_code: &[u8]) -> u32 {
             continue;
         }
 
-        // Check for single-line comment
+        // Single-line // comments (C/C++/Rust)
         if trimmed.starts_with(b"//") {
             continue;
         }
@@ -402,28 +469,21 @@ fn visit_node_abc(
     conditions: &mut u32,
 ) {
     match node.kind() {
-        // Assignments (C/C++ and Rust share assignment_expression)
-        "assignment_expression" => {
-            *assignments += 1;
-        }
-        "update_expression" => {
-            // C/C++ ++ and -- operators
-            *assignments += 1;
-        }
-        "compound_assignment_expr" => {
-            // Rust +=, -=, *=, etc.
-            *assignments += 1;
-        }
+        // Assignments — C/C++
+        "assignment_expression" => *assignments += 1,
+        "update_expression" => *assignments += 1, // C/C++ ++ and --
+        // Assignments — Rust
+        "compound_assignment_expr" => *assignments += 1, // Rust +=, -=, *=, etc.
+        // Assignments — Python
+        "assignment" => *assignments += 1,           // x = value
+        "augmented_assignment" => *assignments += 1, // x += value
+        "named_expression" => *assignments += 1,     // x := value (walrus)
 
-        // Branches (function calls — same node kind in C and Rust)
-        "call_expression" => {
-            *branches += 1;
-        }
+        // Branches — function calls (C/C++/Rust use call_expression, Python uses call)
+        "call_expression" | "call" => *branches += 1,
 
-        // Branches: throw, new, delete create control flow paths
-        "throw_statement" | "new_expression" | "delete_expression" => {
-            *branches += 1;
-        }
+        // Branches: throw, new, delete create control flow paths (C/C++)
+        "throw_statement" | "new_expression" | "delete_expression" => *branches += 1,
 
         // Conditions (C/C++)
         "if_statement"
@@ -432,21 +492,31 @@ fn visit_node_abc(
         | "for_statement"
         | "for_range_loop"
         | "switch_statement"
-        | "conditional_expression" => {
-            *conditions += 1;
-        }
+        | "conditional_expression" => *conditions += 1,
 
         // Conditions (Rust)
         "if_expression" | "while_expression" | "for_expression" | "loop_expression"
-        | "match_expression" => {
-            *conditions += 1;
-        }
+        | "match_expression" => *conditions += 1,
 
-        // Logical operators
+        // Conditions (Python)
+        "elif_clause" | "match_statement" => *conditions += 1,
+
+        // Logical operators (C/C++/Rust: &&/||)
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
                     if op_text == "&&" || op_text == "||" {
+                        *conditions += 1;
+                    }
+                }
+            }
+        }
+
+        // Logical operators (Python: and/or)
+        "boolean_operator" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if op_text == "and" || op_text == "or" {
                         *conditions += 1;
                     }
                 }
@@ -698,10 +768,10 @@ fn visit_node_dependencies(
     has_system_calls: &mut bool,
     modifies_globals: &mut bool,
 ) {
-    if node.kind() == "call_expression" {
+    if node.kind() == "call_expression" || node.kind() == "call" {
         if let Some(function) = node.child_by_field_name("function") {
             if let Ok(func_name) = function.utf8_text(source_code) {
-                // File I/O functions
+                // File I/O — C/C++ functions
                 if matches!(
                     func_name,
                     "fopen"
@@ -724,7 +794,12 @@ fn visit_node_dependencies(
                     *has_io = true;
                 }
 
-                // Memory allocation
+                // File I/O — Python functions
+                if matches!(func_name, "open" | "print" | "input") {
+                    *has_io = true;
+                }
+
+                // Memory allocation (C/C++)
                 if matches!(
                     func_name,
                     "malloc" | "calloc" | "realloc" | "free" | "aligned_alloc"
@@ -732,7 +807,7 @@ fn visit_node_dependencies(
                     *has_allocation = true;
                 }
 
-                // System calls
+                // System calls (C/C++)
                 if matches!(
                     func_name,
                     "time"
@@ -748,6 +823,11 @@ fn visit_node_dependencies(
                         | "wait"
                         | "pipe"
                 ) {
+                    *has_system_calls = true;
+                }
+
+                // System calls (Python simple-name form)
+                if matches!(func_name, "exit" | "abort") {
                     *has_system_calls = true;
                 }
             }
@@ -835,7 +915,7 @@ fn visit_node_observability(
     has_random: &mut bool,
     has_time: &mut bool,
 ) {
-    if node.kind() == "call_expression" {
+    if node.kind() == "call_expression" || node.kind() == "call" {
         if let Some(function) = node.child_by_field_name("function") {
             if let Ok(func_name) = function.utf8_text(source_code) {
                 if matches!(
@@ -848,6 +928,9 @@ fn visit_node_observability(
                         | "printf"
                         | "scanf"
                         | "puts"
+                        | "open"   // Python
+                        | "print"  // Python
+                        | "input" // Python
                 ) {
                     *has_io = true;
                 }
@@ -1717,5 +1800,293 @@ mod tests {
         let tree = parse_rust(code);
         // Implicit return (expression tail, no return keyword) counts 0
         assert_eq!(calculate_return_count(tree.root_node()), 0);
+    }
+
+    // ---- Python parser/metric tests ----
+
+    fn parse_python(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_python::language())
+            .unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    // McCabe
+
+    #[test]
+    fn test_python_simple_mccabe() {
+        let code = "def f(x):\n    return x + 1\n";
+        let tree = parse_python(code);
+        // base 1, no branches
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
+    }
+
+    #[test]
+    fn test_python_if_mccabe() {
+        let code = "def f(x):\n    if x > 0:\n        return x\n    return 0\n";
+        let tree = parse_python(code);
+        // base 1 + 1 if = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_python_elif_mccabe() {
+        let code = "def f(x, y):\n    if x > 0:\n        return x\n    elif y > 0:\n        return y\n    return 0\n";
+        let tree = parse_python(code);
+        // base 1 + 1 if + 1 elif = 3
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    #[test]
+    fn test_python_for_mccabe() {
+        let code = "def f(items):\n    for item in items:\n        pass\n";
+        let tree = parse_python(code);
+        // base 1 + 1 for = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_python_while_mccabe() {
+        let code = "def f(x):\n    while x > 0:\n        x -= 1\n";
+        let tree = parse_python(code);
+        // base 1 + 1 while = 2
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_python_except_mccabe() {
+        let code = "def f():\n    try:\n        pass\n    except ValueError:\n        pass\n";
+        let tree = parse_python(code);
+        // base 1 + 1 except = 2 (try itself has no cost)
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_python_boolean_and_mccabe() {
+        let code = "def f(a, b):\n    if a > 0 and b > 0:\n        return True\n    return False\n";
+        let tree = parse_python(code);
+        // base 1 + 1 if + 1 and = 3
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    #[test]
+    fn test_python_boolean_or_mccabe() {
+        let code = "def f(a, b, c):\n    if a < 0 or b < 0 or c < 0:\n        return True\n    return False\n";
+        let tree = parse_python(code);
+        // base 1 + 1 if + 1 or + 1 or = 4
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            4
+        );
+    }
+
+    // Cognitive
+
+    #[test]
+    fn test_python_simple_cognitive() {
+        let code = "def f(x):\n    return x + 1\n";
+        let tree = parse_python(code);
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            0
+        );
+    }
+
+    #[test]
+    fn test_python_if_cognitive() {
+        let code = "def f(x):\n    if x > 0:\n        return x\n    return 0\n";
+        let tree = parse_python(code);
+        // if at nesting=0: +1
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
+    }
+
+    #[test]
+    fn test_python_elif_cognitive() {
+        let code = "def f(x, y):\n    if x > 0:\n        return x\n    elif y > 0:\n        return y\n    else:\n        return 0\n";
+        let tree = parse_python(code);
+        // if: +1, elif: +1 flat, else: +1 flat → 3
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    #[test]
+    fn test_python_nested_if_cognitive() {
+        let code =
+            "def f(x, y):\n    if x > 0:\n        if y > 0:\n            return 1\n    return 0\n";
+        let tree = parse_python(code);
+        // outer if: +1 (nesting=0); inner if: +1+1=2 → total 3
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    #[test]
+    fn test_python_for_with_if_cognitive() {
+        let code =
+            "def f(items):\n    for item in items:\n        if item > 0:\n            pass\n";
+        let tree = parse_python(code);
+        // for at nesting=0: +1; if inside for (nesting=1): +1+1=2 → total 3
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            3
+        );
+    }
+
+    #[test]
+    fn test_python_and_cognitive() {
+        let code = "def f(a, b):\n    if a > 0 and b > 0:\n        return True\n    return False\n";
+        let tree = parse_python(code);
+        // if: +1; and (new op, parent=None): +1 → total 2
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_python_and_chain_cognitive() {
+        let code = "def f(a, b, c):\n    if a > 0 and b > 0 and c > 0:\n        return True\n    return False\n";
+        let tree = parse_python(code);
+        // if: +1; first and: +1; second and (same op, no penalty): +0 → total 2
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
+    }
+
+    #[test]
+    fn test_python_except_cognitive() {
+        let code = "def f():\n    try:\n        pass\n    except ValueError:\n        pass\n";
+        let tree = parse_python(code);
+        // try: no cost; except at nesting=0: +1+0=1 → total 1
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
+    }
+
+    // Nesting depth
+
+    #[test]
+    fn test_python_nesting_simple_if() {
+        let code = "def f(x):\n    if x > 0:\n        return x\n";
+        let tree = parse_python(code);
+        assert_eq!(calculate_nesting_depth(tree.root_node()), 1);
+    }
+
+    #[test]
+    fn test_python_nesting_nested_for() {
+        let code = "def f(a, b):\n    for x in a:\n        for y in b:\n            pass\n";
+        let tree = parse_python(code);
+        assert_eq!(calculate_nesting_depth(tree.root_node()), 2);
+    }
+
+    #[test]
+    fn test_python_nesting_lambda() {
+        let code = "def f():\n    fn = lambda x: x * 2\n    return fn\n";
+        let tree = parse_python(code);
+        // lambda: depth 1 (keyword token doesn't count due to is_named() guard)
+        assert_eq!(calculate_nesting_depth(tree.root_node()), 1);
+    }
+
+    // ABC
+
+    #[test]
+    fn test_python_assignment_abc() {
+        let code = "def f():\n    x = 1\n    y = 2\n";
+        let tree = parse_python(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.assignments, 2, "two assignments");
+    }
+
+    #[test]
+    fn test_python_augmented_assignment_abc() {
+        let code = "def f():\n    x = 0\n    x += 1\n    x -= 2\n";
+        let tree = parse_python(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        // 1 assignment + 2 augmented = 3
+        assert_eq!(abc.assignments, 3);
+    }
+
+    #[test]
+    fn test_python_call_abc() {
+        let code = "def f():\n    foo()\n    bar()\n";
+        let tree = parse_python(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.branches, 2, "two function calls");
+    }
+
+    #[test]
+    fn test_python_if_condition_abc() {
+        let code = "def f(x):\n    if x > 0:\n        pass\n";
+        let tree = parse_python(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.conditions, 1);
+    }
+
+    #[test]
+    fn test_python_boolean_operator_abc() {
+        let code = "def f(a, b):\n    if a > 0 and b > 0:\n        pass\n";
+        let tree = parse_python(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        // 1 if + 1 and = 2 conditions
+        assert_eq!(abc.conditions, 2);
+    }
+
+    // Return count
+
+    #[test]
+    fn test_python_return_count() {
+        let code = "def f(x):\n    if x > 0:\n        return x\n    return 0\n";
+        let tree = parse_python(code);
+        assert_eq!(calculate_return_count(tree.root_node()), 2);
+    }
+
+    // SLOC
+
+    #[test]
+    fn test_python_sloc_skips_hash_comments() {
+        let code = "def f(x):\n    # this is a comment\n    return x + 1\n";
+        let tree = parse_python(code);
+        // def line + return line = 2; comment skipped
+        let sloc = calculate_sloc_python(tree.root_node(), code.as_bytes());
+        assert!(sloc <= 3, "comment line should be excluded, got {}", sloc);
+    }
+
+    #[test]
+    fn test_python_sloc_c_sloc_counts_hash_preprocessor() {
+        let code = "#include <stdio.h>\nint f() { return 0; }\n";
+        let tree = parse_c_function(code);
+        // In C, # is a preprocessor directive (IS code), not a comment
+        let sloc = calculate_sloc(tree.root_node(), code.as_bytes());
+        assert!(sloc >= 1, "C # line should be counted as SLOC");
     }
 }

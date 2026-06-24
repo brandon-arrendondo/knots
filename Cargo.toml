@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "C/C++/Rust complexity analyzer with AI cost metrics (AIRD, AICP), SARIF/JSON/CSV output, and CI threshold enforcement"
+description = "C/C++/Rust/Python complexity analyzer with AI cost metrics (AIRD, AICP), SARIF/JSON/CSV output, and CI threshold enforcement"
 
 [[bin]]
 name = "knots"
@@ -20,6 +20,7 @@ tree-sitter.workspace = true
 tree-sitter-c.workspace = true
 tree-sitter-cpp.workspace = true
 tree-sitter-rust.workspace = true
+tree-sitter-python.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 walkdir.workspace = true
@@ -34,14 +35,14 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.6.0"
+version = "1.7.0"
 edition = "2021"
 license = "MIT"
 authors = ["Brandon Arrendondo <brandon.arrendondo@bissell.com>"]
 repository = "https://github.com/brandon-arrendondo/knots"
 homepage = "https://github.com/brandon-arrendondo/knots"
 readme = "README.md"
-keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "rust"]
+keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "python"]
 categories = ["development-tools", "command-line-utilities"]
 
 [workspace.dependencies]
@@ -49,6 +50,7 @@ tree-sitter = "0.22"
 tree-sitter-c = "0.21"
 tree-sitter-cpp = "0.21"
 tree-sitter-rust = "0.21"
+tree-sitter-python = "0.21"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 colored = "2.0"
