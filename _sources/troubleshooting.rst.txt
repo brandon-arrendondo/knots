@@ -30,7 +30,8 @@ Or exclude problematic files via a filter:
 
 Check:
 
-- File extensions are ``.c``, ``.cpp``, ``.cc``, ``.cxx``, or ``.rs``
+- File extensions are ``.c``, ``.cpp``, ``.cc``, ``.cxx``, ``.rs``,
+  ``.py``, ``.js``, ``.mjs``, or ``.cjs``
   (recursive mode only scans source files, not headers)
 - You're pointing at the right directory
 - Files aren't filtered out by an active include/exclude rule

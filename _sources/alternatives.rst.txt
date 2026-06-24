@@ -1,9 +1,9 @@
 Alternatives Comparison
 ========================
 
-Several tools measure code complexity for C/C++ and Rust. This page compares
-knots against the most commonly used alternatives, with empirical validation
-data where available.
+Several tools measure code complexity for C, C++, Rust, Python, and JavaScript.
+This page compares knots against the most commonly used alternatives, with
+empirical validation data where available.
 
 Feature Comparison
 ------------------
@@ -32,6 +32,16 @@ Feature Comparison
      - ✓
      - ✓
      - ✓
+   * - Python
+     - ✓
+     - ✓
+     - ✓
+     - ✗
+   * - JavaScript
+     - ✓
+     - ✓
+     - ✓
+     - ✗
    * - 30+ other languages
      - ✗
      - ✓
@@ -221,7 +231,7 @@ When to Choose Each Tool
 
 - You need **AI cost signals** (AIRD/AICP) to gate AI-assisted workflows or
   identify functions that are expensive to modify with an LLM
-- You want **CI threshold enforcement** across C, C++, and Rust in one pass
+- You want **CI threshold enforcement** across C, C++, Rust, Python, and JavaScript in one pass
 - You want **SARIF output** for PR annotations in GitHub Code Scanning
 - You want **NDJSON corpus analysis** composable via ``find``/``xargs``
 - You want a **pre-commit hook** that works out of the box

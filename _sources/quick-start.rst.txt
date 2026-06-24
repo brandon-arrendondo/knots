@@ -55,7 +55,7 @@ Recursive Directory Analysis
 
 Recursive mode:
 
-- Scans all ``.c`` / ``.cpp`` / ``.cc`` / ``.cxx`` / ``.rs`` files (headers skipped by default)
+- Scans all ``.c`` / ``.cpp`` / ``.cc`` / ``.cxx`` / ``.rs`` / ``.py`` / ``.js`` / ``.mjs`` / ``.cjs`` files (headers skipped by default)
 - Shows top 5 worst functions by complexity
 - Displays totals and averages across all files
 - Writes per-function detail to ``report.txt``
@@ -185,7 +185,7 @@ Find high-complexity, hard-to-test functions::
 
 Analyze only files modified in the last commit::
 
-    git diff --name-only HEAD~1 | grep -E '\.(c|cpp|cc|cxx|rs)$' | while read f; do
+    git diff --name-only HEAD~1 | grep -E '\.(c|cpp|cc|cxx|rs|py|js|mjs|cjs)$' | while read f; do
         knots "$f"
     done
 

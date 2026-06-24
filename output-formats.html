@@ -132,17 +132,21 @@ Suitable for interactive use and terminal review.</p>
 <p>One JSON object per line. Unlike <code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">json</span></code>, output from multiple
 invocations concatenates cleanly without array merging — ideal for corpus
 analysis via <code class="docutils literal notranslate"><span class="pre">find</span></code>/<code class="docutils literal notranslate"><span class="pre">xargs</span></code>.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Composable across files</span>
-<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">&gt;</span> <span class="n">all_metrics</span><span class="o">.</span><span class="n">ndjson</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Composable across files (C/C++ project)</span>
+<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.cpp&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">&gt;</span> <span class="n">all_metrics</span><span class="o">.</span><span class="n">ndjson</span>
 
-<span class="c1"># Pipe directly to jq</span>
-<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.aird &gt; 70)&#39;</span>
-
-<span class="c1"># Parallel per-file analysis</span>
-<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="n">P4</span> <span class="o">-</span><span class="n">I</span><span class="p">{}</span> <span class="n">sh</span> <span class="o">-</span><span class="n">c</span> <span class="s1">&#39;knots --format ndjson </span><span class="si">{}</span><span class="s1"> &gt;&gt; metrics.ndjson&#39;</span>
+<span class="c1"># Python project corpus</span>
+<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.py&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.aird &gt; 70)&#39;</span>
 
 <span class="c1"># Rust project corpus</span>
 <span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.rs&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.cognitive &gt; 20)&#39;</span>
+
+<span class="c1"># JavaScript project corpus</span>
+<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.js&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.mjs&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.mccabe &gt; 10)&#39;</span>
+
+<span class="c1"># Parallel per-file analysis (all supported languages)</span>
+<span class="n">find</span> <span class="o">.</span> \<span class="p">(</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.cpp&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.rs&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.py&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.js&quot;</span> \<span class="p">)</span> \
+    <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="n">P4</span> <span class="o">-</span><span class="n">I</span><span class="p">{}</span> <span class="n">sh</span> <span class="o">-</span><span class="n">c</span> <span class="s1">&#39;knots --format ndjson </span><span class="si">{}</span><span class="s1"> &gt;&gt; metrics.ndjson&#39;</span>
 </pre></div>
 </div>
 </section>

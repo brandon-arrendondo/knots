@@ -140,7 +140,7 @@ Summary:
 </div>
 <p>Recursive mode:</p>
 <ul class="simple">
-<li><p>Scans all <code class="docutils literal notranslate"><span class="pre">.c</span></code> / <code class="docutils literal notranslate"><span class="pre">.cpp</span></code> / <code class="docutils literal notranslate"><span class="pre">.cc</span></code> / <code class="docutils literal notranslate"><span class="pre">.cxx</span></code> / <code class="docutils literal notranslate"><span class="pre">.rs</span></code> files (headers skipped by default)</p></li>
+<li><p>Scans all <code class="docutils literal notranslate"><span class="pre">.c</span></code> / <code class="docutils literal notranslate"><span class="pre">.cpp</span></code> / <code class="docutils literal notranslate"><span class="pre">.cc</span></code> / <code class="docutils literal notranslate"><span class="pre">.cxx</span></code> / <code class="docutils literal notranslate"><span class="pre">.rs</span></code> / <code class="docutils literal notranslate"><span class="pre">.py</span></code> / <code class="docutils literal notranslate"><span class="pre">.js</span></code> / <code class="docutils literal notranslate"><span class="pre">.mjs</span></code> / <code class="docutils literal notranslate"><span class="pre">.cjs</span></code> files (headers skipped by default)</p></li>
 <li><p>Shows top 5 worst functions by complexity</p></li>
 <li><p>Displays totals and averages across all files</p></li>
 <li><p>Writes per-function detail to <code class="docutils literal notranslate"><span class="pre">report.txt</span></code></p></li>
@@ -257,7 +257,7 @@ Detailed per-function output written to report.txt
 </pre></div>
 </div>
 <p>Analyze only files modified in the last commit:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">diff</span> <span class="o">--</span><span class="n">name</span><span class="o">-</span><span class="n">only</span> <span class="n">HEAD</span><span class="o">~</span><span class="mi">1</span> <span class="o">|</span> <span class="n">grep</span> <span class="o">-</span><span class="n">E</span> <span class="s1">&#39;\.(c|cpp|cc|cxx|rs)$&#39;</span> <span class="o">|</span> <span class="k">while</span> <span class="n">read</span> <span class="n">f</span><span class="p">;</span> <span class="n">do</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">diff</span> <span class="o">--</span><span class="n">name</span><span class="o">-</span><span class="n">only</span> <span class="n">HEAD</span><span class="o">~</span><span class="mi">1</span> <span class="o">|</span> <span class="n">grep</span> <span class="o">-</span><span class="n">E</span> <span class="s1">&#39;\.(c|cpp|cc|cxx|rs|py|js|mjs|cjs)$&#39;</span> <span class="o">|</span> <span class="k">while</span> <span class="n">read</span> <span class="n">f</span><span class="p">;</span> <span class="n">do</span>
     <span class="n">knots</span> <span class="s2">&quot;$f&quot;</span>
 <span class="n">done</span>
 </pre></div>
