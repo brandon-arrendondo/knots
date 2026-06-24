@@ -49,6 +49,7 @@
 <li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Metrics Reference</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#python-language-support">Python Language Support</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#javascript-language-support">JavaScript Language Support</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#mccabe-cyclomatic-complexity">McCabe Cyclomatic Complexity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#cognitive-complexity">Cognitive Complexity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#nesting-depth">Nesting Depth</a></li>
@@ -107,8 +108,29 @@ increments nesting depth without adding a base cost</p></li>
 <li><p><strong>SLOC</strong>: <code class="docutils literal notranslate"><span class="pre">#</span></code> comment lines are excluded</p></li>
 <li><p><strong>External calls</strong>: attribute-form calls (<code class="docutils literal notranslate"><span class="pre">obj.method()</span></code>, <code class="docutils literal notranslate"><span class="pre">module.func()</span></code>)
 are counted as external references</p></li>
-<li><p><strong>Limitations</strong>: <code class="docutils literal notranslate"><span class="pre">for_in_clause</span></code> inside comprehensions is not counted;
-<code class="docutils literal notranslate"><span class="pre">field_expression</span></code>-style calls are counted as external (conservative)</p></li>
+<li><p><strong>Limitations</strong>: <code class="docutils literal notranslate"><span class="pre">for_in_clause</span></code> inside comprehensions is not counted</p></li>
+</ul>
+</section>
+<section id="javascript-language-support">
+<h2>JavaScript Language Support<a class="headerlink" href="#javascript-language-support" title="Link to this heading"></a></h2>
+<p>As of v1.8.0, knots supports JavaScript (<code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.mjs</span></code>, <code class="docutils literal notranslate"><span class="pre">.cjs</span></code>).
+All 13 metrics are computed. JavaScript-specific notes:</p>
+<ul class="simple">
+<li><p><strong>McCabe</strong>: counts <code class="docutils literal notranslate"><span class="pre">if</span></code>, <code class="docutils literal notranslate"><span class="pre">while</span></code>, <code class="docutils literal notranslate"><span class="pre">do</span></code>, <code class="docutils literal notranslate"><span class="pre">for</span></code>, <code class="docutils literal notranslate"><span class="pre">for...in</span></code>,
+<code class="docutils literal notranslate"><span class="pre">for...of</span></code>, <code class="docutils literal notranslate"><span class="pre">switch</span></code>, <code class="docutils literal notranslate"><span class="pre">ternary</span></code> (<code class="docutils literal notranslate"><span class="pre">?:</span></code>), <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>, <code class="docutils literal notranslate"><span class="pre">||</span></code>, and <code class="docutils literal notranslate"><span class="pre">??</span></code>
+(nullish coalescing)</p></li>
+<li><p><strong>Cognitive</strong>: <code class="docutils literal notranslate"><span class="pre">for...in</span></code> and <code class="docutils literal notranslate"><span class="pre">for...of</span></code> share <code class="docutils literal notranslate"><span class="pre">for_in_statement</span></code> and
+are treated as loop structures (+1 + nesting penalty); arrow functions
+(<code class="docutils literal notranslate"><span class="pre">()</span> <span class="pre">=&gt;</span></code>) increment nesting depth without adding a base cost; <code class="docutils literal notranslate"><span class="pre">??</span></code>
+chains count once per contiguous sequence (same as <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>/<code class="docutils literal notranslate"><span class="pre">||</span></code>)</p></li>
+<li><p><strong>SLOC</strong>: <code class="docutils literal notranslate"><span class="pre">//</span></code> and <code class="docutils literal notranslate"><span class="pre">/*</span> <span class="pre">*/</span></code> comments are excluded (same as C/C++)</p></li>
+<li><p><strong>External calls</strong>: member-expression calls (<code class="docutils literal notranslate"><span class="pre">obj.method()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">module.func()</span></code>) are counted as external references</p></li>
+<li><p><strong>Function discovery</strong>: <code class="docutils literal notranslate"><span class="pre">function</span></code> declarations, named <code class="docutils literal notranslate"><span class="pre">function</span></code>
+expressions, class methods, and generator functions are discovered;
+anonymous arrow functions are not (no name to report)</p></li>
+<li><p><strong>Limitations</strong>: anonymous arrow functions do not appear in per-function
+output; TypeScript (<code class="docutils literal notranslate"><span class="pre">.ts</span></code>, <code class="docutils literal notranslate"><span class="pre">.tsx</span></code>) is not supported</p></li>
 </ul>
 </section>
 <section id="mccabe-cyclomatic-complexity">
@@ -212,9 +234,10 @@ and function-like macros. Measures external dependency breadth.</p>
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>For Rust, method call syntax (<code class="docutils literal notranslate"><span class="pre">self.foo()</span></code>, <code class="docutils literal notranslate"><span class="pre">vec.push()</span></code>) via
-<code class="docutils literal notranslate"><span class="pre">field_expression</span></code> nodes is not yet counted. Plain function call
-syntax is counted.</p>
+<p>For Rust, method call syntax (<code class="docutils literal notranslate"><span class="pre">self.foo()</span></code>, <code class="docutils literal notranslate"><span class="pre">vec.push()</span></code>) is counted
+via <code class="docutils literal notranslate"><span class="pre">field_expression</span></code> nodes. Method names defined locally are excluded;
+external method names (e.g. standard library, third-party crate methods)
+are counted as external references.</p>
 </div>
 </section>
 <section id="aird-ai-reasoning-difficulty">

@@ -36,3 +36,4 @@ Knots analyzes source files with these extensions:
 * ``.hpp``, ``.hxx`` — C++ headers
 * ``.rs`` — Rust
 * ``.py`` — Python 3 (including decorated functions and class methods)
+* ``.js``, ``.mjs``, ``.cjs`` — JavaScript (ES2015+, including class methods and generators)

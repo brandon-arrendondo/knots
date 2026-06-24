@@ -13,7 +13,7 @@ Positional Arguments
 --------------------
 
 ``[FILE]...``
-    One or more paths to C/C++/Rust/Python source files or directories.
+    One or more paths to C/C++/Rust/Python/JavaScript source files or directories.
     Pass a directory with ``-r`` for recursive scanning.
     Mutually exclusive with ``--compile-commands``.
 
@@ -21,10 +21,11 @@ Options
 -------
 
 ``-r``, ``--recursive``
-    Recursively process all C/C++/Rust/Python source files (``.c``, ``.cpp``,
-    ``.cc``, ``.cxx``, ``.rs``, ``.py``) in directories. Header files
-    (``.h``, ``.hpp``, ``.hxx``) are skipped unless explicitly included via a
-    filter. Generates ``report.txt`` in the current directory.
+    Recursively process all C/C++/Rust/Python/JavaScript source files (``.c``,
+    ``.cpp``, ``.cc``, ``.cxx``, ``.rs``, ``.py``, ``.js``, ``.mjs``,
+    ``.cjs``) in directories. Header files (``.h``, ``.hpp``, ``.hxx``) are
+    skipped unless explicitly included via a filter. Generates ``report.txt``
+    in the current directory.
 
 ``-v``, ``--verbose``
     Show detailed per-function analysis including all test scoring sub-axes.
