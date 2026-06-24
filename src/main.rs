@@ -789,6 +789,16 @@ fn collect_external_calls_recursive(
                 if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
                     external.insert(name.to_string());
                 }
+            } else if func_node.kind() == "field_expression" {
+                // Rust method call: self.foo(), vec.push(), iter.map()
+                // Check the method name (field) against local definitions.
+                if let Some(field) = func_node.child_by_field_name("field") {
+                    if let Ok(method_name) = field.utf8_text(source_code.as_bytes()) {
+                        if !local_names.contains(method_name) {
+                            external.insert(method_name.to_string());
+                        }
+                    }
+                }
             }
         }
     }
@@ -1878,6 +1888,74 @@ mod tests {
         let names =
             discover_rust_functions("struct Foo; impl Foo { fn method(&self) -> i32 { 0 } }");
         assert_eq!(names, vec!["method"]);
+    }
+
+    fn rust_external_calls(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_rust::language()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let root = tree.root_node();
+        let local_names = collect_local_names(root, code);
+        // Find the first function_item to use as the function node
+        fn find_fn(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+            if node.kind() == "function_item" {
+                return Some(node);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(f) = find_fn(child) {
+                    return Some(f);
+                }
+            }
+            None
+        }
+        let func_node = find_fn(root).expect("no function_item found");
+        let mut external: std::collections::HashSet<String> = std::collections::HashSet::new();
+        collect_external_calls_recursive(func_node, code, &local_names, &mut external);
+        let mut v: Vec<String> = external.into_iter().collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn test_rust_field_expression_external_call() {
+        // vec.push() — push is not a locally defined function → external
+        let code = "fn f(mut v: Vec<i32>) { v.push(1); }";
+        let calls = rust_external_calls(code);
+        assert!(
+            calls.contains(&"push".to_string()),
+            "push should be external: {:?}",
+            calls
+        );
+    }
+
+    #[test]
+    fn test_rust_field_expression_self_local_not_counted() {
+        // self.helper() where helper is defined locally → NOT external
+        let code = "struct S; impl S { fn f(&self) { self.helper(); } fn helper(&self) {} }";
+        let calls = rust_external_calls(code);
+        assert!(
+            !calls.contains(&"helper".to_string()),
+            "helper is local: {:?}",
+            calls
+        );
+    }
+
+    #[test]
+    fn test_rust_field_expression_chain_counts_each() {
+        // iter.map(...).collect() — map and collect are external
+        let code = "fn f(v: Vec<i32>) -> Vec<i32> { v.iter().map(|x| x * 2).collect() }";
+        let calls = rust_external_calls(code);
+        assert!(
+            calls.contains(&"map".to_string()),
+            "map should be external: {:?}",
+            calls
+        );
+        assert!(
+            calls.contains(&"collect".to_string()),
+            "collect should be external: {:?}",
+            calls
+        );
     }
 
     // ---- Python function discovery tests ----

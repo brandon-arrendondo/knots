@@ -17,8 +17,7 @@ All 13 metrics are computed. Python-specific notes:
 - **SLOC**: ``#`` comment lines are excluded
 - **External calls**: attribute-form calls (``obj.method()``, ``module.func()``)
   are counted as external references
-- **Limitations**: ``for_in_clause`` inside comprehensions is not counted;
-  ``field_expression``-style calls are counted as external (conservative)
+- **Limitations**: ``for_in_clause`` inside comprehensions is not counted
 
 JavaScript Language Support
 ---------------------------
@@ -137,9 +136,10 @@ and function-like macros. Measures external dependency breadth.
 
 .. note::
 
-   For Rust, method call syntax (``self.foo()``, ``vec.push()``) via
-   ``field_expression`` nodes is not yet counted. Plain function call
-   syntax is counted.
+   For Rust, method call syntax (``self.foo()``, ``vec.push()``) is counted
+   via ``field_expression`` nodes. Method names defined locally are excluded;
+   external method names (e.g. standard library, third-party crate methods)
+   are counted as external references.
 
 AIRD — AI Reasoning Difficulty
 --------------------------------
