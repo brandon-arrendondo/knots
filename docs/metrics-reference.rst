@@ -20,6 +20,28 @@ All 13 metrics are computed. Python-specific notes:
 - **Limitations**: ``for_in_clause`` inside comprehensions is not counted;
   ``field_expression``-style calls are counted as external (conservative)
 
+JavaScript Language Support
+---------------------------
+
+As of v1.8.0, knots supports JavaScript (``.js``, ``.mjs``, ``.cjs``).
+All 13 metrics are computed. JavaScript-specific notes:
+
+- **McCabe**: counts ``if``, ``while``, ``do``, ``for``, ``for...in``,
+  ``for...of``, ``switch``, ``ternary`` (``?:``), ``&&``, ``||``, and ``??``
+  (nullish coalescing)
+- **Cognitive**: ``for...in`` and ``for...of`` share ``for_in_statement`` and
+  are treated as loop structures (+1 + nesting penalty); arrow functions
+  (``() =>``) increment nesting depth without adding a base cost; ``??``
+  chains count once per contiguous sequence (same as ``&&``/``||``)
+- **SLOC**: ``//`` and ``/* */`` comments are excluded (same as C/C++)
+- **External calls**: member-expression calls (``obj.method()``,
+  ``module.func()``) are counted as external references
+- **Function discovery**: ``function`` declarations, named ``function``
+  expressions, class methods, and generator functions are discovered;
+  anonymous arrow functions are not (no name to report)
+- **Limitations**: anonymous arrow functions do not appear in per-function
+  output; TypeScript (``.ts``, ``.tsx``) is not supported
+
 McCabe Cyclomatic Complexity
 -----------------------------
 

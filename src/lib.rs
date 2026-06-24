@@ -11,6 +11,7 @@ pub use complexity::{
 pub use tree_sitter;
 pub use tree_sitter_c;
 pub use tree_sitter_cpp;
+pub use tree_sitter_javascript;
 pub use tree_sitter_python;
 pub use tree_sitter_rust;
 
@@ -32,6 +33,7 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         }
         Some("rs") => tree_sitter_rust::language(),
         Some("py") => tree_sitter_python::language(),
+        Some("js") | Some("mjs") | Some("cjs") => tree_sitter_javascript::language(),
         _ => tree_sitter_c::language(),
     }
 }
@@ -41,7 +43,7 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
 /// @version 4
 pub fn is_source_extension(ext: &std::ffi::OsStr) -> bool {
     match ext.to_str() {
-        Some("c") | Some("rs") | Some("py") => true,
+        Some("c") | Some("rs") | Some("py") | Some("js") | Some("mjs") | Some("cjs") => true,
         Some(e) => CPP_SOURCE_EXTENSIONS.contains(&e),
         None => false,
     }

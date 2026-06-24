@@ -1,6 +1,6 @@
 # Knots
 
-A fast C/C++/Rust/Python code complexity analyzer built on tree-sitter. Knots measures
+A fast C/C++/Rust/Python/JavaScript code complexity analyzer built on tree-sitter. Knots measures
 traditional complexity metrics alongside two AI-specific cost scores — AIRD (AI
 Reasoning Difficulty) and AICP (AI Context Pressure) — to identify which functions
 are genuinely expensive to modify with AI assistance.
@@ -9,7 +9,7 @@ are genuinely expensive to modify with AI assistance.
 
 - **Multiple Complexity Metrics**: McCabe, Cognitive, Nesting Depth, SLOC, ABC, Test Scoring
 - **AI Cost Metrics**: AIRD (reasoning difficulty) and AICP (context pressure) — corpus-validated against 32,205 functions across 6 open-source C codebases
-- **Multi-Language**: C, C++, Rust, and Python — same metrics and thresholds across all four
+- **Multi-Language**: C, C++, Rust, Python, and JavaScript — same metrics and thresholds across all five
 - **Testability Matrix**: Categorize functions by complexity and testability
 - **Multiple Output Formats**: text, SARIF, JSON, NDJSON (find/xargs-composable), CSV
 - **CI Threshold Enforcement**: exit 1 on any threshold violation; recommended `--aird-threshold 85`
@@ -72,7 +72,7 @@ knots [OPTIONS] [FILE]...
 knots [OPTIONS] --compile-commands <FILE>
 
 Options:
-  -r, --recursive                   Recursively process all C/C++/Rust/Python source files
+  -r, --recursive                   Recursively process all C/C++/Rust/Python/JavaScript source files
   -v, --verbose                     Show detailed per-function analysis
   -m, --matrix                      Show testability matrix categorization
   --compile-commands <FILE>         Use compile_commands.json to get file list

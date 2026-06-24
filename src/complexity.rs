@@ -45,11 +45,14 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Python match_statement (3.10+): like switch
         "match_statement" => *complexity += 1,
 
+        // JavaScript: for...in and for...of share for_in_statement
+        "for_in_statement" => *complexity += 1,
+
         // Logical operators (each adds a path)
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "&&" || op_text == "||" {
+                    if op_text == "&&" || op_text == "||" || op_text == "??" {
                         *complexity += 1;
                     }
                 }
@@ -58,6 +61,8 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
 
         // Ternary operator (C/C++) and Python ternary (x if cond else y)
         "conditional_expression" => *complexity += 1,
+        // JavaScript ternary expression
+        "ternary_expression" => *complexity += 1,
 
         // Python boolean operators: and/or each add a path (like && / ||)
         "boolean_operator" => {
@@ -138,6 +143,13 @@ fn visit_node_cognitive(
             return;
         }
 
+        // JavaScript for...in and for...of share for_in_statement
+        "for_in_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
         // Rust loops
         "while_expression" | "for_expression" | "loop_expression" => {
             *complexity += 1 + nesting_level;
@@ -155,7 +167,8 @@ fn visit_node_cognitive(
         // Lambda / closure body is a nested scope — children get increased nesting.
         // No +1 base cost: a closure is not itself a decision point.
         // "lambda" covers Python lambdas; "lambda_expression"/"closure_expression" cover C++/Rust.
-        "lambda_expression" | "closure_expression" | "lambda" => {
+        // "arrow_function" covers JavaScript arrow functions (() => ...).
+        "lambda_expression" | "closure_expression" | "lambda" | "arrow_function" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -192,7 +205,7 @@ fn visit_node_cognitive(
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "&&" || op_text == "||" {
+                    if op_text == "&&" || op_text == "||" || op_text == "??" {
                         if parent_binary_op != Some(op_text) {
                             *complexity += 1;
                         }
@@ -306,7 +319,9 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         | "if_expression" | "while_expression" | "for_expression" | "loop_expression"
         | "match_expression" | "closure_expression"
         // Python control structures
-        | "except_clause" | "match_statement" | "lambda" => {
+        | "except_clause" | "match_statement" | "lambda"
+        // JavaScript control structures
+        | "for_in_statement" | "arrow_function" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -478,6 +493,8 @@ fn visit_node_abc(
         "assignment" => *assignments += 1,           // x = value
         "augmented_assignment" => *assignments += 1, // x += value
         "named_expression" => *assignments += 1,     // x := value (walrus)
+        // Assignments — JavaScript (augmented_assignment_expression: +=, -=, etc.)
+        "augmented_assignment_expression" => *assignments += 1,
 
         // Branches — function calls (C/C++/Rust use call_expression, Python uses call)
         "call_expression" | "call" => *branches += 1,
@@ -494,6 +511,9 @@ fn visit_node_abc(
         | "switch_statement"
         | "conditional_expression" => *conditions += 1,
 
+        // Conditions (JavaScript)
+        "for_in_statement" | "ternary_expression" => *conditions += 1,
+
         // Conditions (Rust)
         "if_expression" | "while_expression" | "for_expression" | "loop_expression"
         | "match_expression" => *conditions += 1,
@@ -501,11 +521,11 @@ fn visit_node_abc(
         // Conditions (Python)
         "elif_clause" | "match_statement" => *conditions += 1,
 
-        // Logical operators (C/C++/Rust: &&/||)
+        // Logical operators (C/C++/Rust: &&/||; JavaScript also: ??)
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "&&" || op_text == "||" {
+                    if op_text == "&&" || op_text == "||" || op_text == "??" {
                         *conditions += 1;
                     }
                 }
@@ -2088,5 +2108,180 @@ mod tests {
         // In C, # is a preprocessor directive (IS code), not a comment
         let sloc = calculate_sloc(tree.root_node(), code.as_bytes());
         assert!(sloc >= 1, "C # line should be counted as SLOC");
+    }
+
+    // ---- JavaScript tests ----
+
+    fn parse_js_function(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_javascript::language())
+            .unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    fn js_func_node(tree: &tree_sitter::Tree) -> tree_sitter::Node<'_> {
+        fn find_func(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+            if matches!(
+                node.kind(),
+                "function_declaration"
+                    | "function_expression"
+                    | "method_definition"
+                    | "generator_function_declaration"
+            ) {
+                return Some(node);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(found) = find_func(child) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        find_func(tree.root_node()).expect("no function node found")
+    }
+
+    #[test]
+    fn test_js_simple_mccabe() {
+        let code = "function f() { return 1; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_js_if_mccabe() {
+        let code = "function f(x) { if (x > 0) { return 1; } return 0; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_js_for_in_mccabe() {
+        let code = "function f(obj) { for (const k in obj) { console.log(k); } }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_js_for_of_mccabe() {
+        let code = "function f(arr) { for (const x of arr) { console.log(x); } }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_js_ternary_mccabe() {
+        let code = "function f(x) { return x > 0 ? 1 : 0; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_js_nullish_mccabe() {
+        let code = "function f(x) { return x ?? 0; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_js_logical_and_mccabe() {
+        let code = "function f(a, b) { return a && b; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_js_simple_cognitive() {
+        let code = "function f() { return 1; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 0);
+    }
+
+    #[test]
+    fn test_js_if_cognitive() {
+        let code = "function f(x) { if (x > 0) { return 1; } return 0; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_js_for_of_cognitive() {
+        let code = "function f(arr) { for (const x of arr) { if (x > 0) { return x; } } }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        // for_of: +1+0=1, if inside for: +1+1=2 → total 3
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_js_nullish_cognitive() {
+        let code = "function f(a, b) { return a ?? b; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_js_nesting_simple_if() {
+        let code = "function f(x) { if (x > 0) { return 1; } }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_nesting_depth(node), 1);
+    }
+
+    #[test]
+    fn test_js_nesting_for_in_with_if() {
+        let code = "function f(obj) { for (const k in obj) { if (obj[k]) { return k; } } }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_nesting_depth(node), 2);
+    }
+
+    #[test]
+    fn test_js_nesting_arrow_function() {
+        let code = "function f(arr) { return arr.map(x => x * 2); }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        // arrow_function adds one nesting level
+        assert_eq!(calculate_nesting_depth(node), 1);
+    }
+
+    #[test]
+    fn test_js_assignment_abc() {
+        // `let x = 1` is a variable_declarator (declaration), not an assignment_expression.
+        // Only `x = expr` and `x += expr` forms count as A in ABC.
+        let code = "function f(x) { x = 1; x += 2; return x; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        assert_eq!(abc.assignments, 2);
+    }
+
+    #[test]
+    fn test_js_call_abc() {
+        let code = "function f() { console.log('hi'); return 0; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        assert!(abc.branches >= 1);
+    }
+
+    #[test]
+    fn test_js_ternary_abc() {
+        let code = "function f(x) { return x > 0 ? 1 : 0; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        assert!(abc.conditions >= 1);
     }
 }

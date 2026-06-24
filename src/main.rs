@@ -719,7 +719,13 @@ fn collect_local_names(root: Node, source_code: &str) -> HashSet<String> {
 
 fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut HashSet<String>) {
     match node.kind() {
-        "function_definition" | "function_item" => {
+        "function_definition"
+        | "function_item"
+        | "function_declaration"
+        | "function_expression"
+        | "method_definition"
+        | "generator_function_declaration"
+        | "generator_function" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -775,6 +781,11 @@ fn collect_external_calls_recursive(
                 }
             } else if func_node.kind() == "attribute" {
                 // Python attribute call: obj.method() or module.func() — always external
+                if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
+                    external.insert(name.to_string());
+                }
+            } else if func_node.kind() == "member_expression" {
+                // JavaScript member call: obj.method() or obj?.method() — always external
                 if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
                     external.insert(name.to_string());
                 }
@@ -1625,7 +1636,16 @@ where
 {
     let node = cursor.node();
 
-    if node.kind() == "function_definition" || node.kind() == "function_item" {
+    if matches!(
+        node.kind(),
+        "function_definition"
+            | "function_item"
+            | "function_declaration"
+            | "function_expression"
+            | "method_definition"
+            | "generator_function_declaration"
+            | "generator_function"
+    ) {
         callback(node, source_code);
     }
 
@@ -1643,6 +1663,23 @@ where
 fn get_function_name(node: Node, source_code: &str) -> Option<String> {
     // Rust function_item has a direct 'name' field
     if node.kind() == "function_item" {
+        return node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string());
+    }
+
+    // JavaScript: function_declaration, function_expression, method_definition,
+    // generator_function_declaration, and generator_function all have a direct 'name' field.
+    // function_expression and generator_function may be anonymous (name field absent).
+    if matches!(
+        node.kind(),
+        "function_declaration"
+            | "function_expression"
+            | "method_definition"
+            | "generator_function_declaration"
+            | "generator_function"
+    ) {
         return node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
@@ -1894,5 +1931,56 @@ mod tests {
     fn test_python_discover_decorated_function() {
         let names = discover_python_functions("@decorator\ndef decorated(x):\n    return x\n");
         assert_eq!(names, vec!["decorated"]);
+    }
+
+    fn discover_js_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_javascript::language())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_js_discover_function_declaration() {
+        let names = discover_js_functions("function add(a, b) { return a + b; }");
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_js_discover_multiple_functions() {
+        let code = "function foo() {} function bar() {}";
+        let mut names = discover_js_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_js_discover_named_function_expression() {
+        let code = "const fn = function myFunc() { return 1; };";
+        let names = discover_js_functions(code);
+        assert_eq!(names, vec!["myFunc"]);
+    }
+
+    #[test]
+    fn test_js_discover_class_method() {
+        let code = "class Foo { bar() { return 1; } }";
+        let names = discover_js_functions(code);
+        assert_eq!(names, vec!["bar"]);
+    }
+
+    #[test]
+    fn test_js_discover_generator_function() {
+        let code = "function* gen() { yield 1; }";
+        let names = discover_js_functions(code);
+        assert_eq!(names, vec!["gen"]);
     }
 }
