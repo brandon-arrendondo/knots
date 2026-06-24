@@ -21,7 +21,7 @@ repos:
   # If your team already has knots on PATH (released binary / package manager),
   # use id: knots-system instead to skip the Rust toolchain requirement.
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v1.8.2
+    rev: v1.8.3
     hooks:
       # -----------------------------------------------------------------------
       # All supported languages — default gate: AIRD ≤ 85

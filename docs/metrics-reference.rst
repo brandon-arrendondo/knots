@@ -7,7 +7,7 @@ and CSV output.
 Python Language Support
 -----------------------
 
-As of v1.7.0, knots supports Python (``.py``) in addition to C, C++, and Rust.
+Knots supports Python (``.py``) alongside C, C++, Rust, and JavaScript.
 All 13 metrics are computed. Python-specific notes:
 
 - **McCabe**: counts ``if``, ``elif``, ``while``, ``for``, ``except``, ``and``,

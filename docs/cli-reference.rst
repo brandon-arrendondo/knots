@@ -13,7 +13,7 @@ Positional Arguments
 --------------------
 
 ``[FILE]...``
-    One or more paths to C/C++/Rust/Python/JavaScript source files or directories.
+    One or more paths to source files or directories.
     Pass a directory with ``-r`` for recursive scanning.
     Mutually exclusive with ``--compile-commands``.
 
@@ -21,11 +21,10 @@ Options
 -------
 
 ``-r``, ``--recursive``
-    Recursively process all C/C++/Rust/Python/JavaScript source files (``.c``,
-    ``.cpp``, ``.cc``, ``.cxx``, ``.rs``, ``.py``, ``.js``, ``.mjs``,
-    ``.cjs``) in directories. Header files (``.h``, ``.hpp``, ``.hxx``) are
-    skipped unless explicitly included via a filter. Generates ``report.txt``
-    in the current directory.
+    Recursively process all supported source files in directories. See
+    :doc:`installation` for the full list of recognized extensions. Header
+    files (``.h``, ``.hpp``, ``.hxx``) are skipped unless explicitly included
+    via a filter. Generates ``report.txt`` in the current directory.
 
 ``-v``, ``--verbose``
     Show detailed per-function analysis including all test scoring sub-axes.
@@ -36,7 +35,9 @@ Options
 
 ``--compile-commands <FILE>``
     Use a ``compile_commands.json`` (from CMake, Bear, etc.) to get the file
-    list. Mutually exclusive with positional ``[FILE]...``.
+    list. **C/C++ only** — compilation databases are not produced by Rust,
+    Python, or JavaScript toolchains. Mutually exclusive with positional
+    ``[FILE]...``.
 
 ``--include <FILE>``
     Include filter rules from a JSON file (whitelist). See ``FILTERS``.

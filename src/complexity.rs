@@ -971,57 +971,43 @@ fn visit_node_observability(
 }
 
 /// Calculates documentation quality score (higher is better, reduces total difficulty)
+const DOC_TAGS: &[(&str, i32)] = &[
+    ("@intent",       5),
+    ("@param",        2),
+    ("@return",       2),
+    ("@requires",     2),
+    ("@ensures",      2),
+    ("@side_effects", 2),
+    ("@example",      3),
+    ("@edge_cases",   2),
+    ("@complexity",   2),
+];
+
 fn calculate_documentation_score(node: Node, source_code: &[u8]) -> i32 {
-    let mut score = 0;
-
-    // Look for comment before the function.
-    // C/C++ use "comment"; Rust uses "line_comment" (for // and ///) and "block_comment"
-    if let Some(prev_sibling) = node.prev_sibling() {
-        if matches!(
-            prev_sibling.kind(),
-            "comment" | "line_comment" | "block_comment"
-        ) {
-            if let Ok(comment_text) = prev_sibling.utf8_text(source_code) {
-                // Check for Doxygen-style documentation
-                if comment_text.contains("/**") || comment_text.contains("///") {
-                    score += 4; // Base documentation
-
-                    // Check for specific Doxygen tags
-                    if comment_text.contains("@intent") {
-                        score += 5;
-                    }
-                    if comment_text.contains("@param") {
-                        score += 2;
-                    }
-                    if comment_text.contains("@return") {
-                        score += 2;
-                    }
-                    if comment_text.contains("@requires") {
-                        score += 2;
-                    }
-                    if comment_text.contains("@ensures") {
-                        score += 2;
-                    }
-                    if comment_text.contains("@side_effects") {
-                        score += 2;
-                    }
-                    if comment_text.contains("@example") {
-                        score += 3;
-                    }
-                    if comment_text.contains("@edge_cases") {
-                        score += 2;
-                    }
-                    if comment_text.contains("@complexity") {
-                        score += 2;
-                    }
-                } else if comment_text.starts_with("//") || comment_text.starts_with("/*") {
-                    score += 2; // Basic comment
-                }
-            }
-        }
+    // Look for comment immediately before the function.
+    // C/C++ use "comment"; Rust uses "line_comment"/"block_comment".
+    let Some(prev) = node.prev_sibling() else {
+        return 0;
+    };
+    if !matches!(prev.kind(), "comment" | "line_comment" | "block_comment") {
+        return 0;
     }
+    let Ok(text) = prev.utf8_text(source_code) else {
+        return 0;
+    };
 
-    score.min(10)
+    if text.contains("/**") || text.contains("///") {
+        let tag_score: i32 = DOC_TAGS
+            .iter()
+            .filter(|(tag, _)| text.contains(tag))
+            .map(|(_, pts)| pts)
+            .sum();
+        (4 + tag_score).min(10)
+    } else if text.starts_with("//") || text.starts_with("/*") {
+        2
+    } else {
+        0
+    }
 }
 
 /// Calculates AI Reasoning Difficulty (AIRD): a normalized 0-100 estimate of how

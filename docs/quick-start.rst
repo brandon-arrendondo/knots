@@ -55,7 +55,7 @@ Recursive Directory Analysis
 
 Recursive mode:
 
-- Scans all ``.c`` / ``.cpp`` / ``.cc`` / ``.cxx`` / ``.rs`` / ``.py`` / ``.js`` / ``.mjs`` / ``.cjs`` files (headers skipped by default)
+- Scans all supported source files (see :doc:`installation` for the full extension list; headers skipped by default)
 - Shows top 5 worst functions by complexity
 - Displays totals and averages across all files
 - Writes per-function detail to ``report.txt``

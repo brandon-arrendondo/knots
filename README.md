@@ -1,6 +1,6 @@
 # Knots
 
-A fast C/C++/Rust/Python/JavaScript code complexity analyzer built on tree-sitter. Knots measures
+A fast multi-language code complexity analyzer built on tree-sitter. Knots measures
 traditional complexity metrics alongside two AI-specific cost scores — AIRD (AI
 Reasoning Difficulty) and AICP (AI Context Pressure) — to identify which functions
 are genuinely expensive to modify with AI assistance.
@@ -9,7 +9,7 @@ are genuinely expensive to modify with AI assistance.
 
 - **Multiple Complexity Metrics**: McCabe, Cognitive, Nesting Depth, SLOC, ABC, Test Scoring
 - **AI Cost Metrics**: AIRD (reasoning difficulty) and AICP (context pressure) — corpus-validated against 32,205 functions across 6 open-source C codebases
-- **Multi-Language**: C, C++, Rust, Python, and JavaScript — same metrics and thresholds across all five
+- **Multi-Language**: C, C++, Rust, Python, and JavaScript — same metrics and thresholds across all supported languages
 - **Testability Matrix**: Categorize functions by complexity and testability
 - **Multiple Output Formats**: text, SARIF, JSON, NDJSON (find/xargs-composable), CSV
 - **CI Threshold Enforcement**: exit 1 on any threshold violation; recommended `--aird-threshold 85`

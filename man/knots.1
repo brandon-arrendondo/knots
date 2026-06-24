@@ -1,6 +1,6 @@
-.TH KNOTS 1 "2026-06-24" "knots 1.8.2" "User Commands"
+.TH KNOTS 1 "2026-06-24" "knots 1.8.3" "User Commands"
 .SH NAME
-knots \- C/C++/Rust/Python/JavaScript code complexity analyzer with AI cost metrics
+knots \- multi-language code complexity analyzer with AI cost metrics
 .SH SYNOPSIS
 .B knots
 [\fIOPTIONS\fR] [\fIFILE\fR...]
@@ -9,7 +9,7 @@ knots \- C/C++/Rust/Python/JavaScript code complexity analyzer with AI cost metr
 [\fIOPTIONS\fR] \fB\-\-compile\-commands\fR <\fIFILE\fR>
 .SH DESCRIPTION
 .B knots
-is a fast C/C++/Rust/Python/JavaScript code complexity analyzer built on tree-sitter.
+is a fast multi-language code complexity analyzer built on tree-sitter.
 It measures traditional complexity metrics alongside two AI-specific cost scores \(em
 .B AIRD
 (AI Reasoning Difficulty) and
@@ -65,7 +65,7 @@ Formula: (external_calls/20 \(mu 60) + (sloc/200 \(mu 40) \(mi (doc_score/10 \(m
 .SH OPTIONS
 .TP
 .BR \-r ", " \-\-recursive
-Recursively process all C/C++/Rust/Python/JavaScript source files in directories.
+Recursively process all supported source files in directories.
 When used, a
 .I report.txt
 file is generated with per-function details.
@@ -86,6 +86,7 @@ REFACTOR (high complexity, hard to test).
 Use a
 .I compile_commands.json
 file (from CMake, Bear, etc.) to get the list of files to analyze.
+C/C++ only \(em compilation databases are not produced by Rust, Python, or JavaScript toolchains.
 Mutually exclusive with the positional \fIFILE\fR argument.
 .TP
 .BI \-\-include " FILE"

@@ -15,20 +15,28 @@ pub use tree_sitter_javascript;
 pub use tree_sitter_python;
 pub use tree_sitter_rust;
 
-/// C++ source file extensions (not headers)
-const CPP_SOURCE_EXTENSIONS: &[&str] = &["cpp", "cc", "cxx"];
-/// C++ header extensions
-const CPP_HEADER_EXTENSIONS: &[&str] = &["hpp", "hxx"];
+/// All source file extensions recognized by knots, grouped by language.
+/// This is the single source of truth — add new language extensions here.
+/// `.h` is intentionally excluded (treated as C by language_for_file but not
+/// scanned during recursive discovery, since headers often contain vendor/inline code).
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    // C
+    "c",
+    // C++
+    "cpp", "cc", "cxx", "hpp", "hxx",
+    // Rust
+    "rs",
+    // Python
+    "py",
+    // JavaScript
+    "js", "mjs", "cjs",
+];
 
 /// Returns the appropriate tree-sitter language for a file based on extension.
 /// `.h` defaults to C; C++ headers should use `.hpp`/`.hxx`.
-/// @brief Select tree-sitter language grammar by file extension
-/// @version 4
 pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
     match path.extension().and_then(|e| e.to_str()) {
-        Some(ext)
-            if CPP_SOURCE_EXTENSIONS.contains(&ext) || CPP_HEADER_EXTENSIONS.contains(&ext) =>
-        {
+        Some("cpp") | Some("cc") | Some("cxx") | Some("hpp") | Some("hxx") => {
             tree_sitter_cpp::language()
         }
         Some("rs") => tree_sitter_rust::language(),
@@ -38,13 +46,9 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
     }
 }
 
-/// Returns true if the extension is a C/C++/Rust/Python source file (not a header).
-/// @brief Check if file extension is a supported source extension
-/// @version 4
+/// Returns true if the file extension is supported by knots.
 pub fn is_source_extension(ext: &std::ffi::OsStr) -> bool {
-    match ext.to_str() {
-        Some("c") | Some("rs") | Some("py") | Some("js") | Some("mjs") | Some("cjs") => true,
-        Some(e) => CPP_SOURCE_EXTENSIONS.contains(&e),
-        None => false,
-    }
+    ext.to_str()
+        .map(|e| SUPPORTED_EXTENSIONS.contains(&e))
+        .unwrap_or(false)
 }
