@@ -48,6 +48,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#from-crates-io">From crates.io</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#from-source">From Source</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#supported-languages">Supported Languages</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
@@ -104,8 +105,19 @@
 </section>
 <section id="requirements">
 <h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading"></a></h2>
-<p>Rust 1.70 or higher. No C compiler, build system, or language server required —
-knots uses tree-sitter grammars bundled as Rust dependencies.</p>
+<p>Rust 1.70 or higher. No C compiler, Python interpreter, build system, or language
+server required — knots uses tree-sitter grammars bundled as Rust dependencies.</p>
+</section>
+<section id="supported-languages">
+<h2>Supported Languages<a class="headerlink" href="#supported-languages" title="Link to this heading"></a></h2>
+<p>Knots analyzes source files with these extensions:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">.c</span></code> — C</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.cc</span></code>, <code class="docutils literal notranslate"><span class="pre">.cxx</span></code> — C++</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.hpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.hxx</span></code> — C++ headers</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.rs</span></code> — Rust</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.py</span></code> — Python 3 (including decorated functions and class methods)</p></li>
+</ul>
 </section>
 </section>
 

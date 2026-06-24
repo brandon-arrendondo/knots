@@ -4,14 +4,31 @@ Metrics Reference
 Knots computes 13 metrics per function. All are present in JSON, NDJSON,
 and CSV output.
 
+Python Language Support
+-----------------------
+
+As of v1.7.0, knots supports Python (``.py``) in addition to C, C++, and Rust.
+All 13 metrics are computed. Python-specific notes:
+
+- **McCabe**: counts ``if``, ``elif``, ``while``, ``for``, ``except``, ``and``,
+  ``or``, ``match`` (3.10+), and ternary expressions
+- **Cognitive**: ``elif`` is a flat ``+1`` (no nesting penalty); ``lambda``
+  increments nesting depth without adding a base cost
+- **SLOC**: ``#`` comment lines are excluded
+- **External calls**: attribute-form calls (``obj.method()``, ``module.func()``)
+  are counted as external references
+- **Limitations**: ``for_in_clause`` inside comprehensions is not counted;
+  ``field_expression``-style calls are counted as external (conservative)
+
 McCabe Cyclomatic Complexity
 -----------------------------
 
 Counts the number of linearly independent paths through a function.
 
 - **Formula**: decision points + 1
-- **Decision points**: ``if``, ``while``, ``for``, ``do``, ``switch/case``,
-  ternary (``?:``), logical operators (``&&``, ``||``)
+- **Decision points**: ``if``/``elif``, ``while``, ``for``, ``do``,
+  ``switch``/``case``/``match``, ternary, logical operators (``&&``/``||``,
+  Python ``and``/``or``), ``except`` (Python and C++)
 - **Thresholds**: ≤10 good, 11–20 moderate, 21+ consider refactoring
 - **Validated**: 100% match with ``pmccabe`` output across a 32,205-function corpus
 

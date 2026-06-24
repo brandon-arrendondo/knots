@@ -23,5 +23,16 @@ From Source
 Requirements
 ------------
 
-Rust 1.70 or higher. No C compiler, build system, or language server required —
-knots uses tree-sitter grammars bundled as Rust dependencies.
+Rust 1.70 or higher. No C compiler, Python interpreter, build system, or language
+server required — knots uses tree-sitter grammars bundled as Rust dependencies.
+
+Supported Languages
+-------------------
+
+Knots analyzes source files with these extensions:
+
+* ``.c`` — C
+* ``.cpp``, ``.cc``, ``.cxx`` — C++
+* ``.hpp``, ``.hxx`` — C++ headers
+* ``.rs`` — Rust
+* ``.py`` — Python 3 (including decorated functions and class methods)
