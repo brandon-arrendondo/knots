@@ -17,20 +17,36 @@ repos:
       - id: check-yaml
 
   # Code complexity checking with knots
-  # pre-commit will automatically build and install knots when you run `pre-commit install`
+  # pre-commit will automatically build and install knots from source.
+  # If your team already has knots on PATH (released binary / package manager),
+  # use id: knots-system instead to skip the Rust toolchain requirement.
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v1.8.1
+    rev: v1.8.2
     hooks:
       # -----------------------------------------------------------------------
-      # All supported languages (see docs for full list)
-      # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50,
-      #                     ABC: 10.0, Returns: 3
-      # Shows only violations. Passes silently if no issues.
+      # All supported languages — default gate: AIRD ≤ 85
+      # Override thresholds via args: (pre-commit replaces args, so you get
+      # full additive and subtractive control with no duplicate-flag quirks)
       # -----------------------------------------------------------------------
       - id: knots
 
       # -----------------------------------------------------------------------
-      # C / C++ projects
+      # Custom thresholds — replaces the default args entirely
+      # -----------------------------------------------------------------------
+      # - id: knots
+      #   args:
+      #     - --mccabe-threshold=20
+      #     - --cognitive-threshold=15
+      #     - --nesting-threshold=7
+
+      # -----------------------------------------------------------------------
+      # AIRD-only gate (recommended for most teams)
+      # -----------------------------------------------------------------------
+      # - id: knots
+      #   args: [--aird-threshold=85]
+
+      # -----------------------------------------------------------------------
+      # C / C++ projects — restrict to those file types only
       # -----------------------------------------------------------------------
       # - id: knots
       #   types_or: [c, c++]
@@ -58,28 +74,23 @@ repos:
       #   exclude: ^(node_modules/|dist/|build/)
 
       # -----------------------------------------------------------------------
-      # Verbose output (shows summary even for passing files)
+      # Verbose output (shows per-function detail for all files)
       # -----------------------------------------------------------------------
       # - id: knots-verbose
 
       # -----------------------------------------------------------------------
       # Strict checking (McCabe: 10, Cognitive: 10, Nesting: 3, SLOC: 30,
-      #                  ABC: 5.0, Returns: 3)
+      #                  ABC: 5.0, Returns: 3) — fully baked, not overridable
       # -----------------------------------------------------------------------
       # - id: knots-strict
 
       # -----------------------------------------------------------------------
-      # Custom thresholds
-      # Note: custom thresholds automatically enable detailed analysis mode
+      # system variants — use when knots is already on PATH.
+      # No Rust toolchain install required; ideal for C-only shops or teams
+      # that distribute knots via a released binary.
       # -----------------------------------------------------------------------
-      # - id: knots
-      #   args:
-      #     - --mccabe-threshold=20
-      #     - --cognitive-threshold=15
-      #     - --nesting-threshold=7
-      #     - --sloc-threshold=100
-      #     - --abc-threshold=15.0
-      #     - --return-threshold=5
+      # - id: knots-system
+      # - id: knots-system-strict
 
       # -----------------------------------------------------------------------
       # Test quality validation (C/C++ Ceedling projects)

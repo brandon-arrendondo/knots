@@ -43,7 +43,7 @@ in test files:
 
     repos:
       - repo: https://github.com/brandon-arrendondo/knots
-        rev: v1.8.1
+        rev: v1.8.2
         hooks:
           # Main complexity check
           - id: knots

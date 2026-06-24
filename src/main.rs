@@ -155,12 +155,9 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[command(name = "knots")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Analyzes C/C++/Rust/Python code complexity with visual indicators: 😊 (1-10), 😐 (11-20), 😠 (21-49), 😢 (50+)", long_about = None)]
-// Last-wins on repeated flags. The pre-commit hook entry bakes default
-// thresholds (e.g. `--abc-threshold=10.0`); a consumer overriding one
-// via the hook's `args:` field appends a second occurrence. Without
-// this, clap rejects it with "cannot be used multiple times"; with it,
-// the consumer's value wins — matching the README's documented `args:`
-// customization.
+// Last-wins on repeated flags — allows a consumer who bakes thresholds
+// into a wrapper script or local hook override to append a second
+// occurrence and have it win rather than error.
 #[command(args_override_self = true)]
 struct Args {
     /// Path(s) to C/C++/Rust/Python files or directories to analyze
@@ -230,6 +227,10 @@ struct Args {
     /// Exit 1 if any function exceeds this external call count (default: off)
     #[arg(long, value_name = "N")]
     external_calls_threshold: Option<u32>,
+
+    /// Write detailed per-function report to this file (opt-in; omit to suppress the file)
+    #[arg(long, value_name = "FILE")]
+    report: Option<PathBuf>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -560,11 +561,12 @@ fn main() -> Result<()> {
         );
     }
 
-    // Write detailed report to file
-    write_detailed_report(&all_metrics, args.verbose)?;
+    if let Some(report_path) = &args.report {
+        write_detailed_report(&all_metrics, args.verbose, report_path)?;
+    }
 
     // Display summary with top 5 worst functions and totals/averages
-    display_recursive_summary(&all_metrics, files.len(), skipped_files);
+    display_recursive_summary(&all_metrics, files.len(), skipped_files, args.report.as_deref());
 
     check_thresholds(&all_metrics, &thresholds)?;
     Ok(())
@@ -1312,9 +1314,9 @@ fn path_to_sarif_uri(file_path: &str) -> String {
     file_path.replace('\\', "/")
 }
 
-/// Write detailed report to report.txt for recursive analysis
-fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Result<()> {
-    let mut file = fs::File::create("report.txt").context("Failed to create report.txt")?;
+fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool, path: &Path) -> Result<()> {
+    let mut file = fs::File::create(path)
+        .with_context(|| format!("Failed to create report file: {}", path.display()))?;
 
     for func in all_metrics {
         let emoji = get_complexity_emoji(func.max_complexity());
@@ -1381,11 +1383,11 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool) -> Resu
     Ok(())
 }
 
-/// Display summary with top 5 worst functions and totals/averages
 fn display_recursive_summary(
     all_metrics: &[FunctionMetrics],
     total_files: usize,
     skipped_files: usize,
+    report_path: Option<&Path>,
 ) {
     // Sort by worst complexity (max of McCabe and Cognitive)
     let mut sorted = all_metrics.to_vec();
@@ -1477,7 +1479,9 @@ fn display_recursive_summary(
         );
     }
 
-    println!("\nDetailed per-function output written to report.txt");
+    if let Some(path) = report_path {
+        println!("\nDetailed per-function output written to {}", path.display());
+    }
     println!("\n=== FILES PROCESSED ===\n");
     println!("  Total files found: {}", total_files);
     println!("  Successfully processed: {}", total_files - skipped_files);

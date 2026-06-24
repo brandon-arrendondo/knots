@@ -3,29 +3,58 @@
 #
 # These hooks use language: rust — pre-commit will automatically build and
 # install knots from this repo when users run `pre-commit install`.
+#
+# For teams that already have knots on PATH (e.g. installed via a released
+# binary), use the knots-system / knots-system-strict variants, which set
+# language: system and skip the Rust toolchain requirement.
 
-# Standard complexity check
+# Standard complexity check — AIRD gate only, fully overridable
+# Override thresholds by setting `args:` in your .pre-commit-config.yaml.
+# Because pre-commit *replaces* args (not appends), you get full control:
+#   args: [--mccabe-threshold=20, --cognitive-threshold=20]
 - id: knots
   name: Code Complexity Check
-  description: Check C, C++, Rust, Python, and JavaScript code complexity with default thresholds (McCabe 15, Cognitive 15, Nesting 5, SLOC 50, ABC 10.0, Returns 3)
-  entry: knots --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
+  description: Check code complexity; default gate is AIRD ≤ 85 (fully overridable via args:)
+  entry: knots
+  args: [--aird-threshold=85]
   language: rust
   types_or: [c, c++, rust, python, javascript]
 
-# Verbose variant - shows full per-function analysis for all files
+# Verbose variant — same overridable defaults, adds per-function detail to stdout
 - id: knots-verbose
   name: Code Complexity Check (Verbose)
-  description: Show detailed per-function output for C, C++, Rust, Python, and JavaScript; fails on same default thresholds
-  entry: knots --verbose --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
+  description: Show detailed per-function output; default gate is AIRD ≤ 85 (overridable via args:)
+  entry: knots
+  args: [--verbose, --aird-threshold=85]
   language: rust
   types_or: [c, c++, rust, python, javascript]
 
-# Strict variant - stricter thresholds
+# Strict variant — baked-in conservative thresholds for teams that want a
+# tighter baseline without managing args themselves
 - id: knots-strict
   name: Code Complexity Check (Strict)
   description: Strict thresholds for C, C++, Rust, Python, and JavaScript (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
-  entry: knots --mccabe-threshold=10 --cognitive-threshold=10 --nesting-threshold=3 --sloc-threshold=30 --abc-threshold=5.0 --return-threshold=3
+  entry: knots
+  args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=5.0, --return-threshold=3]
   language: rust
+  types_or: [c, c++, rust, python, javascript]
+
+# system variants — require knots on PATH; skip the Rust toolchain install.
+# Use these when your team installs knots via a released binary or package manager.
+- id: knots-system
+  name: Code Complexity Check (system)
+  description: Like knots but assumes knots is already on PATH (no Rust toolchain needed)
+  entry: knots
+  args: [--aird-threshold=85]
+  language: system
+  types_or: [c, c++, rust, python, javascript]
+
+- id: knots-system-strict
+  name: Code Complexity Check (system, strict)
+  description: Like knots-strict but assumes knots is already on PATH
+  entry: knots
+  args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=5.0, --return-threshold=3]
+  language: system
   types_or: [c, c++, rust, python, javascript]
 
 # Test quality checker - validates tests have sufficient complexity and boundary coverage
