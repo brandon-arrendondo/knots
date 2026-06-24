@@ -7,26 +7,26 @@
 # Standard complexity check
 - id: knots
   name: Code Complexity Check
-  description: Check C/C++ code complexity with default thresholds (McCabe 15, Cognitive 15, Nesting 5, SLOC 50, ABC 10.0, Returns 3)
+  description: Check C, C++, Rust, Python, and JavaScript code complexity with default thresholds (McCabe 15, Cognitive 15, Nesting 5, SLOC 50, ABC 10.0, Returns 3)
   entry: knots --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
   language: rust
-  types_or: [c, c++]
+  types_or: [c, c++, rust, python, javascript]
 
 # Verbose variant - shows full per-function analysis for all files
 - id: knots-verbose
   name: Code Complexity Check (Verbose)
-  description: Show detailed per-function output; fails on same default thresholds
+  description: Show detailed per-function output for C, C++, Rust, Python, and JavaScript; fails on same default thresholds
   entry: knots --verbose --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3
   language: rust
-  types_or: [c, c++]
+  types_or: [c, c++, rust, python, javascript]
 
 # Strict variant - stricter thresholds
 - id: knots-strict
   name: Code Complexity Check (Strict)
-  description: Strict thresholds (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
+  description: Strict thresholds for C, C++, Rust, Python, and JavaScript (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
   entry: knots --mccabe-threshold=10 --cognitive-threshold=10 --nesting-threshold=3 --sloc-threshold=30 --abc-threshold=5.0 --return-threshold=3
   language: rust
-  types_or: [c, c++]
+  types_or: [c, c++, rust, python, javascript]
 
 # Test quality checker - validates tests have sufficient complexity and boundary coverage
 # Default discovery: naming convention (test_foo.c / foo_test.c -> foo.c)

@@ -143,9 +143,11 @@ git commit --no-verify -m "Emergency fix"
 
 ## What Gets Checked?
 
-The hook checks:
-- All C/C++ source files (`.c`, `.cpp`, `.cc`, `.cxx`) being committed
-- All C/C++ header files (`.h`, `.hpp`, `.hxx`) being committed
+The hook checks all supported source files being staged:
+- C/C++: `.c`, `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hxx`
+- Rust: `.rs`
+- Python: `.py`
+- JavaScript: `.js`, `.mjs`, `.cjs`
 - Only files that are staged (in `git add`)
 
 Files NOT checked:
@@ -323,11 +325,12 @@ If you already have a pre-commit hook, integrate knots:
 
 # ... your existing checks ...
 
-# Add knots check
+# Add knots check (all supported languages)
 if command -v knots &> /dev/null; then
-    C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|h)$')
-    if [ -n "$C_FILES" ]; then
-        for file in $C_FILES; do
+    SRC_FILES=$(git diff --cached --name-only --diff-filter=ACM \
+        | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$')
+    if [ -n "$SRC_FILES" ]; then
+        for file in $SRC_FILES; do
             knots "$file" || exit 1
         done
     fi
@@ -342,13 +345,13 @@ fi
 A: Not directly. Consider using warning-only mode and manual review for complex files.
 
 **Q: Does this work with pre-commit framework (Python)?**
-A: Not currently, but you can wrap it. See "Advanced" section.
+A: Yes — see [PRE_COMMIT_FRAMEWORK.md](PRE_COMMIT_FRAMEWORK.md). The published hook is the recommended approach; the bash wrapper is also documented there.
 
 **Q: What happens with syntax errors?**
 A: The tool will fail gracefully and report the error. Commit is blocked.
 
 **Q: Can I check complexity without committing?**
-A: Yes! Run `knots file.c` manually anytime.
+A: Yes! Run `knots file.c` (or any supported file) manually anytime.
 
 **Q: Does this check files not in git?**
 A: No, only staged files. Use `knots *.c` to check all files.

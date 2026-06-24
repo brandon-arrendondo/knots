@@ -31,3 +31,12 @@ repos:
         pass_filenames: false
         types: [rust]
         verbose: true
+
+      - id: knots-self-check
+        name: knots (self-check)
+        description: Check this repo's own Rust source complexity with knots
+        entry: bash -c 'cargo run --quiet -- --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=10.0 --return-threshold=3 "$@"' --
+        language: system
+        types: [rust]
+        pass_filenames: true
+        verbose: true

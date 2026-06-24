@@ -37,16 +37,16 @@ repos:
         name: Code Complexity Check
         entry: /path/to/knots/hooks/pre-commit-wrapper.sh
         language: script
-        files: \.(c|h)$
+        files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
         pass_filenames: true
 ```
 
-**Or if knots is published:**
+**Recommended: use the published hook instead (handles language filtering automatically):**
 
 ```yaml
 repos:
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v0.2.0  # Use specific version
+    rev: v1.8.1
     hooks:
       - id: knots
 ```
@@ -82,7 +82,7 @@ All three hook variants use the same wrapper script but differ in their behavior
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       pass_filenames: true
 ```
 
@@ -101,7 +101,7 @@ All three hook variants use the same wrapper script but differ in their behavior
       name: Code Complexity Check (Verbose)
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh --verbose
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       pass_filenames: true
 ```
 
@@ -118,7 +118,7 @@ All three hook variants use the same wrapper script but differ in their behavior
       name: Code Complexity Check (Strict)
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh --mccabe-threshold 10 --cognitive-threshold 10
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       pass_filenames: true
 ```
 
@@ -171,7 +171,7 @@ If you're familiar with flake8, here's how knots arguments map to flake8 argumen
     - id: knots
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       exclude: ^(vendor/|third_party/)
       pass_filenames: true
       args:
@@ -191,7 +191,7 @@ Configure all available thresholds (similar to flake8):
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       pass_filenames: true
       args:
         - --mccabe-threshold=15
@@ -213,7 +213,7 @@ Or customize specific thresholds only:
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       pass_filenames: true
       args:
         - --mccabe-threshold=12
@@ -223,7 +223,7 @@ Or customize specific thresholds only:
 
 ### Custom File Pattern
 
-Only check `.c` source files (exclude headers and C++ files):
+Restrict to a specific language subset (e.g., only C source files):
 
 ```yaml
 - repo: local
@@ -232,7 +232,20 @@ Only check `.c` source files (exclude headers and C++ files):
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.c$  # Only .c files — default includes C++ extensions too
+      files: \.c$  # Only .c files
+      pass_filenames: true
+```
+
+Or restrict to Rust only:
+
+```yaml
+- repo: local
+  hooks:
+    - id: knots
+      name: Code Complexity Check
+      entry: /path/to/knots/hooks/pre-commit-wrapper.sh
+      language: script
+      files: \.rs$
       pass_filenames: true
 ```
 
@@ -245,7 +258,7 @@ Only check `.c` source files (exclude headers and C++ files):
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       exclude: ^(vendor/|third_party/)  # Exclude vendor code
       pass_filenames: true
 ```
@@ -270,7 +283,7 @@ repos:
         name: Code Complexity Check
         entry: /path/to/knots/hooks/pre-commit-wrapper.sh
         language: script
-        files: \.(c|h)$
+        files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
         exclude: ^(vendor/|third_party/)  # Exclude third-party code
         pass_filenames: true
         args:
@@ -391,7 +404,7 @@ Add `--verbose` to args or set `verbose: true`:
     - id: knots
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|h)$
+      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
       verbose: true
       args:
         - --verbose

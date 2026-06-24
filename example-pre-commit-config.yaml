@@ -4,6 +4,7 @@
 # Then run: pre-commit install
 #
 # See https://pre-commit.com for more information
+# knots supports multiple languages — see docs for the current list
 
 repos:
   # Standard pre-commit hooks
@@ -18,22 +19,59 @@ repos:
   # Code complexity checking with knots
   # pre-commit will automatically build and install knots when you run `pre-commit install`
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v1.4.1
+    rev: v1.8.1
     hooks:
-      # Standard complexity check
-      # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
+      # -----------------------------------------------------------------------
+      # All supported languages (see docs for full list)
+      # Default thresholds: McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50,
+      #                     ABC: 10.0, Returns: 3
       # Shows only violations. Passes silently if no issues.
+      # -----------------------------------------------------------------------
       - id: knots
-        exclude: ^(Drivers/|Middlewares/)  # Exclude vendor/generated code
 
-      # Uncomment for verbose output (shows summary even for passing files):
+      # -----------------------------------------------------------------------
+      # C / C++ projects
+      # -----------------------------------------------------------------------
+      # - id: knots
+      #   types_or: [c, c++]
+      #   exclude: ^(Drivers/|Middlewares/)  # Exclude vendor/generated code
+
+      # -----------------------------------------------------------------------
+      # Rust projects
+      # -----------------------------------------------------------------------
+      # - id: knots
+      #   types: [rust]
+      #   exclude: ^(target/|build\.rs$)
+
+      # -----------------------------------------------------------------------
+      # Python projects
+      # -----------------------------------------------------------------------
+      # - id: knots
+      #   types: [python]
+      #   exclude: ^(migrations/|setup\.py$)
+
+      # -----------------------------------------------------------------------
+      # JavaScript projects
+      # -----------------------------------------------------------------------
+      # - id: knots
+      #   types: [javascript]
+      #   exclude: ^(node_modules/|dist/|build/)
+
+      # -----------------------------------------------------------------------
+      # Verbose output (shows summary even for passing files)
+      # -----------------------------------------------------------------------
       # - id: knots-verbose
 
-      # Uncomment for strict checking (McCabe: 10, Cognitive: 10, Nesting: 3, SLOC: 30, ABC: 5.0):
+      # -----------------------------------------------------------------------
+      # Strict checking (McCabe: 10, Cognitive: 10, Nesting: 3, SLOC: 30,
+      #                  ABC: 5.0, Returns: 3)
+      # -----------------------------------------------------------------------
       # - id: knots-strict
 
-      # For custom thresholds, use the standard hook with args:
-      # Note: Custom thresholds automatically enable detailed analysis mode
+      # -----------------------------------------------------------------------
+      # Custom thresholds
+      # Note: custom thresholds automatically enable detailed analysis mode
+      # -----------------------------------------------------------------------
       # - id: knots
       #   args:
       #     - --mccabe-threshold=20
@@ -43,9 +81,11 @@ repos:
       #     - --abc-threshold=15.0
       #     - --return-threshold=5
 
-      # Test quality validation - for Ceedling framework
-      # Parses TEST_SOURCE_FILE("path/to/source.c") macro from test files
+      # -----------------------------------------------------------------------
+      # Test quality validation (C/C++ Ceedling projects)
+      # Parses TEST_SOURCE_FILE("path/to/source.c") from test files
       # Customize --test-dir for your test directory (Test/test/Tests/etc)
+      # -----------------------------------------------------------------------
       # - id: test-complexity
       #   args:
       #     - --threshold=0.70

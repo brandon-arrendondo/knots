@@ -56,17 +56,21 @@ analysis via ``find``/``xargs``.
 
 ::
 
-    # Composable across files
-    find . -name "*.c" | xargs knots --format ndjson > all_metrics.ndjson
+    # Composable across files (C/C++ project)
+    find . -name "*.c" -o -name "*.cpp" | xargs knots --format ndjson > all_metrics.ndjson
 
-    # Pipe directly to jq
-    find src/ -name "*.c" | xargs knots --format ndjson | jq 'select(.aird > 70)'
-
-    # Parallel per-file analysis
-    find . -name "*.c" | xargs -P4 -I{} sh -c 'knots --format ndjson {} >> metrics.ndjson'
+    # Python project corpus
+    find src/ -name "*.py" | xargs knots --format ndjson | jq 'select(.aird > 70)'
 
     # Rust project corpus
     find . -name "*.rs" | xargs knots --format ndjson | jq 'select(.cognitive > 20)'
+
+    # JavaScript project corpus
+    find src/ -name "*.js" -o -name "*.mjs" | xargs knots --format ndjson | jq 'select(.mccabe > 10)'
+
+    # Parallel per-file analysis (all supported languages)
+    find . \( -name "*.c" -o -name "*.cpp" -o -name "*.rs" -o -name "*.py" -o -name "*.js" \) \
+        | xargs -P4 -I{} sh -c 'knots --format ndjson {} >> metrics.ndjson'
 
 CSV
 ---

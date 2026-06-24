@@ -18,7 +18,7 @@ cp /path/to/knots/hooks/* .
 ## What You Get
 
 Every time you `git commit`, the hook will:
-1. Find all C/H files you're committing
+1. Find all supported source files you're committing (C, C++, Rust, Python, JavaScript)
 2. Check their complexity
 3. Block the commit if any function exceeds thresholds
 

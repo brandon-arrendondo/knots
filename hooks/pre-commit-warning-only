@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Pre-commit hook for knots (WARNING MODE)
-# Reports complexity but doesn't block commits
+# Reports complexity of C, C++, Rust, Python, and JavaScript files but doesn't block commits
 #
 # Installation:
 #   cp pre-commit-warning-only .git/hooks/pre-commit
@@ -27,14 +27,14 @@ if [ ! -x "$VALIDATOR_PATH" ]; then
     exit 0
 fi
 
-# Get list of C/C++ files being committed
-C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx)$')
+# Get list of supported source files being committed
+C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$')
 
 if [ -z "$C_FILES" ]; then
     exit 0
 fi
 
-echo "Checking complexity of C files..."
+echo "Checking complexity of staged files..."
 echo ""
 
 WARNINGS=0

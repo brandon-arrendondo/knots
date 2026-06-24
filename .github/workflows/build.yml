@@ -257,12 +257,12 @@ jobs:
           Architecture: amd64
           Maintainer: Brandon Arrendondo <brandon@arrendondo.dev>
           Homepage: https://github.com/brandon-arrendondo/knots
-          Description: C/C++ code complexity analyzer
-           A fast, powerful C/C++ code complexity analyzer with visual indicators,
-           built on tree-sitter. Knots computes McCabe cyclomatic complexity,
-           cognitive complexity, nesting depth, SLOC, ABC complexity, and test
-           scoring metrics. Includes knots-test-complexity for validating unit
-           test quality against source complexity.
+          Description: Multi-language code complexity analyzer
+           A fast, powerful code complexity analyzer for C, C++, Rust, Python, and
+           JavaScript with visual indicators, built on tree-sitter. Knots computes
+           McCabe cyclomatic complexity, cognitive complexity, nesting depth, SLOC,
+           ABC complexity, and test scoring metrics. Includes knots-test-complexity
+           for validating unit test quality against source complexity.
           EOF
           # Remove leading whitespace from control file (heredoc indentation)
           sed -i 's/^          //' "${PKG_DIR}/DEBIAN/control"
@@ -320,17 +320,17 @@ jobs:
           Name:           knots
           Version:        VERSION_PLACEHOLDER
           Release:        1%{?dist}
-          Summary:        C/C++ code complexity analyzer
+          Summary:        Multi-language code complexity analyzer
           License:        MIT
           URL:            https://github.com/brandon-arrendondo/knots
           Source0:        %{name}-%{version}.tar.gz
 
           %description
-          A fast, powerful C/C++ code complexity analyzer with visual indicators,
-          built on tree-sitter. Knots computes McCabe cyclomatic complexity,
-          cognitive complexity, nesting depth, SLOC, ABC complexity, and test
-          scoring metrics. Includes knots-test-complexity for validating unit
-          test quality against source complexity.
+          A fast, powerful code complexity analyzer for C, C++, Rust, Python, and
+          JavaScript with visual indicators, built on tree-sitter. Knots computes
+          McCabe cyclomatic complexity, cognitive complexity, nesting depth, SLOC,
+          ABC complexity, and test scoring metrics. Includes knots-test-complexity
+          for validating unit test quality against source complexity.
 
           %prep
           %setup -q
@@ -412,7 +412,7 @@ jobs:
           Name=knots
           Exec=knots
           Icon=knots
-          Comment=C/C++ code complexity analyzer
+          Comment=Multi-language code complexity analyzer
           Categories=Development;
           Terminal=true
           NoDisplay=true
