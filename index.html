@@ -1,0 +1,201 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knots User Guide &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Knots User Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="knots-user-guide">
+<h1>Knots User Guide<a class="headerlink" href="#knots-user-guide" title="Link to this heading"></a></h1>
+<p>Knots is a fast C/C++/Rust code complexity analyzer built on tree-sitter.
+It measures traditional complexity metrics alongside two AI-specific cost
+scores — AIRD (AI Reasoning Difficulty) and AICP (AI Context Pressure) —
+to identify which functions are genuinely expensive to modify with AI
+assistance.</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#from-crates-io">From crates.io</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#from-source">From Source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#requirements">Requirements</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="quick-start.html#single-file">Single File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quick-start.html#verbose-mode">Verbose Mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quick-start.html#recursive-directory-analysis">Recursive Directory Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quick-start.html#compile-commands-integration">Compile Commands Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quick-start.html#testability-matrix">Testability Matrix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quick-start.html#filtering">Filtering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quick-start.html#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#options">Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#informational">Informational</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#exit-status">Exit Status</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#complexity-indicators">Complexity Indicators</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#mccabe-cyclomatic-complexity">McCabe Cyclomatic Complexity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#cognitive-complexity">Cognitive Complexity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#nesting-depth">Nesting Depth</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#sloc-source-lines-of-code">SLOC (Source Lines of Code)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#abc-complexity">ABC Complexity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#test-scoring">Test Scoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#external-calls">External Calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#aird-ai-reasoning-difficulty">AIRD — AI Reasoning Difficulty</a></li>
+<li class="toctree-l2"><a class="reference internal" href="metrics-reference.html#aicp-ai-context-pressure">AICP — AI Context Pressure</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="output-formats.html#text-default">text (default)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output-formats.html#json">JSON</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output-formats.html#ndjson-newline-delimited-json">NDJSON (newline-delimited JSON)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output-formats.html#csv">CSV</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output-formats.html#sarif-vs-code-github-code-scanning">SARIF (VS Code / GitHub Code Scanning)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="ci-integration.html#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ci-integration.html#github-actions">GitHub Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ci-integration.html#pre-commit-hook">Pre-commit Hook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ci-integration.html#combining-with-other-tools">Combining with Other Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ci-integration.html#corpus-analysis">Corpus Analysis</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="test-complexity.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="test-complexity.html#key-features">Key Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="test-complexity.html#pre-commit-hook">Pre-commit Hook</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="alternatives.html#feature-comparison">Feature Comparison</a></li>
+<li class="toctree-l2"><a class="reference internal" href="alternatives.html#cognitive-complexity-algorithm-differences">Cognitive Complexity: Algorithm Differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="alternatives.html#when-to-choose-each-tool">When to Choose Each Tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#path-is-a-directory-use-r-recursive">“Path is a directory. Use -r/–recursive”</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#warning-skipping-file-stream-did-not-contain-valid-utf-8">“Warning: Skipping &lt;file&gt;: stream did not contain valid UTF-8”</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#no-supported-source-files-found-in-directory">“No supported source files found in directory”</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#metrics-seem-lower-than-expected-for-rust-vs-clippy">Metrics seem lower than expected for Rust (vs. clippy)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#report-txt-not-generated"><code class="docutils literal notranslate"><span class="pre">report.txt</span></code> not generated</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#sarif-has-no-results">SARIF has no results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#compile-commands-file-not-found-or-missing-files">Compile commands: “file not found” or missing files</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

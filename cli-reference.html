@@ -1,0 +1,254 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI Reference &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Metrics Reference" href="metrics-reference.html" />
+    <link rel="prev" title="Quick Start" href="quick-start.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">CLI Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#options">Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#informational">Informational</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#exit-status">Exit Status</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#complexity-indicators">Complexity Indicators</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">CLI Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cli-reference.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="cli-reference">
+<h1>CLI Reference<a class="headerlink" href="#cli-reference" title="Link to this heading"></a></h1>
+<section id="synopsis">
+<h2>Synopsis<a class="headerlink" href="#synopsis" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="p">[</span><span class="n">OPTIONS</span><span class="p">]</span> <span class="p">[</span><span class="n">FILE</span><span class="p">]</span><span class="o">...</span>
+<span class="n">knots</span> <span class="p">[</span><span class="n">OPTIONS</span><span class="p">]</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="o">&lt;</span><span class="n">FILE</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+</section>
+<section id="positional-arguments">
+<h2>Positional Arguments<a class="headerlink" href="#positional-arguments" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">[FILE]...</span></code></dt><dd><p>One or more paths to C/C++/Rust source files or directories.
+Pass a directory with <code class="docutils literal notranslate"><span class="pre">-r</span></code> for recursive scanning.
+Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">--compile-commands</span></code>.</p>
+</dd>
+</dl>
+</section>
+<section id="options">
+<h2>Options<a class="headerlink" href="#options" title="Link to this heading"></a></h2>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">-r</span></code>, <code class="docutils literal notranslate"><span class="pre">--recursive</span></code></dt><dd><p>Recursively process all C/C++/Rust source files (<code class="docutils literal notranslate"><span class="pre">.c</span></code>, <code class="docutils literal notranslate"><span class="pre">.cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.cc</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.cxx</span></code>, <code class="docutils literal notranslate"><span class="pre">.rs</span></code>) in directories. Header files (<code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.hpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.hxx</span></code>)
+are skipped unless explicitly included via a filter. Generates <code class="docutils literal notranslate"><span class="pre">report.txt</span></code>
+in the current directory.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-v</span></code>, <code class="docutils literal notranslate"><span class="pre">--verbose</span></code></dt><dd><p>Show detailed per-function analysis including all test scoring sub-axes.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-m</span></code>, <code class="docutils literal notranslate"><span class="pre">--matrix</span></code></dt><dd><p>Show testability matrix categorization. Functions are placed into four
+quadrants: QUICK WINS, INVEST IN TESTS, ADD DOCS, REFACTOR.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--compile-commands</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Use a <code class="docutils literal notranslate"><span class="pre">compile_commands.json</span></code> (from CMake, Bear, etc.) to get the file
+list. Mutually exclusive with positional <code class="docutils literal notranslate"><span class="pre">[FILE]...</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--include</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Include filter rules from a JSON file (whitelist). See <code class="docutils literal notranslate"><span class="pre">FILTERS</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--exclude</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Exclude filter rules from a JSON file (blacklist). See <code class="docutils literal notranslate"><span class="pre">FILTERS</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">&lt;FORMAT&gt;</span></code></dt><dd><p>Output format. One of:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12.0%" />
+<col style="width: 88.0%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
+<td><p>Human-readable output (default).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sarif</span></code></p></td>
+<td><p>SARIF 2.1.0 JSON for VS Code / GitHub Code Scanning.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">json</span></code></p></td>
+<td><p>JSON array of per-function metrics.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ndjson</span></code></p></td>
+<td><p>Newline-delimited JSON — one record per line; composable via <code class="docutils literal notranslate"><span class="pre">find</span></code>/<code class="docutils literal notranslate"><span class="pre">xargs</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">csv</span></code></p></td>
+<td><p>CSV with header row.</p></td>
+</tr>
+</tbody>
+</table>
+</dd>
+</dl>
+</section>
+<section id="threshold-flags">
+<h2>Threshold Flags<a class="headerlink" href="#threshold-flags" title="Link to this heading"></a></h2>
+<p>All threshold flags cause knots to exit with status 1 if any function
+exceeds the specified value.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--mccabe-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>McCabe cyclomatic complexity.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--cognitive-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Cognitive complexity (Campbell spec).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--nesting-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Nesting depth.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--sloc-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Source lines of code.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--abc-threshold</span> <span class="pre">&lt;F&gt;</span></code></dt><dd><p>ABC magnitude (floating-point).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--return-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Return statement count.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AIRD score. Recommended value: <code class="docutils literal notranslate"><span class="pre">85</span></code> (empirically validated against
+Sonnet 4.6 and Opus 4.8).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--aicp-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AICP score.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--external-calls-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>External call count.</p>
+</dd>
+</dl>
+</section>
+<section id="informational">
+<h2>Informational<a class="headerlink" href="#informational" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">-h</span></code>, <code class="docutils literal notranslate"><span class="pre">--help</span></code></dt><dd><p>Print help.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-V</span></code>, <code class="docutils literal notranslate"><span class="pre">--version</span></code></dt><dd><p>Print version.</p>
+</dd>
+</dl>
+</section>
+<section id="exit-status">
+<h2>Exit Status<a class="headerlink" href="#exit-status" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">0</span></code></dt><dd><p>Successful analysis, no threshold violations.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>Error (file not found, parse error, invalid arguments), or one or more
+threshold violations when any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag is set.</p>
+</dd>
+</dl>
+</section>
+<section id="complexity-indicators">
+<h2>Complexity Indicators<a class="headerlink" href="#complexity-indicators" title="Link to this heading"></a></h2>
+<p>Knots uses visual emoji indicators based on <code class="docutils literal notranslate"><span class="pre">max(McCabe,</span> <span class="pre">cognitive)</span></code>:</p>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">1–10</span></code></p></td>
+<td><p>😊 Good — low complexity, easy to maintain</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">11–20</span></code></p></td>
+<td><p>😐 Okay — moderate complexity, monitor</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">21–49</span></code></p></td>
+<td><p>😠 Bad — high complexity, consider refactoring</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">50+</span></code></p></td>
+<td><p>😢 Critical — urgent refactoring needed</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="quick-start.html" class="btn btn-neutral float-left" title="Quick Start" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="metrics-reference.html" class="btn btn-neutral float-right" title="Metrics Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

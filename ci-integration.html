@@ -1,0 +1,223 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CI Integration &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Test Quality Analysis (knots-test-complexity)" href="test-complexity.html" />
+    <link rel="prev" title="Output Formats" href="output-formats.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">CI Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#github-actions">GitHub Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pre-commit-hook">Pre-commit Hook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#combining-with-other-tools">Combining with Other Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#corpus-analysis">Corpus Analysis</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">CI Integration</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/ci-integration.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="ci-integration">
+<h1>CI Integration<a class="headerlink" href="#ci-integration" title="Link to this heading"></a></h1>
+<section id="threshold-flags">
+<h2>Threshold Flags<a class="headerlink" href="#threshold-flags" title="Link to this heading"></a></h2>
+<p>Any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag causes knots to exit with status 1 if any
+function exceeds the specified value. Use these as CI gates:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Fail if any function has AIRD &gt; 85 (recommended threshold)</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">src</span><span class="o">/</span> <span class="o">--</span><span class="n">aird</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">85</span>
+
+<span class="c1"># Enforce multiple metrics at once</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">src</span><span class="o">/</span> \
+    <span class="o">--</span><span class="n">aird</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">85</span> \
+    <span class="o">--</span><span class="n">mccabe</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">20</span> \
+    <span class="o">--</span><span class="n">cognitive</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">15</span> \
+    <span class="o">--</span><span class="n">nesting</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">5</span>
+</pre></div>
+</div>
+<p>The recommended starting point is <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code>, which was
+empirically validated against Sonnet 4.6 and Opus 4.8. See
+<a class="reference internal" href="metrics-reference.html"><span class="doc">Metrics Reference</span></a> for AIRD formula and corpus distribution.</p>
+</section>
+<section id="github-actions">
+<h2>GitHub Actions<a class="headerlink" href="#github-actions" title="Link to this heading"></a></h2>
+<p>Basic CI gate:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Complexity gate</span>
+<span class="w">  </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots -r src/ --aird-threshold 85</span>
+</pre></div>
+</div>
+<p>SARIF upload for PR annotations:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Run knots</span>
+<span class="w">  </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots -r --format sarif src/ &gt; knots.sarif</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Upload SARIF</span>
+<span class="w">  </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github/codeql-action/upload-sarif@v3</span>
+<span class="w">  </span><span class="nt">with</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">sarif_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots.sarif</span>
+</pre></div>
+</div>
+</section>
+<section id="pre-commit-hook">
+<h2>Pre-commit Hook<a class="headerlink" href="#pre-commit-hook" title="Link to this heading"></a></h2>
+<p>Knots integrates with the <a class="reference external" href="https://pre-commit.com">pre-commit</a> framework.
+Add to <code class="docutils literal notranslate"><span class="pre">.pre-commit-config.yaml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">repos</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/brandon-arrendondo/knots</span>
+<span class="w">    </span><span class="nt">rev</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.6.0</span>
+<span class="w">    </span><span class="nt">hooks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span><span class="w">          </span><span class="c1"># default thresholds</span>
+<span class="w">      </span><span class="c1"># - id: knots-verbose  # same thresholds, per-function detail</span>
+<span class="w">      </span><span class="c1"># - id: knots-strict   # stricter: McCabe 10, Cognitive 10</span>
+</pre></div>
+</div>
+<p>Then install:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pre</span><span class="o">-</span><span class="n">commit</span> <span class="n">install</span>
+</pre></div>
+</div>
+<p>Custom thresholds via <code class="docutils literal notranslate"><span class="pre">args</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>
+<span class="w">  </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--mccabe-threshold=20</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--cognitive-threshold=15</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--aird-threshold=85</span>
+</pre></div>
+</div>
+<p>Exclude vendor/driver directories:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>
+<span class="w">  </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--mccabe-threshold=15</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">--cognitive-threshold=15</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^(Drivers/|Middlewares/|third_party/)</span>
+</pre></div>
+</div>
+<p>See <code class="docutils literal notranslate"><span class="pre">example-pre-commit-config.yaml</span></code> in the repository for a full example.</p>
+</section>
+<section id="combining-with-other-tools">
+<h2>Combining with Other Tools<a class="headerlink" href="#combining-with-other-tools" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span># Run alongside cppcheck
+knots -r src/ &gt; complexity.txt
+cppcheck src/ 2&gt; cppcheck.txt
+
+# Find high-complexity functions that also have cppcheck warnings
+grep -f &lt;(knots -r src/ | grep 😢 | cut -d&#39; &#39; -f2) cppcheck.txt
+</pre></div>
+</div>
+</section>
+<section id="corpus-analysis">
+<h2>Corpus Analysis<a class="headerlink" href="#corpus-analysis" title="Link to this heading"></a></h2>
+<p>For large-scale analysis across many files, NDJSON is the most composable
+format:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Analyze entire project, one record per function</span>
+<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.rs&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">ndjson</span>
+
+<span class="c1"># Functions above AIRD threshold</span>
+<span class="n">jq</span> <span class="s1">&#39;select(.aird &gt; 85)&#39;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">ndjson</span>
+
+<span class="c1"># Top 10 by cognitive complexity</span>
+<span class="n">jq</span> <span class="o">-</span><span class="n">s</span> <span class="s1">&#39;sort_by(-.cognitive) | .[0:10]&#39;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">ndjson</span>
+
+<span class="c1"># Per-file average AIRD</span>
+<span class="n">jq</span> <span class="o">-</span><span class="n">s</span> <span class="s1">&#39;group_by(.file) | map({file: .[0].file, avg_aird: (map(.aird) | add / length)})&#39;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">ndjson</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="output-formats.html" class="btn btn-neutral float-left" title="Output Formats" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="test-complexity.html" class="btn btn-neutral float-right" title="Test Quality Analysis (knots-test-complexity)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

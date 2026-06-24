@@ -1,0 +1,400 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alternatives Comparison &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Troubleshooting" href="troubleshooting.html" />
+    <link rel="prev" title="Test Quality Analysis (knots-test-complexity)" href="test-complexity.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Alternatives Comparison</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#feature-comparison">Feature Comparison</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cognitive-complexity-algorithm-differences">Cognitive Complexity: Algorithm Differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#when-to-choose-each-tool">When to Choose Each Tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Alternatives Comparison</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/alternatives.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="alternatives-comparison">
+<h1>Alternatives Comparison<a class="headerlink" href="#alternatives-comparison" title="Link to this heading"></a></h1>
+<p>Several tools measure code complexity for C/C++ and Rust. This page compares
+knots against the most commonly used alternatives, with empirical validation
+data where available.</p>
+<section id="feature-comparison">
+<h2>Feature Comparison<a class="headerlink" href="#feature-comparison" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 41.4%" />
+<col style="width: 13.8%" />
+<col style="width: 13.8%" />
+<col style="width: 17.2%" />
+<col style="width: 13.8%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feature</p></th>
+<th class="head"><p>knots</p></th>
+<th class="head"><p><a class="reference external" href="https://github.com/terryyin/lizard">lizard</a></p></th>
+<th class="head"><p><a class="reference external" href="https://github.com/mozilla/rust-code-analysis">rust-code-analysis</a></p></th>
+<th class="head"><p><a class="reference external" href="https://github.com/rust-lang/rust-clippy">clippy</a></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Languages</strong></p></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>C / C++</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>Rust</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+</tr>
+<tr class="row-odd"><td><p>30+ other languages</p></td>
+<td><p>✗</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Metrics</strong></p></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>McCabe cyclomatic</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>lint only</p></td>
+</tr>
+<tr class="row-even"><td><p>Cognitive complexity (Campbell spec)</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗ (see note)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Nesting depth</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>SLOC</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-odd"><td><p>ABC complexity</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>Halstead / MI</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-odd"><td><p>Test scoring</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>AIRD (AI reasoning difficulty)</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-odd"><td><p>AICP (AI context pressure)</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>External call count</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Output</strong></p></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>Human-readable text</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+</tr>
+<tr class="row-odd"><td><p>JSON</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>NDJSON (find/xargs composable)</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-odd"><td><p>CSV</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>SARIF (VS Code / GitHub)</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✓</p></td>
+</tr>
+<tr class="row-odd"><td><p>Testability matrix</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Integration</strong></p></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>CI threshold flags</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>partial</p></td>
+<td><p>✓</p></td>
+</tr>
+<tr class="row-even"><td><p>Pre-commit hook (native)</p></td>
+<td><p>✓</p></td>
+<td><p>manual</p></td>
+<td><p>✗</p></td>
+<td><p>manual</p></td>
+</tr>
+<tr class="row-odd"><td><p>No compiler / build required</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-even"><td><p>pmccabe-compatible output</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+<tr class="row-odd"><td><p>Tree-sitter based</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+<td><p>✗</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cognitive-complexity-algorithm-differences">
+<h2>Cognitive Complexity: Algorithm Differences<a class="headerlink" href="#cognitive-complexity-algorithm-differences" title="Link to this heading"></a></h2>
+<p>All four tools claim to measure “cognitive complexity,” but they are <strong>not
+computing the same thing</strong>. This was validated empirically against 285k lines
+of Rust in a real-world codebase (11,365 functions from <code class="docutils literal notranslate"><span class="pre">tools_sqc</span></code>).</p>
+<p><strong>knots and rust-code-analysis produce essentially identical scores</strong> (mean
+ratio 1.004, median 1.000 across 17 matched high-complexity functions). Both
+implement the <a class="reference external" href="https://www.sonarsource.com/resources/cognitive-complexity/">G. Ann Campbell cognitive complexity specification</a>: loops,
+conditionals, and match expressions each add <code class="docutils literal notranslate"><span class="pre">1</span> <span class="pre">+</span> <span class="pre">nesting_level</span></code>, where
+nesting level accumulates through nested control flow including closures.</p>
+<p><strong>Clippy’s ``cognitive_complexity`` lint uses a fundamentally different
+algorithm</strong> that diverges from the Campbell spec in three major ways (sourced
+from <code class="docutils literal notranslate"><span class="pre">clippy_lints/src/cognitive_complexity.rs</span></code>):</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 35.0%" />
+<col style="width: 35.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspect</p></th>
+<th class="head"><p>Campbell spec / knots / RCA</p></th>
+<th class="head"><p>Clippy</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">for</span></code> / <code class="docutils literal notranslate"><span class="pre">while</span></code> / <code class="docutils literal notranslate"><span class="pre">loop</span></code></p></td>
+<td><p>+1 + nesting_level each</p></td>
+<td><p><strong>not counted</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>Nesting penalty</p></td>
+<td><p>accumulated per level</p></td>
+<td><p><strong>no nesting penalty</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Closures</p></td>
+<td><p>increase nesting level for inner code</p></td>
+<td><p><strong>analyzed as separate functions</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">match</span></code></p></td>
+<td><p>+1 + nesting_level</p></td>
+<td><p>+1 if &gt;1 arms (flat, no nesting)</p></td>
+</tr>
+<tr class="row-even"><td><p>Guard clauses</p></td>
+<td><p>not counted separately</p></td>
+<td><p>+1 per arm guard</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">return</span></code> statements</p></td>
+<td><p>not counted</p></td>
+<td><p>+1 (minus adjustment for Result types)</p></td>
+</tr>
+</tbody>
+</table>
+<p>The practical result: <strong>clippy reports 3–4× lower scores</strong> than knots or
+rust-code-analysis for the same functions (mean 0.29×, range 0.16×–0.50×).
+A function that knots scores at ~75 will typically score ~25 in clippy —
+right at clippy’s default threshold of 25.</p>
+<p><strong>Threshold equivalence</strong>: clippy threshold 25 ≈ knots/RCA threshold 75–100.</p>
+<p>Neither implementation is wrong in an absolute sense; they measure different
+things under the same name. Knots and rust-code-analysis follow the published
+spec; clippy’s lint is a simplified heuristic tuned to fire at
+Rust-idiomatic complexity boundaries.</p>
+</section>
+<section id="when-to-choose-each-tool">
+<h2>When to Choose Each Tool<a class="headerlink" href="#when-to-choose-each-tool" title="Link to this heading"></a></h2>
+<p><strong>Choose knots when:</strong></p>
+<ul class="simple">
+<li><p>You need <strong>AI cost signals</strong> (AIRD/AICP) to gate AI-assisted workflows or
+identify functions that are expensive to modify with an LLM</p></li>
+<li><p>You want <strong>CI threshold enforcement</strong> across C, C++, and Rust in one pass</p></li>
+<li><p>You want <strong>SARIF output</strong> for PR annotations in GitHub Code Scanning</p></li>
+<li><p>You want <strong>NDJSON corpus analysis</strong> composable via <code class="docutils literal notranslate"><span class="pre">find</span></code>/<code class="docutils literal notranslate"><span class="pre">xargs</span></code></p></li>
+<li><p>You want a <strong>pre-commit hook</strong> that works out of the box</p></li>
+<li><p>You want <strong>test quality enforcement</strong> via the companion <code class="docutils literal notranslate"><span class="pre">knots-test-complexity</span></code></p></li>
+</ul>
+<p><strong>Choose an alternative when:</strong></p>
+<ul class="simple">
+<li><p><strong>lizard</strong>: you need 30+ language support, or you’re already using it and
+don’t need AI metrics</p></li>
+<li><p><strong>rust-code-analysis</strong>: you need Halstead metrics or Maintainability Index
+for Rust/Java/Python</p></li>
+<li><p><strong>clippy</strong>: you want deep Rust semantic analysis, idiomatic style
+enforcement, and unsafe lints; note that its <code class="docutils literal notranslate"><span class="pre">cognitive_complexity</span></code> lint
+uses a simplified algorithm (see above) with a very different scale</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="test-complexity.html" class="btn btn-neutral float-left" title="Test Quality Analysis (knots-test-complexity)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="troubleshooting.html" class="btn btn-neutral float-right" title="Troubleshooting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

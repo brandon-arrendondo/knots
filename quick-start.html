@@ -1,0 +1,308 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quick Start &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="CLI Reference" href="cli-reference.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quick Start</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#single-file">Single File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#verbose-mode">Verbose Mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#recursive-directory-analysis">Recursive Directory Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#compile-commands-integration">Compile Commands Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#testability-matrix">Testability Matrix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#filtering">Filtering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Quick Start</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/quick-start.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="quick-start">
+<h1>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h1>
+<section id="single-file">
+<h2>Single File<a class="headerlink" href="#single-file" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="n">src</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">c</span>
+</pre></div>
+</div>
+<p>Output shows per-function metrics:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>😊 init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
+😠 process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
+
+Summary:
+  Total Functions: 2
+  Average McCabe Complexity: 15.50
+  Average AIRD Score: 45.50
+  Average AICP Score: 40.00
+</pre></div>
+</div>
+</section>
+<section id="verbose-mode">
+<h2>Verbose Mode<a class="headerlink" href="#verbose-mode" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">v</span> <span class="n">src</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">c</span>
+</pre></div>
+</div>
+<p>Shows a detailed per-function breakdown including all test scoring sub-axes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Function: process_data 😠
+  McCabe Complexity: 28
+  Cognitive Complexity: 45
+  Nesting Depth: 8
+  SLOC: 120
+  ABC Magnitude: 35.71
+  Return Count: 7
+  Test Scoring: 18 (Simple)
+    - Signature: 3
+    - Dependency: 5
+    - Observable: 2
+    - Implementation: 8
+    - Documentation: 0
+  AIRD Score: 87
+  AICP Score: 72
+  External Calls: 14
+  Max Complexity: 45
+</pre></div>
+</div>
+</section>
+<section id="recursive-directory-analysis">
+<h2>Recursive Directory Analysis<a class="headerlink" href="#recursive-directory-analysis" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">~/</span><span class="n">projects</span><span class="o">/</span><span class="n">myproject</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>Recursive mode:</p>
+<ul class="simple">
+<li><p>Scans all <code class="docutils literal notranslate"><span class="pre">.c</span></code> / <code class="docutils literal notranslate"><span class="pre">.cpp</span></code> / <code class="docutils literal notranslate"><span class="pre">.cc</span></code> / <code class="docutils literal notranslate"><span class="pre">.cxx</span></code> / <code class="docutils literal notranslate"><span class="pre">.rs</span></code> files (headers skipped by default)</p></li>
+<li><p>Shows top 5 worst functions by complexity</p></li>
+<li><p>Displays totals and averages across all files</p></li>
+<li><p>Writes per-function detail to <code class="docutils literal notranslate"><span class="pre">report.txt</span></code></p></li>
+<li><p>Reports file processing statistics</p></li>
+</ul>
+<p>Example output:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>=== TOP 5 WORST FUNCTIONS ===
+
+1. 😢 HAL_RCC_OscConfig [drivers/hal_rcc.c]
+   McCabe: 71, Cognitive: 214, Nesting: 11, SLOC: 327, ABC: 134.90, Returns: 23, TestScore: 9
+
+=== TOTALS &amp; AVERAGES ===
+
+  Total Functions: 3404
+  Average McCabe Complexity: 2.02
+  Average Cognitive Complexity: 1.65
+
+Detailed per-function output written to report.txt
+
+=== FILES PROCESSED ===
+
+  Total files found: 165
+  Successfully processed: 163
+  Skipped (encoding/parse errors): 2
+</pre></div>
+</div>
+<p>To include header files, use an include filter:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/*.c&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;**/*.h&quot;</span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="compile-commands-integration">
+<h2>Compile Commands Integration<a class="headerlink" href="#compile-commands-integration" title="Link to this heading"></a></h2>
+<p>Knots can analyze the file set from a <code class="docutils literal notranslate"><span class="pre">compile_commands.json</span></code> (CMake, Bear, Clang):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">build</span><span class="o">/</span><span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span>
+<span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span> <span class="o">-</span><span class="n">v</span>
+<span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span> <span class="o">-</span><span class="n">m</span>
+<span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span> <span class="o">--</span><span class="n">include</span> <span class="nb">filter</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>Generating <code class="docutils literal notranslate"><span class="pre">compile_commands.json</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># CMake</span>
+<span class="n">cmake</span> <span class="o">-</span><span class="n">DCMAKE_EXPORT_COMPILE_COMMANDS</span><span class="o">=</span><span class="n">ON</span> <span class="o">-</span><span class="n">B</span> <span class="n">build</span>
+
+<span class="c1"># Makefile projects with Bear</span>
+<span class="n">bear</span> <span class="o">--</span> <span class="n">make</span>
+</pre></div>
+</div>
+</section>
+<section id="testability-matrix">
+<h2>Testability Matrix<a class="headerlink" href="#testability-matrix" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">m</span> <span class="n">src</span><span class="o">/</span><span class="n">module</span><span class="o">.</span><span class="n">c</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">m</span> <span class="o">~/</span><span class="n">projects</span><span class="o">/</span><span class="n">myproject</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>The matrix places each function in one of four quadrants:</p>
+<ul class="simple">
+<li><p><strong>QUICK WINS</strong> — low complexity, easy to test → automate testing</p></li>
+<li><p><strong>INVEST IN TESTS</strong> — high complexity, easy to test → priority for unit tests</p></li>
+<li><p><strong>ADD DOCS</strong> — low complexity, hard to test → needs better documentation</p></li>
+<li><p><strong>REFACTOR</strong> — high complexity, hard to test → high risk, refactor first</p></li>
+</ul>
+<p>Example output:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>=== TESTABILITY MATRIX ===
+
+📊 QUICK WINS (Low Complexity, Easy to Test) - Automate!
+=========================================================
+  ✓ init_module [src/module.c] (McCabe: 2, TestScore: 3)
+
+🚨 REFACTOR (High Complexity, Hard to Test) - HIGH RISK!
+========================================================
+  ⛔ process_matrix [src/complex.c] (McCabe: 35, TestScore: 45)
+</pre></div>
+</div>
+</section>
+<section id="filtering">
+<h2>Filtering<a class="headerlink" href="#filtering" title="Link to this heading"></a></h2>
+<p>Use JSON files to scope analysis to specific files or functions:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">.</span> <span class="o">--</span><span class="n">include</span> <span class="nb">filter</span><span class="o">.</span><span class="n">json</span> <span class="o">--</span><span class="n">exclude</span> <span class="n">exclude</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>Filter schema:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;src/**/*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;!**/vendor/**&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;!**/test_*.c&quot;</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;function_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;^process_.*&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;^handle_.*&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;min_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;max_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>All fields are optional and combinable. <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> supports <code class="docutils literal notranslate"><span class="pre">*</span></code>,
+<code class="docutils literal notranslate"><span class="pre">**</span></code>, and <code class="docutils literal notranslate"><span class="pre">!</span></code> for negation. <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> are regular expressions.</p>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<p>Quick health check:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">~/</span><span class="n">myproject</span><span class="o">/</span> <span class="o">|</span> <span class="n">head</span> <span class="o">-</span><span class="mi">20</span>
+</pre></div>
+</div>
+<p>Generate a comprehensive report:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">v</span> <span class="o">~/</span><span class="n">myproject</span><span class="o">/</span>
+<span class="n">less</span> <span class="n">report</span><span class="o">.</span><span class="n">txt</span>
+</pre></div>
+</div>
+<p>Find high-complexity, hard-to-test functions:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">echo</span> <span class="s1">&#39;{&quot;min_complexity&quot;: 15}&#39;</span> <span class="o">&gt;</span> <span class="nb">complex</span><span class="o">.</span><span class="n">json</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">m</span> <span class="o">~/</span><span class="n">myproject</span><span class="o">/</span> <span class="o">--</span><span class="n">include</span> <span class="nb">complex</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>Analyze only files modified in the last commit:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">diff</span> <span class="o">--</span><span class="n">name</span><span class="o">-</span><span class="n">only</span> <span class="n">HEAD</span><span class="o">~</span><span class="mi">1</span> <span class="o">|</span> <span class="n">grep</span> <span class="o">-</span><span class="n">E</span> <span class="s1">&#39;\.(c|cpp|cc|cxx|rs)$&#39;</span> <span class="o">|</span> <span class="k">while</span> <span class="n">read</span> <span class="n">f</span><span class="p">;</span> <span class="n">do</span>
+    <span class="n">knots</span> <span class="s2">&quot;$f&quot;</span>
+<span class="n">done</span>
+</pre></div>
+</div>
+<p>CMake/build system workflow:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cmake</span> <span class="o">-</span><span class="n">DCMAKE_EXPORT_COMPILE_COMMANDS</span><span class="o">=</span><span class="n">ON</span> <span class="o">-</span><span class="n">B</span> <span class="n">build</span>
+<span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">build</span><span class="o">/</span><span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span> <span class="o">-</span><span class="n">m</span>
+
+<span class="c1"># For Makefile projects</span>
+<span class="n">bear</span> <span class="o">--</span> <span class="n">make</span> <span class="n">clean</span> <span class="nb">all</span>
+<span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span> <span class="o">-</span><span class="n">v</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cli-reference.html" class="btn btn-neutral float-right" title="CLI Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

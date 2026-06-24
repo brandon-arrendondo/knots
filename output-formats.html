@@ -1,0 +1,234 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Output Formats &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="CI Integration" href="ci-integration.html" />
+    <link rel="prev" title="Metrics Reference" href="metrics-reference.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Output Formats</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#text-default">text (default)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#json">JSON</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ndjson-newline-delimited-json">NDJSON (newline-delimited JSON)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#csv">CSV</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#sarif-vs-code-github-code-scanning">SARIF (VS Code / GitHub Code Scanning)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Output Formats</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/output-formats.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="output-formats">
+<h1>Output Formats<a class="headerlink" href="#output-formats" title="Link to this heading"></a></h1>
+<p>All structured formats suppress normal text output — only the data goes to
+stdout. Use <code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">&lt;FORMAT&gt;</span></code> to select.</p>
+<section id="text-default">
+<h2>text (default)<a class="headerlink" href="#text-default" title="Link to this heading"></a></h2>
+<p>Human-readable per-function output with emoji indicators and a summary block.
+Suitable for interactive use and terminal review.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="n">src</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">c</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">v</span> <span class="n">src</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">c</span>
+</pre></div>
+</div>
+</section>
+<section id="json">
+<h2>JSON<a class="headerlink" href="#json" title="Link to this heading"></a></h2>
+<p>Pretty-printed JSON array of per-function records:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">json</span> <span class="n">src</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">c</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">json</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">--</span><span class="nb">format</span> <span class="n">json</span> <span class="n">src</span><span class="o">/</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>Each record contains all 15 fields:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;src/main.c&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;function&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;process_data&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;start_line&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;end_line&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">161</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;mccabe&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">28</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;cognitive&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">45</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;nesting&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;sloc&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">120</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;abc_magnitude&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">35.71</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;return_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;test_score&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">18</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;doc_score&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;aird&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">87</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;aicp&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">72</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;external_calls&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="ndjson-newline-delimited-json">
+<h2>NDJSON (newline-delimited JSON)<a class="headerlink" href="#ndjson-newline-delimited-json" title="Link to this heading"></a></h2>
+<p>One JSON object per line. Unlike <code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">json</span></code>, output from multiple
+invocations concatenates cleanly without array merging — ideal for corpus
+analysis via <code class="docutils literal notranslate"><span class="pre">find</span></code>/<code class="docutils literal notranslate"><span class="pre">xargs</span></code>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Composable across files</span>
+<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">&gt;</span> <span class="n">all_metrics</span><span class="o">.</span><span class="n">ndjson</span>
+
+<span class="c1"># Pipe directly to jq</span>
+<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.aird &gt; 70)&#39;</span>
+
+<span class="c1"># Parallel per-file analysis</span>
+<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="n">P4</span> <span class="o">-</span><span class="n">I</span><span class="p">{}</span> <span class="n">sh</span> <span class="o">-</span><span class="n">c</span> <span class="s1">&#39;knots --format ndjson </span><span class="si">{}</span><span class="s1"> &gt;&gt; metrics.ndjson&#39;</span>
+
+<span class="c1"># Rust project corpus</span>
+<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.rs&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.cognitive &gt; 20)&#39;</span>
+</pre></div>
+</div>
+</section>
+<section id="csv">
+<h2>CSV<a class="headerlink" href="#csv" title="Link to this heading"></a></h2>
+<p>Header row followed by one row per function. Column order matches the JSON
+field order.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">csv</span> <span class="n">src</span><span class="o">/</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>Import directly into spreadsheets, pandas, or any SQL tool.</p>
+</section>
+<section id="sarif-vs-code-github-code-scanning">
+<h2>SARIF (VS Code / GitHub Code Scanning)<a class="headerlink" href="#sarif-vs-code-github-code-scanning" title="Link to this heading"></a></h2>
+<p>Emits <a class="reference external" href="https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html">SARIF 2.1.0</a>
+JSON for static-analysis tooling integration.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">sarif</span> <span class="n">src</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">c</span> <span class="o">&gt;</span> <span class="n">knots</span><span class="o">.</span><span class="n">sarif</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">--</span><span class="nb">format</span> <span class="n">sarif</span> <span class="n">src</span><span class="o">/</span> <span class="o">&gt;</span> <span class="n">knots</span><span class="o">.</span><span class="n">sarif</span>
+<span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span> <span class="o">--</span><span class="nb">format</span> <span class="n">sarif</span> <span class="o">&gt;</span> <span class="n">knots</span><span class="o">.</span><span class="n">sarif</span>
+</pre></div>
+</div>
+<p>One SARIF result is emitted per function whose <code class="docutils literal notranslate"><span class="pre">max(McCabe,</span> <span class="pre">cognitive)</span></code>
+exceeds 10. Severity follows the emoji thresholds:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Max complexity</p></th>
+<th class="head"><p>SARIF level</p></th>
+<th class="head"><p>Emoji</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1–10</p></td>
+<td><p>(omitted)</p></td>
+<td><p>😊</p></td>
+</tr>
+<tr class="row-odd"><td><p>11–20</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">note</span></code></p></td>
+<td><p>😐</p></td>
+</tr>
+<tr class="row-even"><td><p>21–49</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">warning</span></code></p></td>
+<td><p>😠</p></td>
+</tr>
+<tr class="row-odd"><td><p>50+</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">error</span></code></p></td>
+<td><p>😢</p></td>
+</tr>
+</tbody>
+</table>
+<p>Each result carries a <code class="docutils literal notranslate"><span class="pre">properties</span></code> bag with all 15 metrics so downstream
+tools can filter on individual values.</p>
+<p><strong>GitHub Code Scanning</strong>: upload with <code class="docutils literal notranslate"><span class="pre">github/codeql-action/upload-sarif&#64;v3</span></code>
+to surface findings as PR annotations.</p>
+<p><strong>VS Code</strong>: install the <em>SARIF Viewer</em> extension and open <code class="docutils literal notranslate"><span class="pre">knots.sarif</span></code>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="metrics-reference.html" class="btn btn-neutral float-left" title="Metrics Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="ci-integration.html" class="btn btn-neutral float-right" title="CI Integration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
