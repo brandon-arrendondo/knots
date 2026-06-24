@@ -55,7 +55,7 @@ Add to ``.pre-commit-config.yaml``:
 
     repos:
       - repo: https://github.com/brandon-arrendondo/knots
-        rev: v1.8.1
+        rev: v1.8.2
         hooks:
           - id: knots          # default thresholds
           # - id: knots-verbose  # same thresholds, per-function detail
