@@ -379,6 +379,10 @@ fn main() -> Result<()> {
         anyhow::bail!("Either FILE or --compile-commands must be specified");
     };
 
+    if files.is_empty() {
+        return Ok(());
+    }
+
     let thresholds = Thresholds {
         mccabe: args.mccabe_threshold,
         cognitive: args.cognitive_threshold,
@@ -618,7 +622,14 @@ fn collect_files(
     let mut files = Vec::new();
 
     if path.is_file() {
-        // Single file mode
+        // Single file mode — skip unsupported types rather than passing them to the parser
+        let supported = path
+            .extension()
+            .map(|e| is_source_extension(e))
+            .unwrap_or(false);
+        if !supported {
+            return Ok(files);
+        }
         let file_str = path.to_string_lossy();
         if should_process_file(&file_str, include_rules, exclude_rules) {
             files.push(path.clone());
