@@ -23,8 +23,9 @@ From Source
 Requirements
 ------------
 
-Rust 1.70 or higher. No C compiler, Python interpreter, build system, or language
-server required — knots uses tree-sitter grammars bundled as Rust dependencies.
+A Rust toolchain (install via `rustup <https://rustup.rs>`_). No C compiler,
+Python interpreter, build system, or language server required — knots uses
+tree-sitter grammars bundled as Rust dependencies.
 
 Supported Languages
 -------------------

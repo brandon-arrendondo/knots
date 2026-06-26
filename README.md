@@ -30,7 +30,7 @@ cd knots
 cargo build --release
 ```
 
-Requires Rust 1.70+. No C compiler or build system required.
+No C compiler or build system required.
 
 ## Quick Start
 
