@@ -328,6 +328,29 @@ fn format_aird_breakdown(func: &FunctionMetrics) -> String {
     format!("    {}, {}, {}, {}, {}, {}", cog, sloc, nest, test, doc, coup)
 }
 
+/// Returns the top `top_n` AIRD components that drove the score, as
+/// `(label, raw value)` pairs ranked by weighted contribution. Only positive
+/// contributors are considered (doc *reduces* AIRD, so it is never a driver),
+/// and zero-contribution components are dropped. Used to fold a concise
+/// `(drivers: cognitive 215, sloc 492)` hint onto the violation line itself.
+fn aird_drivers(func: &FunctionMetrics, top_n: usize) -> Vec<(&'static str, i64)> {
+    let test_score = func.test_scoring.total_score.max(0);
+    let mut comps: [(&'static str, i64, f64); 5] = [
+        ("cognitive", func.cognitive as i64, (func.cognitive as f64 / 75.0).min(1.0) * 55.0),
+        ("sloc",      func.sloc as i64,      (func.sloc as f64 / 200.0).min(1.0) * 15.0),
+        ("nesting",   func.nesting as i64,   (func.nesting as f64 / 8.0).min(1.0) * 15.0),
+        ("test",      test_score as i64,     (test_score as f64 / 20.0).min(1.0) * 15.0),
+        ("coupling",  func.state_coupling as i64, (func.state_coupling as f64 / 12.0).min(1.0) * 10.0),
+    ];
+    comps.sort_by(|a, b| b.2.total_cmp(&a.2));
+    comps
+        .iter()
+        .filter(|(_, _, contrib)| *contrib > 0.0)
+        .take(top_n)
+        .map(|(label, raw, _)| (*label, *raw))
+        .collect()
+}
+
 fn aird_tips(func: &FunctionMetrics) -> Vec<String> {
     let mut tips = Vec::new();
     let cognitive_capped = func.cognitive >= 75;
@@ -387,9 +410,21 @@ fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
             } else {
                 format!("{}:{}:{}", func.file_path, func.start_line, func.name)
             };
-            output_lines.push(format!("  {} — {}", loc, fv.join(", ")));
-
             let aird_violated = fv.iter().any(|s| s.starts_with("AIRD"));
+            let drivers_suffix = if aird_violated {
+                let drivers = aird_drivers(func, 2);
+                if drivers.is_empty() {
+                    String::new()
+                } else {
+                    let parts: Vec<String> =
+                        drivers.iter().map(|(l, v)| format!("{} {}", l, v)).collect();
+                    format!("  (drivers: {})", parts.join(", "))
+                }
+            } else {
+                String::new()
+            };
+            output_lines.push(format!("  {} — {}{}", loc, fv.join(", "), drivers_suffix));
+
             if aird_violated {
                 output_lines.push(format_aird_breakdown(func));
                 output_lines.extend(aird_tips(func));
@@ -2149,5 +2184,69 @@ mod tests {
         let code = "function* gen() { yield 1; }";
         let names = discover_js_functions(code);
         assert_eq!(names, vec!["gen"]);
+    }
+
+    /// Build a FunctionMetrics fixture with the given AIRD-component raw values;
+    /// fields not relevant to AIRD drivers are left at neutral defaults.
+    fn fixture(cognitive: u32, sloc: u32, nesting: u32, test: i32, coupling: u32) -> FunctionMetrics {
+        FunctionMetrics {
+            name: "f".into(),
+            file_path: "src/x.rs".into(),
+            start_line: 1,
+            end_line: 2,
+            mccabe: 0,
+            cognitive,
+            nesting,
+            sloc,
+            abc_magnitude: 0.0,
+            return_count: 0,
+            test_scoring: TestScoringMetric {
+                signature_score: 0,
+                dependency_score: 0,
+                observable_score: 0,
+                implementation_score: 0,
+                documentation_score: 0,
+                total_score: test,
+            },
+            aird: 0,
+            aicp: 0,
+            external_calls: 0,
+            state_coupling: coupling,
+        }
+    }
+
+    /// The motivating case from FEEDBACK.md #1: a function dominated by cognitive
+    /// then sloc should report those two as drivers, by *raw* value.
+    #[test]
+    fn test_aird_drivers_cognitive_then_sloc() {
+        let func = fixture(215, 492, 1, 0, 0);
+        let drivers = aird_drivers(&func, 2);
+        assert_eq!(drivers, vec![("cognitive", 215), ("sloc", 492)]);
+    }
+
+    /// Drivers are ranked by weighted contribution, not raw magnitude: sloc 200
+    /// (capped, 15 pts) outranks a larger-but-lower-weight component.
+    #[test]
+    fn test_aird_drivers_ranked_by_contribution_not_raw() {
+        // cognitive 10 -> 7.33 pts; sloc 200 -> 15 pts (capped). sloc should lead.
+        let func = fixture(10, 200, 0, 0, 0);
+        let drivers = aird_drivers(&func, 2);
+        assert_eq!(drivers[0].0, "sloc");
+    }
+
+    /// Zero-contribution components are dropped, and doc is never a driver even
+    /// when present (it only reduces AIRD).
+    #[test]
+    fn test_aird_drivers_drops_zero_contributors() {
+        let func = fixture(30, 0, 0, 0, 0);
+        let drivers = aird_drivers(&func, 2);
+        assert_eq!(drivers, vec![("cognitive", 30)]);
+    }
+
+    /// A function with no positive contributors yields no drivers (suffix omitted).
+    #[test]
+    fn test_aird_drivers_empty_when_all_zero() {
+        let func = fixture(0, 0, 0, 0, 0);
+        assert!(aird_drivers(&func, 2).is_empty());
     }
 }
