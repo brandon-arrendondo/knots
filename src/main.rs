@@ -12,6 +12,7 @@ use walkdir::WalkDir;
 mod complexity;
 use complexity::{
     calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_cognitive_complexity,
+    calculate_state_coupling,
     calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
     calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
 };
@@ -188,6 +189,10 @@ struct Args {
     #[arg(long, value_name = "FILE")]
     exclude: Option<PathBuf>,
 
+    /// Exclude files whose path matches this regex (repeatable; same syntax as pre-commit exclude:)
+    #[arg(long, value_name = "PATTERN", action = clap::ArgAction::Append)]
+    exclude_path: Vec<String>,
+
     /// Output format
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     format: OutputFormat,
@@ -359,6 +364,15 @@ fn main() -> Result<()> {
         None
     };
 
+    let exclude_path_patterns: Vec<regex::Regex> = args
+        .exclude_path
+        .iter()
+        .map(|p| {
+            regex::Regex::new(p)
+                .unwrap_or_else(|e| panic!("Invalid --exclude-path pattern '{p}': {e}"))
+        })
+        .collect();
+
     // Collect files to process
     let files = if let Some(compile_commands_path) = &args.compile_commands {
         // Load files from compile_commands.json
@@ -372,6 +386,7 @@ fn main() -> Result<()> {
                 args.recursive,
                 &include_rules,
                 &exclude_rules,
+                &exclude_path_patterns,
             )?);
         }
         collected
@@ -618,6 +633,7 @@ fn collect_files(
     recursive: bool,
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
+    exclude_path_patterns: &[regex::Regex],
 ) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
@@ -631,7 +647,9 @@ fn collect_files(
             return Ok(files);
         }
         let file_str = path.to_string_lossy();
-        if should_process_file(&file_str, include_rules, exclude_rules) {
+        if !path_is_excluded(&file_str, exclude_path_patterns)
+            && should_process_file(&file_str, include_rules, exclude_rules)
+        {
             files.push(path.clone());
         }
     } else if path.is_dir() {
@@ -654,7 +672,9 @@ fn collect_files(
                 if let Some(ext) = file_path.extension() {
                     if is_source_extension(ext) {
                         let file_str = file_path.to_string_lossy();
-                        if should_process_file(&file_str, include_rules, exclude_rules) {
+                        if !path_is_excluded(&file_str, exclude_path_patterns)
+                            && should_process_file(&file_str, include_rules, exclude_rules)
+                        {
                             files.push(file_path.to_path_buf());
                         }
                     }
@@ -673,6 +693,10 @@ fn collect_files(
     }
 
     Ok(files)
+}
+
+fn path_is_excluded(path: &str, patterns: &[regex::Regex]) -> bool {
+    patterns.iter().any(|re| re.is_match(path))
 }
 
 /// Check if a file should be processed based on include/exclude rules
@@ -831,12 +855,14 @@ fn collect_function_metrics(
             let return_count = calculate_return_count(node);
             let test_scoring = calculate_test_scoring(node, src.as_bytes());
             let external_calls = calculate_external_calls(node, src, &local_names);
+            let state_coupling = calculate_state_coupling(node, src.as_bytes());
             let aird = calculate_aird(
                 cognitive,
                 sloc,
                 nesting,
                 test_scoring.total_score,
                 test_scoring.documentation_score,
+                state_coupling,
             );
             let aicp = calculate_aicp(external_calls, sloc, test_scoring.documentation_score);
 
@@ -860,6 +886,7 @@ fn collect_function_metrics(
                     aird,
                     aicp,
                     external_calls,
+                    state_coupling,
                 });
             }
         }
@@ -980,6 +1007,7 @@ fn analyze_code(
             println!("  AIRD Score: {}", func.aird);
             println!("  AICP Score: {}", func.aicp);
             println!("  External Calls: {}", func.external_calls);
+            println!("  State Coupling: {}", func.state_coupling);
             println!("  Max Complexity: {}", func.max_complexity());
             println!();
         } else {
@@ -1499,6 +1527,7 @@ struct FunctionMetrics {
     aird: u32,
     aicp: u32,
     external_calls: u32,
+    state_coupling: u32,
 }
 
 impl FunctionMetrics {

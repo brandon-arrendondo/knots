@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use tree_sitter::Node;
 
 /// Calculates McCabe cyclomatic complexity for a function
@@ -1028,16 +1029,23 @@ pub fn calculate_aird(
     nesting: u32,
     test_score: i32,
     doc_score: i32,
+    state_coupling: u32,
 ) -> u32 {
     let cognitive_norm = (cognitive as f64 / 75.0).min(1.0);
     let sloc_norm = (sloc as f64 / 200.0).min(1.0);
     let nesting_norm = (nesting as f64 / 8.0).min(1.0);
     let test_norm = (test_score.max(0) as f64 / 20.0).min(1.0);
     let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
+    // Normalize at 12: Clippy's too_many_arguments fires at 7, so 11-param functions land ~0.9.
+    // Weight 10 dampens mechanical splits without inverting genuine wins.
+    let coupling_norm = (state_coupling as f64 / 12.0).min(1.0);
 
-    let raw =
-        (cognitive_norm * 55.0) + (sloc_norm * 15.0) + (nesting_norm * 15.0) + (test_norm * 15.0)
-            - (doc_norm * 15.0);
+    let raw = (cognitive_norm * 55.0)
+        + (sloc_norm * 15.0)
+        + (nesting_norm * 15.0)
+        + (test_norm * 15.0)
+        - (doc_norm * 15.0)
+        + (coupling_norm * 10.0);
 
     raw.round().clamp(0.0, 100.0) as u32
 }
@@ -1063,13 +1071,157 @@ pub fn calculate_aicp(external_calls: u32, sloc: u32, doc_score: i32) -> u32 {
     raw.round().clamp(0.0, 100.0) as u32
 }
 
+/// Counts the explicit (non-self) parameters declared in a function signature.
+///
+/// Language coverage:
+/// - Rust `function_item`: counts `parameter` children of the `parameters` node;
+///   `self_parameter` nodes are excluded.
+/// - Python `function_definition`: counts params that are not `self` or `cls`.
+/// - C/C++ `function_definition`/`function_declaration`: counts `parameter_declaration`
+///   children of the `parameter_list` found inside the declarator subtree.
+/// - JavaScript: counts children of the `parameters` (formal_parameters) node.
+fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
+    match node.kind() {
+        "function_item" => {
+            // Rust: named 'parameters' field; children are 'parameter' or 'self_parameter'
+            if let Some(params) = node.child_by_field_name("parameters") {
+                let mut cursor = params.walk();
+                return params
+                    .children(&mut cursor)
+                    .filter(|c| c.kind() == "parameter")
+                    .count() as u32;
+            }
+            0
+        }
+        "function_definition" => {
+            // Python has a named 'parameters' field; C does not (uses declarator).
+            if let Some(params) = node.child_by_field_name("parameters") {
+                let mut count = 0u32;
+                let mut cursor = params.walk();
+                for child in params.children(&mut cursor) {
+                    match child.kind() {
+                        "identifier" => {
+                            let text = child.utf8_text(source_code).unwrap_or("");
+                            if text != "self" && text != "cls" {
+                                count += 1;
+                            }
+                        }
+                        "typed_parameter"
+                        | "default_parameter"
+                        | "typed_default_parameter"
+                        | "list_splat_pattern"
+                        | "dictionary_splat_pattern" => count += 1,
+                        _ => {}
+                    }
+                }
+                return count;
+            }
+            // C/C++ function_definition: drill into the declarator subtree
+            count_c_params_in_subtree(node, source_code)
+        }
+        "function_declaration" => count_c_params_in_subtree(node, source_code),
+        // JavaScript: function_declaration, method_definition, function_expression, etc.
+        "method_definition"
+        | "function_expression"
+        | "generator_function_declaration"
+        | "generator_function" => {
+            if let Some(params) = node.child_by_field_name("parameters") {
+                let mut cursor = params.walk();
+                return params
+                    .children(&mut cursor)
+                    .filter(|c| {
+                        matches!(
+                            c.kind(),
+                            "identifier"
+                                | "required_parameter"
+                                | "optional_parameter"
+                                | "rest_pattern"
+                                | "assignment_pattern"
+                        )
+                    })
+                    .count() as u32;
+            }
+            0
+        }
+        _ => 0,
+    }
+}
+
+fn count_c_params_in_subtree(node: Node, source_code: &[u8]) -> u32 {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "parameter_list" {
+            let mut inner = child.walk();
+            return child
+                .children(&mut inner)
+                .filter(|c| c.kind() == "parameter_declaration")
+                .count() as u32;
+        }
+        if child.kind().contains("declarator") {
+            let n = count_c_params_in_subtree(child, source_code);
+            if n > 0 {
+                return n;
+            }
+        }
+    }
+    0
+}
+
+fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut HashSet<String>) {
+    // Rust: field_expression where the 'value' child is the identifier "self"
+    if node.kind() == "field_expression" {
+        if let Some(value) = node.child_by_field_name("value") {
+            if value.utf8_text(source_code).unwrap_or("") == "self" {
+                if let Some(field) = node.child_by_field_name("field") {
+                    if let Ok(name) = field.utf8_text(source_code) {
+                        fields.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    // Python: attribute node where the 'object' child is the identifier "self"
+    if node.kind() == "attribute" {
+        if let Some(obj) = node.child_by_field_name("object") {
+            if obj.utf8_text(source_code).unwrap_or("") == "self" {
+                if let Some(attr) = node.child_by_field_name("attribute") {
+                    if let Ok(name) = attr.utf8_text(source_code) {
+                        fields.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_self_fields_recursive(child, source_code, fields);
+    }
+}
+
+/// Estimates the state surface area a caller must hold to safely modify a function:
+/// explicit parameter count plus the count of distinct `self.field` accesses in the body.
+///
+/// This catches the two coupling patterns that raw AIRD misses:
+/// - Wide parameter lists created when a large function is mechanically split.
+/// - God-struct methods where coupling hides behind `self` with low arity.
+///
+/// Normalization and weight in `calculate_aird` are calibrated to dampen, not invert:
+/// a split that lowers cognitive complexity still improves AIRD, but less so when it
+/// forces the caller to track many more state values.
+pub fn calculate_state_coupling(node: Node, source_code: &[u8]) -> u32 {
+    let explicit_params = count_explicit_params(node, source_code);
+    let mut self_fields: HashSet<String> = HashSet::new();
+    collect_self_fields_recursive(node, source_code, &mut self_fields);
+    explicit_params + self_fields.len() as u32
+}
+
 #[cfg(test)]
 mod aird_tests {
     use super::*;
 
     #[test]
     fn test_aird_trivial_function() {
-        let aird = calculate_aird(1, 5, 1, 2, 8);
+        let aird = calculate_aird(1, 5, 1, 2, 8, 0);
         assert!(
             aird < 15,
             "trivial function AIRD should be < 15, got {}",
@@ -1079,7 +1231,7 @@ mod aird_tests {
 
     #[test]
     fn test_aird_complex_function() {
-        let aird = calculate_aird(80, 200, 7, 15, 0);
+        let aird = calculate_aird(80, 200, 7, 15, 0, 0);
         assert!(
             aird > 70,
             "complex function AIRD should be > 70, got {}",
@@ -1089,8 +1241,8 @@ mod aird_tests {
 
     #[test]
     fn test_aird_doc_reduces_score() {
-        let without_docs = calculate_aird(20, 40, 3, 15, 0);
-        let with_docs = calculate_aird(20, 40, 3, 15, 10);
+        let without_docs = calculate_aird(20, 40, 3, 15, 0, 0);
+        let with_docs = calculate_aird(20, 40, 3, 15, 10, 0);
         assert!(
             with_docs < without_docs,
             "documentation should reduce AIRD: {} vs {}",
@@ -1101,13 +1253,13 @@ mod aird_tests {
 
     #[test]
     fn test_aird_clamps_to_100() {
-        let aird = calculate_aird(1000, 1000, 1000, 1000, 0);
+        let aird = calculate_aird(1000, 1000, 1000, 1000, 0, 1000);
         assert_eq!(aird, 100);
     }
 
     #[test]
     fn test_aird_clamps_to_0() {
-        let aird = calculate_aird(0, 0, 0, 0, 10);
+        let aird = calculate_aird(0, 0, 0, 0, 10, 0);
         assert_eq!(aird, 0);
     }
 }
@@ -1158,6 +1310,105 @@ mod aicp_tests {
     fn test_aicp_clamps_to_0() {
         let aicp = calculate_aicp(0, 0, 10);
         assert_eq!(aicp, 0);
+    }
+}
+
+#[cfg(test)]
+mod state_coupling_tests {
+    use super::*;
+
+    fn parse_rust(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_rust::language())
+            .unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    fn rust_coupling(code: &str) -> u32 {
+        let tree = parse_rust(code);
+        let root = tree.root_node();
+        let mut result = 0u32;
+        fn find_fn(node: tree_sitter::Node<'_>, src: &[u8], out: &mut u32) {
+            if node.kind() == "function_item" {
+                *out = calculate_state_coupling(node, src);
+                return;
+            }
+            let mut c = node.walk();
+            for child in node.children(&mut c) {
+                find_fn(child, src, out);
+            }
+        }
+        find_fn(root, code.as_bytes(), &mut result);
+        result
+    }
+
+    #[test]
+    fn test_no_params_no_self() {
+        let coupling = rust_coupling("fn f() { let x = 1; }");
+        assert_eq!(coupling, 0);
+    }
+
+    #[test]
+    fn test_counts_explicit_params_excludes_self() {
+        // &self is a self_parameter, not counted; a and b are regular parameters
+        let coupling =
+            rust_coupling("struct S; impl S { fn f(&self, a: i32, b: i32) -> i32 { a + b } }");
+        assert_eq!(coupling, 2);
+    }
+
+    #[test]
+    fn test_self_field_accesses_counted() {
+        let coupling = rust_coupling(
+            "struct S { x: i32, y: i32 } impl S { fn f(&self) { let _ = self.x + self.y; } }",
+        );
+        assert_eq!(coupling, 2);
+    }
+
+    #[test]
+    fn test_duplicate_self_field_counted_once() {
+        let coupling = rust_coupling(
+            "struct S { x: i32 } impl S { fn f(&self) -> i32 { self.x + self.x + self.x } }",
+        );
+        // 'x' accessed multiple times but only one distinct field
+        assert_eq!(coupling, 1);
+    }
+
+    #[test]
+    fn test_params_plus_self_fields() {
+        let coupling = rust_coupling(
+            "struct S { a: i32, b: i32 } impl S { fn f(&self, x: i32, y: i32) { \
+             let _ = self.a + self.b + x + y; } }",
+        );
+        // 2 explicit params + 2 distinct self fields
+        assert_eq!(coupling, 4);
+    }
+
+    #[test]
+    fn test_high_arity_dampens_aird() {
+        // Simulates an 11-param mechanical split: AIRD should be higher with coupling than without.
+        // cognitive=30 sloc=60 nesting=2 test=5 doc=0 — low complexity but wide signature
+        let aird_no_coupling = calculate_aird(30, 60, 2, 5, 0, 0);
+        let aird_with_coupling = calculate_aird(30, 60, 2, 5, 0, 11);
+        assert!(
+            aird_with_coupling > aird_no_coupling,
+            "high arity should raise AIRD: {} vs {}",
+            aird_with_coupling,
+            aird_no_coupling
+        );
+    }
+
+    #[test]
+    fn test_genuine_win_still_positive() {
+        // str31_violation: 4 params, dropped from cognitive ~80 to ~20 — should remain improved.
+        let aird_before = calculate_aird(80, 150, 5, 12, 0, 2);
+        let aird_after = calculate_aird(20, 40, 2, 5, 0, 4);
+        assert!(
+            aird_after < aird_before,
+            "genuine simplification should still lower AIRD: {} -> {}",
+            aird_before,
+            aird_after
+        );
     }
 }
 

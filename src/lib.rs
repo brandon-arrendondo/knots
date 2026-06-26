@@ -5,6 +5,7 @@ pub mod complexity;
 // Re-export complexity functions for use by workspace members
 pub use complexity::{
     calculate_aicp, calculate_aird, calculate_cognitive_complexity, calculate_mccabe_complexity,
+    calculate_state_coupling,
 };
 
 // Re-export tree-sitter for convenience
