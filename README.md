@@ -48,6 +48,9 @@ knots -r src/ --aird-threshold 85
 knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json --write-baseline
 knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json
 
+# Gate only the functions you actually touched (no new debt in this change)
+knots -r src/ --aird-threshold 85 --changed
+
 # SARIF for GitHub Code Scanning
 knots -r --format sarif src/ > knots.sarif
 
@@ -96,6 +99,8 @@ Options:
   --report <FILE>                   Write a detailed per-function report to this file (opt-in)
   --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see docs/baseline.rst)
   --write-baseline                  Snapshot current scores to --baseline and exit without gating
+  --since <REF>                     Gate only functions overlapping lines changed since this git ref
+  --changed                         Gate only functions changed in the working tree (sugar for --since HEAD)
   -h, --help                        Print help
   -V, --version                     Print version
 ```

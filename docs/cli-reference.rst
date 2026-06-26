@@ -134,6 +134,42 @@ whose score got worse. See :doc:`baseline` for the full guide and file format.
     # Gate against it — fails only on new or worsened functions
     knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json
 
+Changed-Function Scoping
+------------------------
+
+Restrict threshold gating to the functions you actually touched, so a
+pre-existing over-threshold function in a file you edited does not block an
+unrelated change. knots intersects each function's line range with the lines
+changed (per ``git diff``) and gates only the functions that overlap. This is
+complementary to ``--baseline``: scoping narrows *which functions are checked*;
+the baseline decides *what counts as worse*. The two compose — gate the touched
+functions, and among those, only fail on new or worsened ones.
+
+``--since <REF>``
+    Gate only functions overlapping lines changed in the working tree relative
+    to the given git ref (e.g. ``HEAD``, ``main``, a commit SHA). Compares the
+    current working tree against ``<REF>``. Brand-new untracked files are treated
+    as entirely changed, so all of their functions are in scope. Requires a git
+    repository; an unknown ref or non-repo exits ``1`` with git's error.
+
+``--changed``
+    Gate only functions you changed in the working tree (uncommitted edits plus
+    untracked files). Sugar for ``--since HEAD``. Mutually exclusive with
+    ``--since``.
+
+.. code-block:: bash
+
+    # In a pre-commit / CI gate, only fail on functions in this change
+    knots -r src/ --aird-threshold 85 --changed
+
+    # Gate everything that diverged from main (good for PR checks)
+    knots -r src/ --aird-threshold 85 --since main
+
+.. note::
+
+   Scoping affects **gating only** — text, JSON, SARIF, NDJSON, and CSV output
+   still report every analyzed function. Only the threshold check is narrowed.
+
 Informational
 -------------
 
@@ -150,9 +186,11 @@ Exit Status
     Successful analysis, no threshold violations.
 
 ``1``
-    Error (file not found, parse error, unreadable baseline), or one or more
+    Error (file not found, parse error, unreadable baseline, unknown git ref or
+    not a git repository under ``--since`` / ``--changed``), or one or more
     threshold violations when any ``--*-threshold`` flag is set. In
-    ``--baseline`` mode, only new or worsened functions count as violations.
+    ``--baseline`` mode, only new or worsened functions count as violations; under
+    ``--since`` / ``--changed`` only touched functions are checked.
 
 ``2``
     Invalid arguments (e.g. ``--write-baseline`` without ``--baseline``).

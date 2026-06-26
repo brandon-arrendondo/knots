@@ -106,5 +106,7 @@ Notes & limitations
 - **Snapshot the whole tree.** Generate the baseline with ``-r .`` (or your full
   source set) so every function has an entry; a partial snapshot will report
   un-snapshotted functions as new.
-- **Per-touched-file scoping** (only gate functions in the current diff) is a
-  separate, complementary feature — see the ``--changed`` / ``--since`` proposal.
+- **Touched-function scoping** (only gate functions in the current diff) is a
+  separate, complementary feature — see ``--changed`` / ``--since`` in
+  :doc:`cli-reference`. The two compose: scope to what you touched, then fail
+  only on what got worse.

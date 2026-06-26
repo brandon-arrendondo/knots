@@ -247,6 +247,17 @@ struct Args {
     /// without gating. Use to adopt the gate on a legacy codebase.
     #[arg(long, requires = "baseline")]
     write_baseline: bool,
+
+    /// Scope threshold gating to functions that overlap lines changed since
+    /// this git ref (e.g. HEAD, main, a commit SHA). Untouched pre-existing
+    /// offenders are ignored. Compares the working tree against <REF>.
+    #[arg(long, value_name = "REF", conflicts_with = "changed")]
+    since: Option<String>,
+
+    /// Scope threshold gating to functions you have changed in the working
+    /// tree (uncommitted edits, plus untracked files). Sugar for `--since HEAD`.
+    #[arg(long)]
+    changed: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -504,10 +515,115 @@ fn aird_tips(func: &FunctionMetrics) -> Vec<String> {
     tips
 }
 
+/// The set of line ranges that changed in the current working tree relative to
+/// a git ref, used by `--changed` / `--since` to scope gating to touched code.
+/// Keyed by canonicalized absolute path; ranges are in the *current* (post-image)
+/// file so they line up with the line numbers knots reports.
+struct ChangedLines {
+    map: HashMap<PathBuf, Vec<(u32, u32)>>,
+}
+
+impl ChangedLines {
+    /// True if `[start, end]` intersects any changed range in `file_path`.
+    /// A file with no recorded changes never overlaps (its functions are skipped).
+    fn overlaps(&self, file_path: &str, start: u32, end: u32) -> bool {
+        let key = canonicalize_path(Path::new(file_path));
+        match self.map.get(&key) {
+            Some(ranges) => ranges.iter().any(|&(s, e)| start <= e && s <= end),
+            None => false,
+        }
+    }
+}
+
+/// Canonicalize for stable map keys; fall back to the path as-given if it can't
+/// be resolved (e.g. it no longer exists on disk).
+fn canonicalize_path(p: &Path) -> PathBuf {
+    fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+}
+
+/// Run `git` with the given args, returning stdout. Errors carry git's stderr so
+/// a bad ref or "not a git repository" surfaces clearly.
+fn git_output(args: &[&str]) -> Result<String> {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .output()
+        .context("failed to run git (is it installed and on PATH?)")?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        anyhow::bail!("git {} failed: {}", args.join(" "), stderr.trim());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Parse the new-file range from a unified-diff hunk header
+/// (`@@ -a,b +c,d @@`), returning `(start, len)` for the `+c,d` side. `len`
+/// defaults to 1 when omitted. Returns `None` if the header is malformed.
+fn parse_hunk_new_range(line: &str) -> Option<(u32, u32)> {
+    let plus = line.split_whitespace().find(|t| t.starts_with('+'))?;
+    let mut parts = plus[1..].splitn(2, ',');
+    let start: u32 = parts.next()?.parse().ok()?;
+    let len: u32 = match parts.next() {
+        Some(l) => l.parse().ok()?,
+        None => 1,
+    };
+    Some((start, len))
+}
+
+/// Collect the changed line ranges of the working tree vs. `reference`. Modified
+/// and added regions come from `git diff --unified=0`; brand-new untracked files
+/// are treated as entirely changed so all of their functions are in scope.
+fn collect_changed_lines(reference: &str) -> Result<ChangedLines> {
+    let root = git_output(&["rev-parse", "--show-toplevel"])?;
+    let root = PathBuf::from(root.trim());
+
+    let diff = git_output(&["diff", "--unified=0", "--no-color", reference])?;
+    let mut map: HashMap<PathBuf, Vec<(u32, u32)>> = HashMap::new();
+    let mut current: Option<PathBuf> = None;
+
+    for line in diff.lines() {
+        if let Some(rest) = line.strip_prefix("+++ ") {
+            // `+++ b/<path>` for the post-image; `+++ /dev/null` for a deletion
+            // (nothing in the current tree to attribute, so drop scope).
+            let rest = rest.split('\t').next().unwrap_or(rest);
+            current = if rest == "/dev/null" {
+                None
+            } else {
+                let rel = rest.strip_prefix("b/").unwrap_or(rest);
+                Some(canonicalize_path(&root.join(rel)))
+            };
+        } else if line.starts_with("@@") {
+            if let Some(path) = &current {
+                if let Some((start, len)) = parse_hunk_new_range(line) {
+                    if len > 0 {
+                        map.entry(path.clone())
+                            .or_default()
+                            .push((start, start + len - 1));
+                    }
+                }
+            }
+        }
+    }
+
+    // Untracked files are newly added in full; cover the whole file so every
+    // function counts as touched.
+    let untracked = git_output(&["ls-files", "--others", "--exclude-standard"])?;
+    for rel in untracked.lines() {
+        if rel.is_empty() {
+            continue;
+        }
+        map.entry(canonicalize_path(&root.join(rel)))
+            .or_default()
+            .push((1, u32::MAX));
+    }
+
+    Ok(ChangedLines { map })
+}
+
 fn check_thresholds(
     metrics: &[FunctionMetrics],
     t: &Thresholds,
     baseline: Option<&Baseline>,
+    changed: Option<&ChangedLines>,
 ) -> Result<()> {
     if !t.active() {
         return Ok(());
@@ -522,6 +638,14 @@ fn check_thresholds(
     let mut violation_count: usize = 0;
 
     for func in metrics {
+        // In --changed / --since mode, only gate functions that overlap a
+        // changed line range — untouched pre-existing offenders are skipped.
+        if let Some(changed) = changed {
+            if !changed.overlaps(&func.file_path, func.start_line, func.end_line) {
+                continue;
+            }
+        }
+
         let base: Option<&BaselineEntry> = index
             .as_ref()
             .and_then(|idx| idx.get(&(func.file_path.as_str(), func.name.as_str())).copied());
@@ -677,6 +801,18 @@ fn main() -> Result<()> {
         None => None,
     };
 
+    // Resolve --changed / --since to a git ref, then collect the changed line
+    // ranges used to scope gating. `--changed` is sugar for `--since HEAD`.
+    let changed_ref: Option<&str> = if args.changed {
+        Some("HEAD")
+    } else {
+        args.since.as_deref()
+    };
+    let changed = match changed_ref {
+        Some(reference) => Some(collect_changed_lines(reference)?),
+        None => None,
+    };
+
     // Structured output modes: collect all metrics then emit and exit.
     // These bypass text/matrix output so only the structured data goes to stdout.
     match args.format {
@@ -754,7 +890,7 @@ fn main() -> Result<()> {
         }
 
         display_testability_matrix(&all_metrics, files.len(), skipped_files);
-        check_thresholds(&all_metrics, &thresholds, baseline.as_ref())?;
+        check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
         return Ok(());
     }
 
@@ -780,7 +916,7 @@ fn main() -> Result<()> {
             &include_rules,
             &exclude_rules,
         );
-        check_thresholds(&metrics, &thresholds, baseline.as_ref())?;
+        check_thresholds(&metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
         return Ok(());
     }
 
@@ -831,7 +967,7 @@ fn main() -> Result<()> {
     // Display summary with top 5 worst functions and totals/averages
     display_recursive_summary(&all_metrics, files.len(), skipped_files, args.report.as_deref());
 
-    check_thresholds(&all_metrics, &thresholds, baseline.as_ref())?;
+    check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
     Ok(())
 }
 
@@ -2451,7 +2587,7 @@ mod tests {
     #[test]
     fn test_no_baseline_flags_violation() {
         let metrics = vec![func_aird("a.rs", "f", 98)];
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), None).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), None, None).is_err());
     }
 
     /// A pre-existing offender at exactly its baselined score is tolerated.
@@ -2459,7 +2595,7 @@ mod tests {
     fn test_baseline_tolerates_preexisting_equal() {
         let metrics = vec![func_aird("a.rs", "f", 98)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_ok());
     }
 
     /// Still over threshold but better than baseline (98 -> 90) is tolerated.
@@ -2467,7 +2603,7 @@ mod tests {
     fn test_baseline_tolerates_improvement() {
         let metrics = vec![func_aird("a.rs", "f", 90)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_ok());
     }
 
     /// A baselined function that got worse (98 -> 99) is a regression and fails.
@@ -2475,7 +2611,7 @@ mod tests {
     fn test_baseline_flags_regression() {
         let metrics = vec![func_aird("a.rs", "f", 99)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_err());
     }
 
     /// An over-threshold function absent from the baseline is new debt and fails.
@@ -2483,7 +2619,7 @@ mod tests {
     fn test_baseline_flags_new_function() {
         let metrics = vec![func_aird("a.rs", "g", 98)];
         let b = baseline_with_aird("a.rs", "f", 98); // different name -> miss
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_err());
     }
 
     /// The key is (file, function): same name in a different file is not matched.
@@ -2491,7 +2627,7 @@ mod tests {
     fn test_baseline_key_is_file_and_function() {
         let metrics = vec![func_aird("b.rs", "f", 98)];
         let b = baseline_with_aird("a.rs", "f", 98); // different file -> miss
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_err());
     }
 
     /// A function under threshold never fails, even if baselined higher.
@@ -2499,7 +2635,7 @@ mod tests {
     fn test_baseline_under_threshold_ok() {
         let metrics = vec![func_aird("a.rs", "f", 10)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_ok());
     }
 
     /// Baseline survives a serialize/parse round-trip and indexes by (file, fn).
@@ -2510,5 +2646,87 @@ mod tests {
         let parsed: Baseline = serde_json::from_str(&json).unwrap();
         let idx = parsed.index();
         assert_eq!(idx.get(&("a.rs", "f")).unwrap().aird, 98);
+    }
+
+    // ---- --changed / --since scoping ----
+
+    /// `@@ -a,b +c,d @@` yields the new-file range `(c, d)`.
+    #[test]
+    fn test_parse_hunk_new_range_full() {
+        assert_eq!(parse_hunk_new_range("@@ -10,3 +12,5 @@ fn foo()"), Some((12, 5)));
+    }
+
+    /// A single-line hunk omits the count on the `+` side; it defaults to 1.
+    #[test]
+    fn test_parse_hunk_new_range_default_len() {
+        assert_eq!(parse_hunk_new_range("@@ -10 +14 @@"), Some((14, 1)));
+    }
+
+    /// A header with no `+` token (or garbage) parses to None.
+    #[test]
+    fn test_parse_hunk_new_range_malformed() {
+        assert_eq!(parse_hunk_new_range("@@ no plus here @@"), None);
+        assert_eq!(parse_hunk_new_range("not a hunk"), None);
+    }
+
+    /// Build a ChangedLines keyed by a path that does not exist on disk so
+    /// `canonicalize_path` falls back to the literal path on both insert and
+    /// lookup — lets us unit-test overlap logic without touching the filesystem.
+    fn changed_with(file: &str, ranges: &[(u32, u32)]) -> ChangedLines {
+        let mut map = HashMap::new();
+        map.insert(canonicalize_path(Path::new(file)), ranges.to_vec());
+        ChangedLines { map }
+    }
+
+    #[test]
+    fn test_overlaps_intersecting() {
+        let c = changed_with("nope_a.rs", &[(10, 20)]);
+        assert!(c.overlaps("nope_a.rs", 15, 25)); // straddles the start
+        assert!(c.overlaps("nope_a.rs", 5, 12)); // straddles the end
+        assert!(c.overlaps("nope_a.rs", 1, 100)); // contains it
+        assert!(c.overlaps("nope_a.rs", 20, 20)); // touches the boundary
+    }
+
+    #[test]
+    fn test_overlaps_disjoint_and_missing_file() {
+        let c = changed_with("nope_b.rs", &[(10, 20)]);
+        assert!(!c.overlaps("nope_b.rs", 1, 9)); // entirely before
+        assert!(!c.overlaps("nope_b.rs", 21, 30)); // entirely after
+        assert!(!c.overlaps("other.rs", 10, 20)); // file not in the diff
+    }
+
+    /// An over-threshold function that overlaps a changed range fails the gate.
+    #[test]
+    fn test_changed_gates_touched_function() {
+        let mut f = func_aird("nope_c.rs", "f", 98);
+        f.start_line = 10;
+        f.end_line = 30;
+        let metrics = vec![f];
+        let c = changed_with("nope_c.rs", &[(15, 16)]);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), None, Some(&c)).is_err());
+    }
+
+    /// An over-threshold function with no overlapping change is skipped (passes).
+    #[test]
+    fn test_changed_skips_untouched_function() {
+        let mut f = func_aird("nope_d.rs", "f", 98);
+        f.start_line = 10;
+        f.end_line = 30;
+        let metrics = vec![f];
+        let c = changed_with("nope_d.rs", &[(100, 110)]);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), None, Some(&c)).is_ok());
+    }
+
+    /// --changed composes with --baseline: a touched function that regressed
+    /// beyond its baseline still fails; the changed-scope only narrows the set.
+    #[test]
+    fn test_changed_composes_with_baseline() {
+        let mut f = func_aird("nope_e.rs", "f", 99);
+        f.start_line = 10;
+        f.end_line = 30;
+        let metrics = vec![f];
+        let b = baseline_with_aird("nope_e.rs", "f", 98); // worsened 98 -> 99
+        let c = changed_with("nope_e.rs", &[(12, 12)]);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), Some(&c)).is_err());
     }
 }
