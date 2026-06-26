@@ -96,11 +96,12 @@ exceeds the specified value.
     Return statement count.
 
 ``--aird-threshold <N>``
-    AIRD score. Recommended value: ``85`` (empirically validated against
-    Sonnet 4.6 and Opus 4.8).
+    AIRD (AI Reasoning Difficulty) score. Recommended value: ``85``
+    (empirically validated against Sonnet 4.6 and Opus 4.8). Run
+    ``knots --explain aird`` for what drives the score and how to lower it.
 
 ``--aicp-threshold <N>``
-    AICP score.
+    AICP (AI Context Pressure) score. Run ``knots --explain aicp`` for details.
 
 ``--external-calls-threshold <N>``
     External call count.
@@ -172,6 +173,17 @@ functions, and among those, only fail on new or worsened ones.
 
 Informational
 -------------
+
+``--explain <METRIC>``
+    Print a terminal-friendly explanation of a metric — what it measures and
+    how to lower it — then exit ``0``. No input files required. Valid metrics:
+    ``mccabe``, ``cognitive``, ``nesting``, ``sloc``, ``abc``, ``returns``,
+    ``aird``, ``aicp``, ``external-calls``. Handy when you meet ``AIRD 98 > 85``
+    mid-commit and don't want to leave the terminal:
+
+    .. code-block:: bash
+
+        knots --explain aird
 
 ``-h``, ``--help``
     Print help.

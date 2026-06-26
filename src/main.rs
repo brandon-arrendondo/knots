@@ -162,7 +162,11 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[command(args_override_self = true)]
 struct Args {
     /// Path(s) to source files or directories to analyze
-    #[arg(value_name = "FILE", required_unless_present = "compile_commands", num_args = 1..)]
+    #[arg(
+        value_name = "FILE",
+        required_unless_present_any = ["compile_commands", "explain"],
+        num_args = 1..
+    )]
     files: Vec<PathBuf>,
 
     /// Recursively process all supported source files in directories
@@ -221,11 +225,13 @@ struct Args {
     #[arg(long, value_name = "N")]
     return_threshold: Option<u32>,
 
-    /// Exit 1 if any function exceeds this AIRD score (default: off, recommended: 85)
+    /// Exit 1 if any function exceeds this AIRD (AI Reasoning Difficulty) score
+    /// (default: off, recommended: 85). Run `knots --explain aird`.
     #[arg(long, value_name = "N")]
     aird_threshold: Option<u32>,
 
-    /// Exit 1 if any function exceeds this AICP score (default: off)
+    /// Exit 1 if any function exceeds this AICP (AI Context Pressure) score
+    /// (default: off). Run `knots --explain aicp`.
     #[arg(long, value_name = "N")]
     aicp_threshold: Option<u32>,
 
@@ -258,6 +264,128 @@ struct Args {
     /// tree (uncommitted edits, plus untracked files). Sugar for `--since HEAD`.
     #[arg(long)]
     changed: bool,
+
+    /// Explain what a metric measures and how to lower it, then exit. No files
+    /// needed. E.g. `knots --explain aird`.
+    #[arg(long, value_name = "METRIC", value_enum)]
+    explain: Option<ExplainMetric>,
+}
+
+/// Metrics that `--explain` can describe at the command line.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+enum ExplainMetric {
+    Mccabe,
+    Cognitive,
+    Nesting,
+    Sloc,
+    Abc,
+    Returns,
+    Aird,
+    Aicp,
+    ExternalCalls,
+}
+
+/// A terminal-friendly explanation of a metric: what it measures and how to
+/// lower it. Distilled from docs/metrics-reference.rst so a user who meets
+/// "AIRD 98 > 85" mid-commit doesn't have to leave the terminal.
+fn explain_metric(metric: ExplainMetric) -> &'static str {
+    match metric {
+        ExplainMetric::Aird => "\
+AIRD — AI Reasoning Difficulty (0–100)
+
+Predicts how much reasoning effort an AI model needs to safely modify a
+function. Higher = harder. Cognitive complexity dominates the score.
+
+  AIRD = cognitive/75 ×55 + sloc/200 ×15 + nesting/8 ×15
+       + test_score/20 ×15 − doc_score/10 ×15        (clamped 0–100)
+
+Recommended CI threshold: 85 (validated against Sonnet 4.6 and Opus 4.8).
+
+Lower it by: reducing cognitive complexity first — it carries 55 of the 100
+points. Extract deeply nested branches into well-named helpers, then trim
+SLOC and nesting. Adding doc comments reduces the score.",
+
+        ExplainMetric::Aicp => "\
+AICP — AI Context Pressure (0–100)
+
+Predicts how much surrounding context an AI must load before it can act.
+Complements AIRD: a function can be cheap to load but hard to reason about,
+or expensive to load but trivial once context is assembled.
+
+  AICP = external_calls/20 ×60 + sloc/200 ×40 − doc_score/10 ×15
+
+External-call breadth is the primary driver (p99 ceiling = 20 calls).
+
+Lower it by: reducing the number of distinct out-of-file functions/macros the
+function calls — consolidate dependencies and narrow its collaborators — then
+trimming SLOC.",
+
+        ExplainMetric::Mccabe => "\
+McCabe — Cyclomatic Complexity
+
+Counts linearly independent paths through a function: decision points + 1
+(if / while / for / case / ternary / && / || / except). 100% match with
+pmccabe across the validation corpus.
+
+Thresholds: ≤10 good, 11–20 moderate, 21+ consider refactoring.
+Lower it by collapsing conditionals, using early returns, and table-driving
+repetitive switches.",
+
+        ExplainMetric::Cognitive => "\
+Cognitive Complexity (Campbell / SonarSource)
+
+How hard code is to *understand*. Like McCabe, but nesting is penalized more,
+else-if chains cost less than independent ifs, and a switch is a single
+increment regardless of arm count.
+
+This is the #1 driver of AIRD. Lower it by flattening nesting (guard clauses,
+early returns) and extracting deeply nested blocks into named helpers.",
+
+        ExplainMetric::Nesting => "\
+Nesting Depth
+
+Maximum depth of nested control structures (if / for / while / switch /
+closures) within a function. Deeper than 4 levels strongly correlates with
+hard-to-maintain code.
+
+Lower it with guard clauses, early returns, and by extracting inner blocks
+into helpers.",
+
+        ExplainMetric::Sloc => "\
+SLOC — Source Lines of Code
+
+Non-blank, non-comment lines within the function body. Functions over ~50
+SLOC often benefit from decomposition.
+
+Lower it by extracting cohesive sub-steps into named helpers.",
+
+        ExplainMetric::Abc => "\
+ABC Complexity
+
+Magnitude of the (Assignments, Branches/calls, Conditions) vector:
+√(A² + B² + C²) — a broad measure of how much a function does.
+
+Lower it by splitting multi-purpose functions and reducing assignment, call,
+and branch density.",
+
+        ExplainMetric::Returns => "\
+Return Count
+
+Number of return statements in a function. A high count can signal tangled
+control flow, though guard-clause early returns are often fine.
+
+Lower it by consolidating exit points where it improves clarity.",
+
+        ExplainMetric::ExternalCalls => "\
+External Calls
+
+Count of distinct call targets not defined in the same file (out-of-file
+functions and function-like macros) — a measure of dependency breadth and the
+primary driver of AICP. p99 across the validation corpus = 20.
+
+Lower it by consolidating dependencies and narrowing the function's
+collaborators.",
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -619,6 +747,27 @@ fn collect_changed_lines(reference: &str) -> Result<ChangedLines> {
     Ok(ChangedLines { map })
 }
 
+/// A one-line pointer printed under AI-metric violations, expanding the acronyms
+/// and pointing at `--explain`. Returns None when no AI metric was violated.
+fn ai_metric_pointer(any_aird: bool, any_aicp: bool) -> Option<String> {
+    match (any_aird, any_aicp) {
+        (true, true) => Some(
+            "  AIRD = AI Reasoning Difficulty, AICP = AI Context Pressure — run \
+             `knots --explain aird` / `knots --explain aicp` for how to lower them."
+                .to_string(),
+        ),
+        (true, false) => Some(
+            "  AIRD = AI Reasoning Difficulty — run `knots --explain aird` for how to lower it."
+                .to_string(),
+        ),
+        (false, true) => Some(
+            "  AICP = AI Context Pressure — run `knots --explain aicp` for how to lower it."
+                .to_string(),
+        ),
+        (false, false) => None,
+    }
+}
+
 fn check_thresholds(
     metrics: &[FunctionMetrics],
     t: &Thresholds,
@@ -636,6 +785,10 @@ fn check_thresholds(
 
     let mut output_lines: Vec<String> = Vec::new();
     let mut violation_count: usize = 0;
+    // Track whether any AI metric was violated so we can append a one-line
+    // pointer expanding the acronym (users meet AIRD/AICP first at the CLI).
+    let mut any_aird = false;
+    let mut any_aicp = false;
 
     for func in metrics {
         // In --changed / --since mode, only gate functions that overlap a
@@ -669,6 +822,8 @@ fn check_thresholds(
                 format!("{}:{}:{}", func.file_path, func.start_line, func.name)
             };
             let aird_violated = fv.iter().any(|s| s.starts_with("AIRD"));
+            any_aird |= aird_violated;
+            any_aicp |= fv.iter().any(|s| s.starts_with("AICP"));
             let drivers_suffix = if aird_violated {
                 let drivers = aird_drivers(func, 2);
                 if drivers.is_empty() {
@@ -699,6 +854,9 @@ fn check_thresholds(
         for line in &output_lines {
             eprintln!("{}", line);
         }
+        if let Some(pointer) = ai_metric_pointer(any_aird, any_aicp) {
+            eprintln!("{}", pointer);
+        }
         if baseline.is_some() {
             anyhow::bail!(
                 "{} function(s) regressed beyond the baseline. Run with --write-baseline to accept the current state.",
@@ -716,6 +874,12 @@ fn check_thresholds(
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    // --explain prints a metric's meaning and exits; no files required.
+    if let Some(metric) = args.explain {
+        println!("{}", explain_metric(metric));
+        return Ok(());
+    }
 
     // Load filter rules
     let include_rules = if let Some(path) = &args.include {
@@ -2715,6 +2879,37 @@ mod tests {
         let metrics = vec![f];
         let c = changed_with("nope_d.rs", &[(100, 110)]);
         assert!(check_thresholds(&metrics, &aird_thresholds(85), None, Some(&c)).is_ok());
+    }
+
+    // ---- --explain / AI-metric pointer ----
+
+    /// Every ExplainMetric variant yields a non-empty explanation that leads
+    /// with the metric's name (so `--explain <m>` is always useful).
+    #[test]
+    fn test_explain_metric_nonempty() {
+        use ExplainMetric::*;
+        for m in [
+            Mccabe, Cognitive, Nesting, Sloc, Abc, Returns, Aird, Aicp, ExternalCalls,
+        ] {
+            let text = explain_metric(m);
+            assert!(!text.is_empty());
+            assert!(text.lines().next().unwrap().len() > 3);
+        }
+        assert!(explain_metric(Aird).contains("AI Reasoning Difficulty"));
+        assert!(explain_metric(Aicp).contains("AI Context Pressure"));
+    }
+
+    /// The pointer expands only the acronyms that were actually violated, and is
+    /// absent when no AI metric is involved.
+    #[test]
+    fn test_ai_metric_pointer() {
+        assert!(ai_metric_pointer(false, false).is_none());
+        let aird = ai_metric_pointer(true, false).unwrap();
+        assert!(aird.contains("AI Reasoning Difficulty") && !aird.contains("Context Pressure"));
+        let aicp = ai_metric_pointer(false, true).unwrap();
+        assert!(aicp.contains("AI Context Pressure") && !aicp.contains("Reasoning Difficulty"));
+        let both = ai_metric_pointer(true, true).unwrap();
+        assert!(both.contains("AI Reasoning Difficulty") && both.contains("AI Context Pressure"));
     }
 
     /// --changed composes with --baseline: a touched function that regressed

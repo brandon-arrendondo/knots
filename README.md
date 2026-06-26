@@ -93,14 +93,15 @@ Options:
   --sloc-threshold <N>              Exit 1 if any function exceeds this SLOC count
   --abc-threshold <F>               Exit 1 if any function exceeds this ABC magnitude
   --return-threshold <N>            Exit 1 if any function exceeds this return count
-  --aird-threshold <N>              Exit 1 if any function exceeds this AIRD score (recommended: 85)
-  --aicp-threshold <N>              Exit 1 if any function exceeds this AICP score
+  --aird-threshold <N>              Exit 1 if any function exceeds this AIRD (AI Reasoning Difficulty) score (recommended: 85)
+  --aicp-threshold <N>              Exit 1 if any function exceeds this AICP (AI Context Pressure) score
   --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
   --report <FILE>                   Write a detailed per-function report to this file (opt-in)
   --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see docs/baseline.rst)
   --write-baseline                  Snapshot current scores to --baseline and exit without gating
   --since <REF>                     Gate only functions overlapping lines changed since this git ref
   --changed                         Gate only functions changed in the working tree (sugar for --since HEAD)
+  --explain <METRIC>                Explain a metric (e.g. aird, aicp) and how to lower it, then exit
   -h, --help                        Print help
   -V, --version                     Print version
 ```
