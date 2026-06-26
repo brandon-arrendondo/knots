@@ -1,0 +1,347 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Filter Rules &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Test Quality Analysis (knots-test-complexity)" href="test-complexity.html" />
+    <link rel="prev" title="Baseline / Ratchet Mode" href="baseline.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Filter Rules</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#json-schema">JSON Schema</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#file-patterns-array-of-strings"><code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> (array of strings)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#function-patterns-array-of-strings"><code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> (array of strings)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-complexity-number"><code class="docutils literal notranslate"><span class="pre">min_complexity</span></code> (number)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-complexity-number"><code class="docutils literal notranslate"><span class="pre">max_complexity</span></code> (number)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#example-1-analyze-only-high-complexity-functions">Example 1: Analyze only high-complexity functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-2-exclude-test-files-and-low-complexity-functions">Example 2: Exclude test files and low-complexity functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-3-focus-on-specific-modules-with-concerning-complexity">Example 3: Focus on specific modules with concerning complexity</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-4-exclude-vendor-code-and-simple-functions">Example 4: Exclude vendor code and simple functions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#filter-logic">Filter Logic</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#include-filter-whitelist">Include filter (whitelist)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#exclude-filter-blacklist">Exclude filter (blacklist)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#combined-filters">Combined filters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Filter Rules</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/filters.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="filter-rules">
+<h1>Filter Rules<a class="headerlink" href="#filter-rules" title="Link to this heading"></a></h1>
+<p>Knots supports filtering files and functions using JSON-based filter rules. Use
+<code class="docutils literal notranslate"><span class="pre">--include</span></code> to whitelist what to analyze, and <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> to blacklist what
+to skip.</p>
+<p>Filters decide <em>what gets analyzed</em>; the <a class="reference internal" href="baseline.html"><span class="doc">baseline</span></a> decides
+<em>what counts as a failure</em>.</p>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Include only specific files/functions</span>
+knots<span class="w"> </span>-r<span class="w"> </span>/path/to/code<span class="w"> </span>--include<span class="w"> </span>filter-include.json
+
+<span class="c1"># Exclude specific files/functions</span>
+knots<span class="w"> </span>-r<span class="w"> </span>/path/to/code<span class="w"> </span>--exclude<span class="w"> </span>filter-exclude.json
+
+<span class="c1"># Combine both (include takes precedence, then exclude is applied)</span>
+knots<span class="w"> </span>-r<span class="w"> </span>/path/to/code<span class="w"> </span>--include<span class="w"> </span>filter-include.json<span class="w"> </span>--exclude<span class="w"> </span>filter-exclude.json
+</pre></div>
+</div>
+</section>
+<section id="json-schema">
+<h2>JSON Schema<a class="headerlink" href="#json-schema" title="Link to this heading"></a></h2>
+<p>Filter JSON files support the following fields (all are optional):</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;pattern1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pattern2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;!negation&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;function_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;regex1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;regex2&quot;</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;min_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;max_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<section id="file-patterns-array-of-strings">
+<h3><code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> (array of strings)<a class="headerlink" href="#file-patterns-array-of-strings" title="Link to this heading"></a></h3>
+<p>Glob-style patterns for matching file paths. Supports:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">*</span></code> — matches any characters except <code class="docutils literal notranslate"><span class="pre">/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">**</span></code> — matches any characters including <code class="docutils literal notranslate"><span class="pre">/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">!pattern</span></code> — negation (exclude files matching this pattern)</p></li>
+</ul>
+<p><strong>Examples:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;src/**/*.c&quot;</span></code> — all <code class="docutils literal notranslate"><span class="pre">.c</span></code> files in <code class="docutils literal notranslate"><span class="pre">src/</span></code> and subdirectories</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lib/*.c&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">.c</span></code> files directly in <code class="docutils literal notranslate"><span class="pre">lib/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;!**/test_*.c&quot;</span></code> — exclude files starting with <code class="docutils literal notranslate"><span class="pre">test_</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;!**/vendor/**&quot;</span></code> — exclude everything in vendor directories</p></li>
+</ul>
+<p><strong>Behavior:</strong></p>
+<ul class="simple">
+<li><p><strong>Include filter:</strong> file must match at least one positive pattern AND not
+match any negation patterns</p></li>
+<li><p><strong>Exclude filter:</strong> file matching any pattern (positive or negative) is
+excluded</p></li>
+</ul>
+</section>
+<section id="function-patterns-array-of-strings">
+<h3><code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> (array of strings)<a class="headerlink" href="#function-patterns-array-of-strings" title="Link to this heading"></a></h3>
+<p>Regular expression patterns for matching function names.</p>
+<p><strong>Examples:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;^process_.*&quot;</span></code> — functions starting with <code class="docutils literal notranslate"><span class="pre">process_</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;.*_handler$&quot;</span></code> — functions ending with <code class="docutils literal notranslate"><span class="pre">_handler</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;^(init|setup|cleanup)_.*&quot;</span></code> — functions starting with <code class="docutils literal notranslate"><span class="pre">init_</span></code>,
+<code class="docutils literal notranslate"><span class="pre">setup_</span></code>, or <code class="docutils literal notranslate"><span class="pre">cleanup_</span></code></p></li>
+</ul>
+<p><strong>Behavior:</strong></p>
+<ul class="simple">
+<li><p><strong>Include filter:</strong> function must match at least one pattern</p></li>
+<li><p><strong>Exclude filter:</strong> function matching any pattern is excluded</p></li>
+</ul>
+</section>
+<section id="min-complexity-number">
+<h3><code class="docutils literal notranslate"><span class="pre">min_complexity</span></code> (number)<a class="headerlink" href="#min-complexity-number" title="Link to this heading"></a></h3>
+<p>Minimum complexity threshold (inclusive). Functions with complexity below this
+are filtered out.</p>
+<ul class="simple">
+<li><p>Complexity is calculated as <code class="docutils literal notranslate"><span class="pre">max(McCabe,</span> <span class="pre">Cognitive)</span></code></p></li>
+<li><p>Default: no minimum (accepts all)</p></li>
+</ul>
+</section>
+<section id="max-complexity-number">
+<h3><code class="docutils literal notranslate"><span class="pre">max_complexity</span></code> (number)<a class="headerlink" href="#max-complexity-number" title="Link to this heading"></a></h3>
+<p>Maximum complexity threshold (inclusive). Functions with complexity above this
+are filtered out.</p>
+<ul class="simple">
+<li><p>Complexity is calculated as <code class="docutils literal notranslate"><span class="pre">max(McCabe,</span> <span class="pre">Cognitive)</span></code></p></li>
+<li><p>Default: no maximum (accepts all)</p></li>
+</ul>
+</section>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<section id="example-1-analyze-only-high-complexity-functions">
+<h3>Example 1: Analyze only high-complexity functions<a class="headerlink" href="#example-1-analyze-only-high-complexity-functions" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">filter-high-complexity.json</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;min_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>knots<span class="w"> </span>-r<span class="w"> </span>.<span class="w"> </span>--include<span class="w"> </span>filter-high-complexity.json
+</pre></div>
+</div>
+</section>
+<section id="example-2-exclude-test-files-and-low-complexity-functions">
+<h3>Example 2: Exclude test files and low-complexity functions<a class="headerlink" href="#example-2-exclude-test-files-and-low-complexity-functions" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">filter-no-tests.json</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;!**/test_*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;!**/*_test.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;!**/tests/**&quot;</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;function_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;^test_.*&quot;</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;max_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>knots<span class="w"> </span>-r<span class="w"> </span>.<span class="w"> </span>--exclude<span class="w"> </span>filter-no-tests.json
+</pre></div>
+</div>
+</section>
+<section id="example-3-focus-on-specific-modules-with-concerning-complexity">
+<h3>Example 3: Focus on specific modules with concerning complexity<a class="headerlink" href="#example-3-focus-on-specific-modules-with-concerning-complexity" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">filter-focus.json</span></code>:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s2">&quot;src/core/**/*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;src/drivers/**/*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;!**/vendor/**&quot;</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;min_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;max_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>knots<span class="w"> </span>-r<span class="w"> </span>.<span class="w"> </span>--include<span class="w"> </span>filter-focus.json
+</pre></div>
+</div>
+</section>
+<section id="example-4-exclude-vendor-code-and-simple-functions">
+<h3>Example 4: Exclude vendor code and simple functions<a class="headerlink" href="#example-4-exclude-vendor-code-and-simple-functions" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create exclude filter</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>filter-exclude.json<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">{</span>
+<span class="s">  &quot;file_patterns&quot;: [</span>
+<span class="s">    &quot;**/vendor/**&quot;,</span>
+<span class="s">    &quot;**/third_party/**&quot;,</span>
+<span class="s">    &quot;**/Middlewares/**&quot;</span>
+<span class="s">  ],</span>
+<span class="s">  &quot;function_patterns&quot;: [</span>
+<span class="s">    &quot;^HAL_.*&quot;,</span>
+<span class="s">    &quot;^__.*&quot;</span>
+<span class="s">  ],</span>
+<span class="s">  &quot;max_complexity&quot;: 5</span>
+<span class="s">}</span>
+<span class="s">EOF</span>
+
+knots<span class="w"> </span>-r<span class="w"> </span>.<span class="w"> </span>--exclude<span class="w"> </span>filter-exclude.json
+</pre></div>
+</div>
+</section>
+</section>
+<section id="filter-logic">
+<h2>Filter Logic<a class="headerlink" href="#filter-logic" title="Link to this heading"></a></h2>
+<section id="include-filter-whitelist">
+<h3>Include filter (whitelist)<a class="headerlink" href="#include-filter-whitelist" title="Link to this heading"></a></h3>
+<p>When <code class="docutils literal notranslate"><span class="pre">--include</span></code> is specified:</p>
+<ol class="arabic simple">
+<li><p>Files must match <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> (if specified)</p></li>
+<li><p>Functions must match <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> (if specified)</p></li>
+<li><p>Complexity must be within min/max bounds (if specified)</p></li>
+</ol>
+<p>If any criterion fails, the file/function is skipped.</p>
+</section>
+<section id="exclude-filter-blacklist">
+<h3>Exclude filter (blacklist)<a class="headerlink" href="#exclude-filter-blacklist" title="Link to this heading"></a></h3>
+<p>When <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> is specified:</p>
+<ol class="arabic simple">
+<li><p>If a file matches <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code>, it’s excluded</p></li>
+<li><p>If a function matches <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> AND complexity bounds, it’s
+excluded</p></li>
+</ol>
+</section>
+<section id="combined-filters">
+<h3>Combined filters<a class="headerlink" href="#combined-filters" title="Link to this heading"></a></h3>
+<p>When both <code class="docutils literal notranslate"><span class="pre">--include</span></code> and <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> are specified:</p>
+<ol class="arabic simple">
+<li><p>Include filter is applied first (whitelist)</p></li>
+<li><p>Exclude filter is applied second (blacklist from the whitelist)</p></li>
+</ol>
+<p>This allows you to say “analyze only <code class="docutils literal notranslate"><span class="pre">core/</span></code>” (include) and then “but skip
+test files” (exclude).</p>
+</section>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>All filter criteria are optional — specify only the ones you need.</p></li>
+<li><p>Empty arrays mean “match everything” for that criterion.</p></li>
+<li><p>File patterns are matched against the full file path.</p></li>
+<li><p>Function patterns use Rust’s regex syntax.</p></li>
+<li><p>Invalid regex patterns are silently ignored (the function won’t match).</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="baseline.html" class="btn btn-neutral float-left" title="Baseline / Ratchet Mode" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="test-complexity.html" class="btn btn-neutral float-right" title="Test Quality Analysis (knots-test-complexity)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

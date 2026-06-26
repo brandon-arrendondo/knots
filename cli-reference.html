@@ -51,6 +51,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#positional-arguments">Positional Arguments</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#options">Options</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#baseline-ratchet-mode">Baseline / Ratchet Mode</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#informational">Informational</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#exit-status">Exit Status</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#complexity-indicators">Complexity Indicators</a></li>
@@ -59,6 +60,8 @@
 <li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filter Rules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -112,7 +115,8 @@ Mutually exclusive with <code class="docutils literal notranslate"><span class="
 <dt><code class="docutils literal notranslate"><span class="pre">-r</span></code>, <code class="docutils literal notranslate"><span class="pre">--recursive</span></code></dt><dd><p>Recursively process all supported source files in directories. See
 <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a> for the full list of recognized extensions. Header
 files (<code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.hpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.hxx</span></code>) are skipped unless explicitly included
-via a filter. Generates <code class="docutils literal notranslate"><span class="pre">report.txt</span></code> in the current directory.</p>
+via a filter. A per-function report file is written only when <code class="docutils literal notranslate"><span class="pre">--report</span></code>
+is given.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-v</span></code>, <code class="docutils literal notranslate"><span class="pre">--verbose</span></code></dt><dd><p>Show detailed per-function analysis including all test scoring sub-axes.</p>
 </dd>
@@ -124,9 +128,15 @@ list. <strong>C/C++ only</strong> — compilation databases are not produced by 
 Python, or JavaScript toolchains. Mutually exclusive with positional
 <code class="docutils literal notranslate"><span class="pre">[FILE]...</span></code>.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--include</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Include filter rules from a JSON file (whitelist). See <code class="docutils literal notranslate"><span class="pre">FILTERS</span></code>.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">--include</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Include filter rules from a JSON file (whitelist). See <a class="reference internal" href="filters.html"><span class="doc">Filter Rules</span></a>.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--exclude</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Exclude filter rules from a JSON file (blacklist). See <code class="docutils literal notranslate"><span class="pre">FILTERS</span></code>.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">--exclude</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Exclude filter rules from a JSON file (blacklist). See <a class="reference internal" href="filters.html"><span class="doc">Filter Rules</span></a>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--exclude-path</span> <span class="pre">&lt;PATTERN&gt;</span></code></dt><dd><p>Exclude files whose path matches this regex. Repeatable; uses the same
+syntax as a pre-commit <code class="docutils literal notranslate"><span class="pre">exclude:</span></code> entry.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Write a detailed per-function report to <code class="docutils literal notranslate"><span class="pre">&lt;FILE&gt;</span></code>. Opt-in — omit to
+suppress the file.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">&lt;FORMAT&gt;</span></code></dt><dd><p>Output format. One of:</p>
 <table class="docutils align-default">
@@ -181,6 +191,33 @@ Sonnet 4.6 and Opus 4.8).</p>
 </dd>
 </dl>
 </section>
+<section id="baseline-ratchet-mode">
+<h2>Baseline / Ratchet Mode<a class="headerlink" href="#baseline-ratchet-mode" title="Link to this heading"></a></h2>
+<p>Adopt a threshold gate on an existing codebase without first refactoring every
+pre-existing offender. Snapshot the current per-function scores once, then gate
+only on <strong>regressions</strong> — a new function over threshold, or a baselined one
+whose score got worse. See <a class="reference internal" href="baseline.html"><span class="doc">Baseline / Ratchet Mode</span></a> for the full guide and file format.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--baseline</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Gate against the snapshot in <code class="docutils literal notranslate"><span class="pre">&lt;FILE&gt;</span></code>: a function is only reported if it
+is over threshold <strong>and</strong> either absent from the baseline (new) or worse on
+the offending metric than its baselined value. Functions at or below their
+baselined scores are tolerated. Without this flag, every over-threshold
+function fails (the default).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code></dt><dd><p>Snapshot the current scores to the <code class="docutils literal notranslate"><span class="pre">--baseline</span></code> file and exit <code class="docutils literal notranslate"><span class="pre">0</span></code>
+without gating. Use it to adopt the gate, and to re-accept the current
+state after intentional changes. Requires <code class="docutils literal notranslate"><span class="pre">--baseline</span> <span class="pre">&lt;FILE&gt;</span></code>; works with
+any <code class="docutils literal notranslate"><span class="pre">--format</span></code>.</p>
+</dd>
+</dl>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Snapshot today (run once, commit the file)</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--aird-threshold<span class="w"> </span><span class="m">85</span><span class="w"> </span>--baseline<span class="w"> </span>.knots-baseline.json<span class="w"> </span>--write-baseline
+
+<span class="c1"># Gate against it — fails only on new or worsened functions</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--aird-threshold<span class="w"> </span><span class="m">85</span><span class="w"> </span>--baseline<span class="w"> </span>.knots-baseline.json
+</pre></div>
+</div>
+</section>
 <section id="informational">
 <h2>Informational<a class="headerlink" href="#informational" title="Link to this heading"></a></h2>
 <dl class="simple">
@@ -195,8 +232,11 @@ Sonnet 4.6 and Opus 4.8).</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">0</span></code></dt><dd><p>Successful analysis, no threshold violations.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>Error (file not found, parse error, invalid arguments), or one or more
-threshold violations when any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag is set.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>Error (file not found, parse error, unreadable baseline), or one or more
+threshold violations when any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag is set. In
+<code class="docutils literal notranslate"><span class="pre">--baseline</span></code> mode, only new or worsened functions count as violations.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">2</span></code></dt><dd><p>Invalid arguments (e.g. <code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code> without <code class="docutils literal notranslate"><span class="pre">--baseline</span></code>).</p>
 </dd>
 </dl>
 </section>

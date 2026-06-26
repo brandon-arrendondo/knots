@@ -49,6 +49,8 @@
 <li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filter Rules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -110,6 +112,7 @@ assistance.</p>
 <li class="toctree-l2"><a class="reference internal" href="cli-reference.html#positional-arguments">Positional Arguments</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli-reference.html#options">Options</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli-reference.html#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli-reference.html#baseline-ratchet-mode">Baseline / Ratchet Mode</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli-reference.html#informational">Informational</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli-reference.html#exit-status">Exit Status</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli-reference.html#complexity-indicators">Complexity Indicators</a></li>
@@ -139,10 +142,43 @@ assistance.</p>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="ci-integration.html#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ci-integration.html#adopting-on-a-legacy-codebase">Adopting on a Legacy Codebase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ci-integration.html#github-actions">GitHub Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ci-integration.html#pre-commit-hook">Pre-commit Hook</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ci-integration.html#combining-with-other-tools">Combining with Other Tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ci-integration.html#corpus-analysis">Corpus Analysis</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="baseline.html#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="baseline.html#how-a-regression-is-decided">How a regression is decided</a></li>
+<li class="toctree-l2"><a class="reference internal" href="baseline.html#file-format">File format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="baseline.html#notes-limitations">Notes &amp; limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filter Rules</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#json-schema">JSON Schema</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#file-patterns-array-of-strings"><code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> (array of strings)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#function-patterns-array-of-strings"><code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> (array of strings)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#min-complexity-number"><code class="docutils literal notranslate"><span class="pre">min_complexity</span></code> (number)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#max-complexity-number"><code class="docutils literal notranslate"><span class="pre">max_complexity</span></code> (number)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#example-1-analyze-only-high-complexity-functions">Example 1: Analyze only high-complexity functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#example-2-exclude-test-files-and-low-complexity-functions">Example 2: Exclude test files and low-complexity functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#example-3-focus-on-specific-modules-with-concerning-complexity">Example 3: Focus on specific modules with concerning complexity</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#example-4-exclude-vendor-code-and-simple-functions">Example 4: Exclude vendor code and simple functions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#filter-logic">Filter Logic</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#include-filter-whitelist">Include filter (whitelist)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#exclude-filter-blacklist">Exclude filter (blacklist)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="filters.html#combined-filters">Combined filters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="filters.html#notes">Notes</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a><ul>

@@ -19,7 +19,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Test Quality Analysis (knots-test-complexity)" href="test-complexity.html" />
+    <link rel="next" title="Baseline / Ratchet Mode" href="baseline.html" />
     <link rel="prev" title="Output Formats" href="output-formats.html" /> 
 </head>
 
@@ -51,12 +51,15 @@
 <li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">CI Integration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#threshold-flags">Threshold Flags</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adopting-on-a-legacy-codebase">Adopting on a Legacy Codebase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#github-actions">GitHub Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#pre-commit-hook">Pre-commit Hook</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#combining-with-other-tools">Combining with Other Tools</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#corpus-analysis">Corpus Analysis</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filter Rules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
@@ -106,6 +109,23 @@ function exceeds the specified value. Use these as CI gates:</p>
 <p>The recommended starting point is <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code>, which was
 empirically validated against Sonnet 4.6 and Opus 4.8. See
 <a class="reference internal" href="metrics-reference.html"><span class="doc">Metrics Reference</span></a> for AIRD formula and corpus distribution.</p>
+</section>
+<section id="adopting-on-a-legacy-codebase">
+<h2>Adopting on a Legacy Codebase<a class="headerlink" href="#adopting-on-a-legacy-codebase" title="Link to this heading"></a></h2>
+<p>On an older or larger project, turning the gate on cold means every
+pre-existing offender fails at once. <code class="docutils literal notranslate"><span class="pre">--baseline</span></code> snapshots the current scores
+and then fails only on <strong>regressions</strong> — new over-threshold functions, or
+baselined ones that got worse — so you can adopt the gate today and improve from
+there. See <a class="reference internal" href="baseline.html"><span class="doc">Baseline / Ratchet Mode</span></a> for details.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Snapshot once and commit the file</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--aird-threshold<span class="w"> </span><span class="m">85</span><span class="w"> </span>--baseline<span class="w"> </span>.knots-baseline.json<span class="w"> </span>--write-baseline
+
+<span class="c1"># CI / pre-commit gate against the snapshot</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--aird-threshold<span class="w"> </span><span class="m">85</span><span class="w"> </span>--baseline<span class="w"> </span>.knots-baseline.json
+</pre></div>
+</div>
+<p>In a pre-commit hook, pass both flags via <code class="docutils literal notranslate"><span class="pre">args</span></code> and commit
+<code class="docutils literal notranslate"><span class="pre">.knots-baseline.json</span></code> so every contributor gates against the same snapshot.</p>
 </section>
 <section id="github-actions">
 <h2>GitHub Actions<a class="headerlink" href="#github-actions" title="Link to this heading"></a></h2>
@@ -194,7 +214,7 @@ format:</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="output-formats.html" class="btn btn-neutral float-left" title="Output Formats" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="test-complexity.html" class="btn btn-neutral float-right" title="Test Quality Analysis (knots-test-complexity)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="baseline.html" class="btn btn-neutral float-right" title="Baseline / Ratchet Mode" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

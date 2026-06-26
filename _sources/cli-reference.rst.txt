@@ -24,7 +24,8 @@ Options
     Recursively process all supported source files in directories. See
     :doc:`installation` for the full list of recognized extensions. Header
     files (``.h``, ``.hpp``, ``.hxx``) are skipped unless explicitly included
-    via a filter. Generates ``report.txt`` in the current directory.
+    via a filter. A per-function report file is written only when ``--report``
+    is given.
 
 ``-v``, ``--verbose``
     Show detailed per-function analysis including all test scoring sub-axes.
@@ -40,10 +41,18 @@ Options
     ``[FILE]...``.
 
 ``--include <FILE>``
-    Include filter rules from a JSON file (whitelist). See ``FILTERS``.
+    Include filter rules from a JSON file (whitelist). See :doc:`filters`.
 
 ``--exclude <FILE>``
-    Exclude filter rules from a JSON file (blacklist). See ``FILTERS``.
+    Exclude filter rules from a JSON file (blacklist). See :doc:`filters`.
+
+``--exclude-path <PATTERN>``
+    Exclude files whose path matches this regex. Repeatable; uses the same
+    syntax as a pre-commit ``exclude:`` entry.
+
+``--report <FILE>``
+    Write a detailed per-function report to ``<FILE>``. Opt-in — omit to
+    suppress the file.
 
 ``--format <FORMAT>``
     Output format. One of:
@@ -96,6 +105,35 @@ exceeds the specified value.
 ``--external-calls-threshold <N>``
     External call count.
 
+Baseline / Ratchet Mode
+-----------------------
+
+Adopt a threshold gate on an existing codebase without first refactoring every
+pre-existing offender. Snapshot the current per-function scores once, then gate
+only on **regressions** — a new function over threshold, or a baselined one
+whose score got worse. See :doc:`baseline` for the full guide and file format.
+
+``--baseline <FILE>``
+    Gate against the snapshot in ``<FILE>``: a function is only reported if it
+    is over threshold **and** either absent from the baseline (new) or worse on
+    the offending metric than its baselined value. Functions at or below their
+    baselined scores are tolerated. Without this flag, every over-threshold
+    function fails (the default).
+
+``--write-baseline``
+    Snapshot the current scores to the ``--baseline`` file and exit ``0``
+    without gating. Use it to adopt the gate, and to re-accept the current
+    state after intentional changes. Requires ``--baseline <FILE>``; works with
+    any ``--format``.
+
+.. code-block:: bash
+
+    # Snapshot today (run once, commit the file)
+    knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json --write-baseline
+
+    # Gate against it — fails only on new or worsened functions
+    knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json
+
 Informational
 -------------
 
@@ -112,8 +150,12 @@ Exit Status
     Successful analysis, no threshold violations.
 
 ``1``
-    Error (file not found, parse error, invalid arguments), or one or more
-    threshold violations when any ``--*-threshold`` flag is set.
+    Error (file not found, parse error, unreadable baseline), or one or more
+    threshold violations when any ``--*-threshold`` flag is set. In
+    ``--baseline`` mode, only new or worsened functions count as violations.
+
+``2``
+    Invalid arguments (e.g. ``--write-baseline`` without ``--baseline``).
 
 Complexity Indicators
 ---------------------
