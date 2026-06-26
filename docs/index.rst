@@ -19,6 +19,7 @@ assistance.
    output-formats
    ci-integration
    baseline
+   filters
    test-complexity
    alternatives
    troubleshooting

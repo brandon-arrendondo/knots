@@ -9,9 +9,9 @@ a new function over threshold, or a baselined function whose score got *worse*.
 Everything already in the snapshot is tolerated until you improve it.
 
 This is the standard "don't make it worse" adoption pattern used by clippy,
-eslint, and mypy on legacy code. It complements the :doc:`filters <cli-reference>`
-(``--include`` / ``--exclude``): filters decide *what gets analyzed*; the
-baseline decides *what counts as a failure*.
+eslint, and mypy on legacy code. It complements the :doc:`filters` (``--include``
+/ ``--exclude``): filters decide *what gets analyzed*; the baseline decides
+*what counts as a failure*.
 
 Usage
 -----

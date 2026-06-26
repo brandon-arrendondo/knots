@@ -40,10 +40,10 @@ Options
     ``[FILE]...``.
 
 ``--include <FILE>``
-    Include filter rules from a JSON file (whitelist). See ``FILTERS``.
+    Include filter rules from a JSON file (whitelist). See :doc:`filters`.
 
 ``--exclude <FILE>``
-    Exclude filter rules from a JSON file (blacklist). See ``FILTERS``.
+    Exclude filter rules from a JSON file (blacklist). See :doc:`filters`.
 
 ``--format <FORMAT>``
     Output format. One of:
