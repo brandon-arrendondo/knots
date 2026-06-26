@@ -46,7 +46,7 @@ repos:
 ```yaml
 repos:
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v1.10.0
+    rev: v1.10.1
     hooks:
       - id: knots
 ```

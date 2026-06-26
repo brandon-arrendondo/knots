@@ -305,12 +305,68 @@ fn check_f64_threshold(out: &mut Vec<String>, label: &str, limit: Option<f64>, v
     }
 }
 
+fn aird_term(label: &str, value: f64, max: f64, cap_label: &str) -> String {
+    let capped = if value >= max { cap_label } else { "" };
+    format!("{}: {:.1}/{:.0}{}", label, value, max, capped)
+}
+
+fn format_aird_breakdown(func: &FunctionMetrics) -> String {
+    let cognitive_contrib = (func.cognitive as f64 / 75.0).min(1.0) * 55.0;
+    let sloc_contrib      = (func.sloc as f64 / 200.0).min(1.0) * 15.0;
+    let nesting_contrib   = (func.nesting as f64 / 8.0).min(1.0) * 15.0;
+    let test_contrib      = (func.test_scoring.total_score.max(0) as f64 / 20.0).min(1.0) * 15.0;
+    let doc_contrib       = (func.test_scoring.documentation_score.max(0) as f64 / 10.0).min(1.0) * 15.0;
+    let coupling_contrib  = (func.state_coupling as f64 / 12.0).min(1.0) * 10.0;
+
+    let cog  = aird_term("cognitive", cognitive_contrib, 55.0, " [capped]");
+    let sloc = aird_term("sloc",      sloc_contrib,      15.0, " [capped]");
+    let nest = aird_term("nesting",   nesting_contrib,   15.0, " [capped]");
+    let test = aird_term("test",      test_contrib,      15.0, " [capped]");
+    let doc  = format!("doc: -{:.1}/15", doc_contrib);
+    let coup = format!("coupling: +{:.1}/10", coupling_contrib);
+
+    format!("    {}, {}, {}, {}, {}, {}", cog, sloc, nest, test, doc, coup)
+}
+
+fn aird_tips(func: &FunctionMetrics) -> Vec<String> {
+    let mut tips = Vec::new();
+    let cognitive_capped = func.cognitive >= 75;
+    let sloc_capped = func.sloc >= 200;
+
+    if cognitive_capped && sloc_capped {
+        tips.push(
+            "    Tip: cognitive and sloc are both capped — incremental extractions won't move the \
+             needle until you break through at least one cap. Push for a larger extraction that \
+             drops cognitive below 75 or sloc below 200."
+                .to_string(),
+        );
+    } else if cognitive_capped {
+        tips.push(
+            "    Tip: cognitive is capped at 75 (contributing full 55 pts). \
+             Extract until cognitive drops below 75 to see AIRD improve."
+                .to_string(),
+        );
+    }
+
+    if func.state_coupling > 0 {
+        tips.push(
+            "    Tip: if early extractions are not reducing AIRD, the function may still be \
+             above the cognitive cap. Continue extracting — once cognitive drops below 75 \
+             the cognitive term will fall sharply and AIRD will follow."
+                .to_string(),
+        );
+    }
+
+    tips
+}
+
 fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
     if !t.active() {
         return Ok(());
     }
 
-    let mut violations: Vec<String> = Vec::new();
+    let mut output_lines: Vec<String> = Vec::new();
+    let mut violation_count: usize = 0;
 
     for func in metrics {
         let mut fv: Vec<String> = Vec::new();
@@ -325,23 +381,30 @@ fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
         check_u32_threshold(&mut fv, "ExternalCalls", t.external_calls, func.external_calls);
 
         if !fv.is_empty() {
+            violation_count += 1;
             let loc = if func.file_path.is_empty() {
                 format!("{}:{}", func.name, func.start_line)
             } else {
                 format!("{}:{}:{}", func.file_path, func.start_line, func.name)
             };
-            violations.push(format!("  {} — {}", loc, fv.join(", ")));
+            output_lines.push(format!("  {} — {}", loc, fv.join(", ")));
+
+            let aird_violated = fv.iter().any(|s| s.starts_with("AIRD"));
+            if aird_violated {
+                output_lines.push(format_aird_breakdown(func));
+                output_lines.extend(aird_tips(func));
+            }
         }
     }
 
-    if !violations.is_empty() {
-        eprintln!("Threshold violations ({}):", violations.len());
-        for v in &violations {
-            eprintln!("{}", v);
+    if violation_count > 0 {
+        eprintln!("Threshold violations ({}):", violation_count);
+        for line in &output_lines {
+            eprintln!("{}", line);
         }
         anyhow::bail!(
             "{} function(s) exceeded complexity thresholds",
-            violations.len()
+            violation_count
         );
     }
 
