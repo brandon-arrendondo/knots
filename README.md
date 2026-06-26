@@ -82,6 +82,7 @@ Options:
   --compile-commands <FILE>         Use compile_commands.json to get file list
   --include <FILE>                  Include filter rules from JSON file (whitelist)
   --exclude <FILE>                  Exclude filter rules from JSON file (blacklist)
+  --exclude-path <PATTERN>          Exclude files whose path matches this regex (repeatable)
   --format <FORMAT>                 text (default) | sarif | json | ndjson | csv
   --mccabe-threshold <N>            Exit 1 if any function exceeds this McCabe complexity
   --cognitive-threshold <N>         Exit 1 if any function exceeds this cognitive complexity
@@ -92,6 +93,7 @@ Options:
   --aird-threshold <N>              Exit 1 if any function exceeds this AIRD score (recommended: 85)
   --aicp-threshold <N>              Exit 1 if any function exceeds this AICP score
   --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
+  --report <FILE>                   Write a detailed per-function report to this file (opt-in)
   --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see docs/baseline.rst)
   --write-baseline                  Snapshot current scores to --baseline and exit without gating
   -h, --help                        Print help

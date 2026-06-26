@@ -24,7 +24,8 @@ Options
     Recursively process all supported source files in directories. See
     :doc:`installation` for the full list of recognized extensions. Header
     files (``.h``, ``.hpp``, ``.hxx``) are skipped unless explicitly included
-    via a filter. Generates ``report.txt`` in the current directory.
+    via a filter. A per-function report file is written only when ``--report``
+    is given.
 
 ``-v``, ``--verbose``
     Show detailed per-function analysis including all test scoring sub-axes.
@@ -44,6 +45,14 @@ Options
 
 ``--exclude <FILE>``
     Exclude filter rules from a JSON file (blacklist). See :doc:`filters`.
+
+``--exclude-path <PATTERN>``
+    Exclude files whose path matches this regex. Repeatable; uses the same
+    syntax as a pre-commit ``exclude:`` entry.
+
+``--report <FILE>``
+    Write a detailed per-function report to ``<FILE>``. Opt-in — omit to
+    suppress the file.
 
 ``--format <FORMAT>``
     Output format. One of:
