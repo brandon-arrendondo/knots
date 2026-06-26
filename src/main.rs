@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -236,6 +236,17 @@ struct Args {
     /// Write detailed per-function report to this file (opt-in; omit to suppress the file)
     #[arg(long, value_name = "FILE")]
     report: Option<PathBuf>,
+
+    /// Ratchet against a baseline file: gate only on regressions (a new
+    /// over-threshold function, or a baselined one whose score got worse).
+    /// Combine with --write-baseline to (re)generate the file.
+    #[arg(long, value_name = "FILE")]
+    baseline: Option<PathBuf>,
+
+    /// Snapshot current per-function scores to the --baseline file and exit
+    /// without gating. Use to adopt the gate on a legacy codebase.
+    #[arg(long, requires = "baseline")]
+    write_baseline: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -289,17 +300,44 @@ impl Thresholds {
     }
 }
 
-fn check_u32_threshold(out: &mut Vec<String>, label: &str, limit: Option<u32>, value: u32) {
+/// Records a violation when `value` exceeds `limit`. In baseline mode `baseline`
+/// carries this function's previously-snapshotted value for the metric; a
+/// pre-existing offender that did not get *worse* (`value <= baseline`) is
+/// tolerated. `baseline == None` means either "not in baseline mode" or "new
+/// function not present in the baseline" — both correctly report the violation.
+fn check_u32_threshold(
+    out: &mut Vec<String>,
+    label: &str,
+    limit: Option<u32>,
+    value: u32,
+    baseline: Option<u32>,
+) {
     if let Some(lim) = limit {
         if value > lim {
+            if let Some(base) = baseline {
+                if value <= base {
+                    return;
+                }
+            }
             out.push(format!("{} {} > {}", label, value, lim));
         }
     }
 }
 
-fn check_f64_threshold(out: &mut Vec<String>, label: &str, limit: Option<f64>, value: f64) {
+fn check_f64_threshold(
+    out: &mut Vec<String>,
+    label: &str,
+    limit: Option<f64>,
+    value: f64,
+    baseline: Option<f64>,
+) {
     if let Some(lim) = limit {
         if value > lim {
+            if let Some(base) = baseline {
+                if value <= base {
+                    return;
+                }
+            }
             out.push(format!("{} {:.2} > {:.2}", label, value, lim));
         }
     }
@@ -326,6 +364,89 @@ fn format_aird_breakdown(func: &FunctionMetrics) -> String {
     let coup = format!("coupling: +{:.1}/10", coupling_contrib);
 
     format!("    {}, {}, {}, {}, {}, {}", cog, sloc, nest, test, doc, coup)
+}
+
+/// One function's snapshotted scores in a baseline file. Keyed on
+/// `file` + `function` (line numbers are deliberately omitted so the baseline
+/// stays stable as code moves). Records every gateable metric so any threshold
+/// combination can be ratcheted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BaselineEntry {
+    file: String,
+    function: String,
+    mccabe: u32,
+    cognitive: u32,
+    nesting: u32,
+    sloc: u32,
+    abc_magnitude: f64,
+    return_count: u32,
+    aird: u32,
+    aicp: u32,
+    external_calls: u32,
+}
+
+/// A baseline snapshot: the set of per-function scores at the time the gate was
+/// adopted. On a later run, only functions that are new or worse than their
+/// entry here fail the gate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Baseline {
+    version: u32,
+    functions: Vec<BaselineEntry>,
+}
+
+impl Baseline {
+    fn from_file(path: &Path) -> Result<Self> {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read baseline file: {}", path.display()))?;
+        serde_json::from_str(&content)
+            .with_context(|| format!("Failed to parse baseline file: {}", path.display()))
+    }
+
+    /// Lookup table keyed by `(file, function)`. On duplicate keys (same-named
+    /// functions in one file) the last entry wins — an accepted limitation
+    /// shared with clippy/eslint-style baselines.
+    fn index(&self) -> HashMap<(&str, &str), &BaselineEntry> {
+        self.functions
+            .iter()
+            .map(|e| ((e.file.as_str(), e.function.as_str()), e))
+            .collect()
+    }
+}
+
+/// Snapshot the analyzed functions into a Baseline, sorted by (file, function)
+/// for deterministic, diff-friendly output.
+fn baseline_from_metrics(metrics: &[FunctionMetrics]) -> Baseline {
+    let mut functions: Vec<BaselineEntry> = metrics
+        .iter()
+        .map(|f| BaselineEntry {
+            file: f.file_path.clone(),
+            function: f.name.clone(),
+            mccabe: f.mccabe,
+            cognitive: f.cognitive,
+            nesting: f.nesting,
+            sloc: f.sloc,
+            abc_magnitude: f.abc_magnitude,
+            return_count: f.return_count,
+            aird: f.aird,
+            aicp: f.aicp,
+            external_calls: f.external_calls,
+        })
+        .collect();
+    functions.sort_by(|a, b| (&a.file, &a.function).cmp(&(&b.file, &b.function)));
+    Baseline {
+        version: 1,
+        functions,
+    }
+}
+
+fn write_baseline(path: &Path, metrics: &[FunctionMetrics]) -> Result<()> {
+    let baseline = baseline_from_metrics(metrics);
+    let json = serde_json::to_string_pretty(&baseline)?;
+    fs::write(path, format!("{json}\n"))
+        .with_context(|| format!("Failed to write baseline file: {}", path.display()))?;
+    Ok(())
 }
 
 /// Returns the top `top_n` AIRD components that drove the score, as
@@ -383,25 +504,38 @@ fn aird_tips(func: &FunctionMetrics) -> Vec<String> {
     tips
 }
 
-fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
+fn check_thresholds(
+    metrics: &[FunctionMetrics],
+    t: &Thresholds,
+    baseline: Option<&Baseline>,
+) -> Result<()> {
     if !t.active() {
         return Ok(());
     }
+
+    // In baseline mode, look each function up so per-metric scores can be
+    // compared against its snapshot. None for every metric when baseline is
+    // off, or when the function is new (absent from the baseline).
+    let index = baseline.map(|b| b.index());
 
     let mut output_lines: Vec<String> = Vec::new();
     let mut violation_count: usize = 0;
 
     for func in metrics {
+        let base: Option<&BaselineEntry> = index
+            .as_ref()
+            .and_then(|idx| idx.get(&(func.file_path.as_str(), func.name.as_str())).copied());
+
         let mut fv: Vec<String> = Vec::new();
-        check_u32_threshold(&mut fv, "McCabe",        t.mccabe,         func.mccabe);
-        check_u32_threshold(&mut fv, "Cognitive",     t.cognitive,      func.cognitive);
-        check_u32_threshold(&mut fv, "Nesting",       t.nesting,        func.nesting);
-        check_u32_threshold(&mut fv, "SLOC",          t.sloc,           func.sloc);
-        check_f64_threshold(&mut fv, "ABC",           t.abc,            func.abc_magnitude);
-        check_u32_threshold(&mut fv, "Returns",       t.returns,        func.return_count);
-        check_u32_threshold(&mut fv, "AIRD",          t.aird,           func.aird);
-        check_u32_threshold(&mut fv, "AICP",          t.aicp,           func.aicp);
-        check_u32_threshold(&mut fv, "ExternalCalls", t.external_calls, func.external_calls);
+        check_u32_threshold(&mut fv, "McCabe",        t.mccabe,         func.mccabe,         base.map(|b| b.mccabe));
+        check_u32_threshold(&mut fv, "Cognitive",     t.cognitive,      func.cognitive,      base.map(|b| b.cognitive));
+        check_u32_threshold(&mut fv, "Nesting",       t.nesting,        func.nesting,        base.map(|b| b.nesting));
+        check_u32_threshold(&mut fv, "SLOC",          t.sloc,           func.sloc,           base.map(|b| b.sloc));
+        check_f64_threshold(&mut fv, "ABC",           t.abc,            func.abc_magnitude,  base.map(|b| b.abc_magnitude));
+        check_u32_threshold(&mut fv, "Returns",       t.returns,        func.return_count,   base.map(|b| b.return_count));
+        check_u32_threshold(&mut fv, "AIRD",          t.aird,           func.aird,           base.map(|b| b.aird));
+        check_u32_threshold(&mut fv, "AICP",          t.aicp,           func.aicp,           base.map(|b| b.aicp));
+        check_u32_threshold(&mut fv, "ExternalCalls", t.external_calls, func.external_calls, base.map(|b| b.external_calls));
 
         if !fv.is_empty() {
             violation_count += 1;
@@ -433,9 +567,19 @@ fn check_thresholds(metrics: &[FunctionMetrics], t: &Thresholds) -> Result<()> {
     }
 
     if violation_count > 0 {
-        eprintln!("Threshold violations ({}):", violation_count);
+        if baseline.is_some() {
+            eprintln!("New or worsened threshold violations vs. baseline ({violation_count}):");
+        } else {
+            eprintln!("Threshold violations ({violation_count}):");
+        }
         for line in &output_lines {
             eprintln!("{}", line);
+        }
+        if baseline.is_some() {
+            anyhow::bail!(
+                "{} function(s) regressed beyond the baseline. Run with --write-baseline to accept the current state.",
+                violation_count
+            );
         }
         anyhow::bail!(
             "{} function(s) exceeded complexity thresholds",
@@ -506,6 +650,31 @@ fn main() -> Result<()> {
         aird: args.aird_threshold,
         aicp: args.aicp_threshold,
         external_calls: args.external_calls_threshold,
+    };
+
+    // Write-baseline mode: snapshot every analyzed function and exit without
+    // gating. Handled before format/mode dispatch so `--write-baseline` behaves
+    // identically regardless of --format. clap's `requires` guarantees a path.
+    if args.write_baseline {
+        let (all_metrics, _skipped) =
+            collect_all_metrics(&files, &include_rules, &exclude_rules);
+        let path = args
+            .baseline
+            .as_ref()
+            .expect("--write-baseline requires --baseline (enforced by clap)");
+        write_baseline(path, &all_metrics)?;
+        eprintln!(
+            "Wrote baseline: {} function(s) -> {}",
+            all_metrics.len(),
+            path.display()
+        );
+        return Ok(());
+    }
+
+    // Load the baseline for ratchet-mode gating (read-only here).
+    let baseline = match &args.baseline {
+        Some(path) => Some(Baseline::from_file(path)?),
+        None => None,
     };
 
     // Structured output modes: collect all metrics then emit and exit.
@@ -585,7 +754,7 @@ fn main() -> Result<()> {
         }
 
         display_testability_matrix(&all_metrics, files.len(), skipped_files);
-        check_thresholds(&all_metrics, &thresholds)?;
+        check_thresholds(&all_metrics, &thresholds, baseline.as_ref())?;
         return Ok(());
     }
 
@@ -611,7 +780,7 @@ fn main() -> Result<()> {
             &include_rules,
             &exclude_rules,
         );
-        check_thresholds(&metrics, &thresholds)?;
+        check_thresholds(&metrics, &thresholds, baseline.as_ref())?;
         return Ok(());
     }
 
@@ -662,7 +831,7 @@ fn main() -> Result<()> {
     // Display summary with top 5 worst functions and totals/averages
     display_recursive_summary(&all_metrics, files.len(), skipped_files, args.report.as_deref());
 
-    check_thresholds(&all_metrics, &thresholds)?;
+    check_thresholds(&all_metrics, &thresholds, baseline.as_ref())?;
     Ok(())
 }
 
@@ -2248,5 +2417,98 @@ mod tests {
     fn test_aird_drivers_empty_when_all_zero() {
         let func = fixture(0, 0, 0, 0, 0);
         assert!(aird_drivers(&func, 2).is_empty());
+    }
+
+    // ---- baseline / ratchet mode ----
+
+    fn func_aird(file: &str, name: &str, aird: u32) -> FunctionMetrics {
+        let mut f = fixture(0, 0, 0, 0, 0);
+        f.file_path = file.into();
+        f.name = name.into();
+        f.aird = aird;
+        f
+    }
+
+    fn aird_thresholds(n: u32) -> Thresholds {
+        Thresholds {
+            mccabe: None,
+            cognitive: None,
+            nesting: None,
+            sloc: None,
+            abc: None,
+            returns: None,
+            aird: Some(n),
+            aicp: None,
+            external_calls: None,
+        }
+    }
+
+    fn baseline_with_aird(file: &str, name: &str, aird: u32) -> Baseline {
+        baseline_from_metrics(&[func_aird(file, name, aird)])
+    }
+
+    /// Without a baseline, any over-threshold function fails (today's behavior).
+    #[test]
+    fn test_no_baseline_flags_violation() {
+        let metrics = vec![func_aird("a.rs", "f", 98)];
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), None).is_err());
+    }
+
+    /// A pre-existing offender at exactly its baselined score is tolerated.
+    #[test]
+    fn test_baseline_tolerates_preexisting_equal() {
+        let metrics = vec![func_aird("a.rs", "f", 98)];
+        let b = baseline_with_aird("a.rs", "f", 98);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+    }
+
+    /// Still over threshold but better than baseline (98 -> 90) is tolerated.
+    #[test]
+    fn test_baseline_tolerates_improvement() {
+        let metrics = vec![func_aird("a.rs", "f", 90)];
+        let b = baseline_with_aird("a.rs", "f", 98);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+    }
+
+    /// A baselined function that got worse (98 -> 99) is a regression and fails.
+    #[test]
+    fn test_baseline_flags_regression() {
+        let metrics = vec![func_aird("a.rs", "f", 99)];
+        let b = baseline_with_aird("a.rs", "f", 98);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+    }
+
+    /// An over-threshold function absent from the baseline is new debt and fails.
+    #[test]
+    fn test_baseline_flags_new_function() {
+        let metrics = vec![func_aird("a.rs", "g", 98)];
+        let b = baseline_with_aird("a.rs", "f", 98); // different name -> miss
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+    }
+
+    /// The key is (file, function): same name in a different file is not matched.
+    #[test]
+    fn test_baseline_key_is_file_and_function() {
+        let metrics = vec![func_aird("b.rs", "f", 98)];
+        let b = baseline_with_aird("a.rs", "f", 98); // different file -> miss
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+    }
+
+    /// A function under threshold never fails, even if baselined higher.
+    #[test]
+    fn test_baseline_under_threshold_ok() {
+        let metrics = vec![func_aird("a.rs", "f", 10)];
+        let b = baseline_with_aird("a.rs", "f", 98);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+    }
+
+    /// Baseline survives a serialize/parse round-trip and indexes by (file, fn).
+    #[test]
+    fn test_baseline_roundtrip() {
+        let b = baseline_from_metrics(&[func_aird("a.rs", "f", 98)]);
+        let json = serde_json::to_string(&b).unwrap();
+        let parsed: Baseline = serde_json::from_str(&json).unwrap();
+        let idx = parsed.index();
+        assert_eq!(idx.get(&("a.rs", "f")).unwrap().aird, 98);
     }
 }

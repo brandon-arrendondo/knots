@@ -44,6 +44,10 @@ knots -r src/
 # CI gate — fail if any function has AIRD > 85
 knots -r src/ --aird-threshold 85
 
+# Adopt the gate on a legacy codebase: snapshot today, then fail only on regressions
+knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json --write-baseline
+knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json
+
 # SARIF for GitHub Code Scanning
 knots -r --format sarif src/ > knots.sarif
 
@@ -88,6 +92,8 @@ Options:
   --aird-threshold <N>              Exit 1 if any function exceeds this AIRD score (recommended: 85)
   --aicp-threshold <N>              Exit 1 if any function exceeds this AICP score
   --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
+  --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see BASELINE.md)
+  --write-baseline                  Snapshot current scores to --baseline and exit without gating
   -h, --help                        Print help
   -V, --version                     Print version
 ```
@@ -102,6 +108,8 @@ Full documentation is in the `docs/` directory (Sphinx/RST):
 - [Metrics Reference](docs/metrics-reference.rst) — AIRD/AICP formulas, corpus validation
 - [Output Formats](docs/output-formats.rst) — JSON schema, SARIF, NDJSON corpus patterns
 - [CI Integration](docs/ci-integration.rst) — GitHub Actions, pre-commit hook
+- [Baseline / Ratchet Mode](BASELINE.md) — adopt the gate on legacy code, fail only on regressions
+- [Filter Rules](FILTERS.md) — `--include`/`--exclude` whitelists/blacklists
 - [Test Quality Analysis](docs/test-complexity.rst) — knots-test-complexity companion tool
 - [Alternatives Comparison](docs/alternatives.rst) — vs. lizard, rust-code-analysis, clippy; cognitive algorithm differences
 - [Troubleshooting](docs/troubleshooting.rst)

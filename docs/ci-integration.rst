@@ -23,6 +23,26 @@ The recommended starting point is ``--aird-threshold 85``, which was
 empirically validated against Sonnet 4.6 and Opus 4.8. See
 :doc:`metrics-reference` for AIRD formula and corpus distribution.
 
+Adopting on a Legacy Codebase
+-----------------------------
+
+On an older or larger project, turning the gate on cold means every
+pre-existing offender fails at once. ``--baseline`` snapshots the current scores
+and then fails only on **regressions** — new over-threshold functions, or
+baselined ones that got worse — so you can adopt the gate today and improve from
+there. See ``BASELINE`` for details.
+
+.. code-block:: bash
+
+    # Snapshot once and commit the file
+    knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json --write-baseline
+
+    # CI / pre-commit gate against the snapshot
+    knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json
+
+In a pre-commit hook, pass both flags via ``args`` and commit
+``.knots-baseline.json`` so every contributor gates against the same snapshot.
+
 GitHub Actions
 --------------
 
