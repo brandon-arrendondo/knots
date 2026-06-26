@@ -102,7 +102,7 @@ Baseline / Ratchet Mode
 Adopt a threshold gate on an existing codebase without first refactoring every
 pre-existing offender. Snapshot the current per-function scores once, then gate
 only on **regressions** — a new function over threshold, or a baselined one
-whose score got worse. See ``BASELINE`` for the full guide and file format.
+whose score got worse. See :doc:`baseline` for the full guide and file format.
 
 ``--baseline <FILE>``
     Gate against the snapshot in ``<FILE>``: a function is only reported if it

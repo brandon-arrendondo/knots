@@ -18,6 +18,7 @@ assistance.
    metrics-reference
    output-formats
    ci-integration
+   baseline
    test-complexity
    alternatives
    troubleshooting

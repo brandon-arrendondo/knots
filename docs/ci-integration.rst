@@ -30,7 +30,7 @@ On an older or larger project, turning the gate on cold means every
 pre-existing offender fails at once. ``--baseline`` snapshots the current scores
 and then fails only on **regressions** — new over-threshold functions, or
 baselined ones that got worse — so you can adopt the gate today and improve from
-there. See ``BASELINE`` for details.
+there. See :doc:`baseline` for details.
 
 .. code-block:: bash
 
