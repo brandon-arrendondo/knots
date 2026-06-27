@@ -18,13 +18,36 @@ pub use tree_sitter_python;
 pub use tree_sitter_rust;
 pub use tree_sitter_typescript;
 
-/// All source file extensions recognized by knots, grouped by language.
-/// This is the single source of truth — add new language extensions here.
-/// `.h` is intentionally excluded (treated as C by language_for_file but not
-/// scanned during recursive discovery, since headers often contain vendor/inline code).
+/// A language knots can analyze, with its display name and file extensions.
+pub struct LanguageInfo {
+    /// Human-facing name, e.g. "C++", "Ada".
+    pub name: &'static str,
+    /// Extensions scanned during recursive discovery (no leading dot).
+    pub extensions: &'static [&'static str],
+    /// Extensions parsed only when a file is passed explicitly, never during
+    /// recursive discovery (e.g. headers, which often hold vendor/inline code).
+    pub explicit_only: &'static [&'static str],
+}
+
+/// The single source of truth for language support. Add a new language here;
+/// `SUPPORTED_EXTENSIONS`, `--supported-languages`, and (via `invoke
+/// sync-languages`) every doc that lists languages all derive from this.
+/// Keep one entry per line — `tasks.py` parses this table.
+pub const LANGUAGES: &[LanguageInfo] = &[
+    LanguageInfo { name: "C",          extensions: &["c"],                            explicit_only: &["h"] },
+    LanguageInfo { name: "C++",        extensions: &["cpp", "cc", "cxx", "hpp", "hxx"], explicit_only: &[] },
+    LanguageInfo { name: "Rust",       extensions: &["rs"],                           explicit_only: &[] },
+    LanguageInfo { name: "Python",     extensions: &["py"],                           explicit_only: &[] },
+    LanguageInfo { name: "JavaScript", extensions: &["js", "mjs", "cjs"],             explicit_only: &[] },
+    LanguageInfo { name: "TypeScript", extensions: &["ts", "tsx"],                    explicit_only: &[] },
+    LanguageInfo { name: "Ada",        extensions: &["adb", "ada"],                   explicit_only: &["ads"] },
+];
+
+/// All source file extensions recognized during recursive discovery, grouped
+/// by language. Mirrors the `extensions` of [`LANGUAGES`] (a test enforces it).
+/// `.h`/`.ads` are intentionally excluded here — they are `explicit_only`
+/// (parsed when passed directly, but skipped by `--recursive`).
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
-    // Ada (.ads specs excluded like .h — bodies live in .adb)
-    "adb", "ada",
     // C
     "c",
     // C++
@@ -37,7 +60,35 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "js", "mjs", "cjs",
     // TypeScript
     "ts", "tsx",
+    // Ada
+    "adb", "ada",
 ];
+
+/// Renders the human-readable `knots --supported-languages` report.
+pub fn supported_languages_report() -> String {
+    let width = LANGUAGES.iter().map(|l| l.name.len()).max().unwrap_or(0);
+    let mut out = String::from("Supported languages:\n");
+    for lang in LANGUAGES {
+        let exts = lang
+            .extensions
+            .iter()
+            .map(|e| format!(".{e}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        out.push_str(&format!("  {:<width$}  {exts}", lang.name, width = width));
+        if !lang.explicit_only.is_empty() {
+            let extra = lang
+                .explicit_only
+                .iter()
+                .map(|e| format!(".{e}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            out.push_str(&format!("  (also {extra} when passed explicitly)"));
+        }
+        out.push('\n');
+    }
+    out
+}
 
 /// Returns the appropriate tree-sitter language for a file based on extension.
 /// `.h` defaults to C; C++ headers should use `.hpp`/`.hxx`.
@@ -61,4 +112,44 @@ pub fn is_source_extension(ext: &std::ffi::OsStr) -> bool {
     ext.to_str()
         .map(|e| SUPPORTED_EXTENSIONS.contains(&e))
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod language_registry_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+    use std::path::Path;
+
+    /// `SUPPORTED_EXTENSIONS` must stay exactly the recursive extensions of
+    /// `LANGUAGES` — guards against the two lists drifting apart.
+    #[test]
+    fn supported_extensions_match_languages_table() {
+        let from_table: BTreeSet<&str> =
+            LANGUAGES.iter().flat_map(|l| l.extensions.iter().copied()).collect();
+        let from_const: BTreeSet<&str> = SUPPORTED_EXTENSIONS.iter().copied().collect();
+        assert_eq!(
+            from_table, from_const,
+            "LANGUAGES.extensions and SUPPORTED_EXTENSIONS disagree — update one to match the other"
+        );
+    }
+
+    /// Every extension in the table (recursive and explicit-only) must route to
+    /// a grammar — i.e. it must not silently fall through to the default C arm,
+    /// unless it genuinely belongs to C.
+    #[test]
+    fn every_table_extension_maps_to_its_grammar() {
+        let c_lang: tree_sitter::Language = tree_sitter_c::LANGUAGE.into();
+        for lang in LANGUAGES {
+            for ext in lang.extensions.iter().chain(lang.explicit_only) {
+                let mapped = language_for_file(Path::new(&format!("f.{ext}")));
+                if lang.name != "C" {
+                    assert_ne!(
+                        mapped, c_lang,
+                        "extension .{ext} ({}) falls through to the default C grammar in language_for_file",
+                        lang.name
+                    );
+                }
+            }
+        }
+    }
 }

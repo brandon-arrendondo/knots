@@ -175,10 +175,14 @@ struct Args {
     /// Path(s) to source files or directories to analyze
     #[arg(
         value_name = "FILE",
-        required_unless_present_any = ["compile_commands", "explain"],
+        required_unless_present_any = ["compile_commands", "explain", "supported_languages"],
         num_args = 1..
     )]
     files: Vec<PathBuf>,
+
+    /// List the languages and file extensions knots can analyze, then exit
+    #[arg(long)]
+    supported_languages: bool,
 
     /// Recursively process all supported source files in directories
     #[arg(short, long)]
@@ -885,6 +889,12 @@ fn main() -> Result<()> {
     // --explain prints a metric's meaning and exits; no files required.
     if let Some(metric) = args.explain {
         println!("{}", explain_metric(metric));
+        return Ok(());
+    }
+
+    // --supported-languages lists the language/extension table and exits.
+    if args.supported_languages {
+        print!("{}", knots::supported_languages_report());
         return Ok(());
     }
 
