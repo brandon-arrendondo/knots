@@ -10,8 +10,11 @@ Single File
 
 Output shows per-function metrics::
 
-    😊 init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
-    😠 process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
+    😊 src/main.c:12:init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
+    😠 src/main.c:30:process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
+
+Each line is prefixed with ``file:line:`` so an editor can jump straight to the
+function from any line of output (not just threshold violations).
 
     Summary:
       Total Functions: 2
@@ -28,7 +31,7 @@ Verbose Mode
 
 Shows a detailed per-function breakdown including all test scoring sub-axes::
 
-    Function: process_data 😠
+    Function: src/main.c:30:process_data 😠
       McCabe Complexity: 28
       Cognitive Complexity: 45
       Nesting Depth: 8
@@ -65,7 +68,7 @@ Example output::
 
     === TOP 5 WORST FUNCTIONS ===
 
-    1. 😢 HAL_RCC_OscConfig [drivers/hal_rcc.c]
+    1. 😢 drivers/hal_rcc.c:142:HAL_RCC_OscConfig
        McCabe: 71, Cognitive: 214, Nesting: 11, SLOC: 327, ABC: 134.90, Returns: 23, TestScore: 9
 
     === TOTALS & AVERAGES ===

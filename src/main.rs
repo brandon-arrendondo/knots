@@ -27,6 +27,17 @@ fn get_complexity_emoji(complexity: u32) -> &'static str {
     }
 }
 
+/// `file:line:name` locator for a function, so an editor can jump from any line
+/// of human output, not just threshold violations. Matches the format the
+/// violation block uses; falls back to `name:line` when the file path is unknown.
+fn func_location(func: &FunctionMetrics) -> String {
+    if func.file_path.is_empty() {
+        format!("{}:{}", func.name, func.start_line)
+    } else {
+        format!("{}:{}:{}", func.file_path, func.start_line, func.name)
+    }
+}
+
 /// Compilation database entry from compile_commands.json
 #[derive(Debug, Clone, Deserialize)]
 struct CompileCommand {
@@ -816,11 +827,7 @@ fn check_thresholds(
 
         if !fv.is_empty() {
             violation_count += 1;
-            let loc = if func.file_path.is_empty() {
-                format!("{}:{}", func.name, func.start_line)
-            } else {
-                format!("{}:{}:{}", func.file_path, func.start_line, func.name)
-            };
+            let loc = func_location(func);
             let aird_violated = fv.iter().any(|s| s.starts_with("AIRD"));
             any_aird |= aird_violated;
             any_aicp |= fv.iter().any(|s| s.starts_with("AICP"));
@@ -1069,6 +1076,7 @@ fn main() -> Result<()> {
         analyze_code(
             &tree,
             &source_code,
+            file.to_str().unwrap_or(""),
             args.verbose,
             &include_rules,
             &exclude_rules,
@@ -1518,11 +1526,13 @@ fn should_process_function(
 fn analyze_code(
     tree: &Tree,
     source_code: &str,
+    file_path: &str,
     verbose: bool,
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
 ) -> Result<()> {
-    let metrics = collect_function_metrics(tree, source_code, "", include_rules, exclude_rules);
+    let metrics =
+        collect_function_metrics(tree, source_code, file_path, include_rules, exclude_rules);
 
     let mut total_mccabe = 0;
     let mut total_cognitive = 0;
@@ -1548,7 +1558,7 @@ fn analyze_code(
         let emoji = get_complexity_emoji(func.max_complexity());
 
         if verbose {
-            println!("Function: {} {}", func.name, emoji);
+            println!("Function: {} {}", func_location(func), emoji);
             println!("  McCabe Complexity: {}", func.mccabe);
             println!("  Cognitive Complexity: {}", func.cognitive);
             println!("  Nesting Depth: {}", func.nesting);
@@ -1580,7 +1590,7 @@ fn analyze_code(
         } else {
             println!(
                 "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
-                emoji, func.name, func.mccabe, func.cognitive, func.nesting, func.sloc,
+                emoji, func_location(func), func.mccabe, func.cognitive, func.nesting, func.sloc,
                 func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aird,
                 func.aicp, func.external_calls
             );
@@ -1910,11 +1920,7 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool, path: &
         let emoji = get_complexity_emoji(func.max_complexity());
 
         if verbose {
-            writeln!(
-                file,
-                "Function: {} {} [{}]",
-                func.name, emoji, func.file_path
-            )?;
+            writeln!(file, "Function: {} {}", func_location(func), emoji)?;
             writeln!(file, "  McCabe Complexity: {}", func.mccabe)?;
             writeln!(file, "  Cognitive Complexity: {}", func.cognitive)?;
             writeln!(file, "  Nesting Depth: {}", func.nesting)?;
@@ -1960,8 +1966,8 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool, path: &
         } else {
             writeln!(
                 file,
-                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
-                emoji, func.name, func.file_path, func.mccabe, func.cognitive, func.nesting,
+                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
+                emoji, func_location(func), func.mccabe, func.cognitive, func.nesting,
                 func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score,
                 func.aird, func.aicp, func.external_calls
             )?;
@@ -1984,7 +1990,7 @@ fn display_recursive_summary(
     println!("\n=== TOP 5 WORST FUNCTIONS ===\n");
     for (i, func) in sorted.iter().take(5).enumerate() {
         let emoji = get_complexity_emoji(func.max_complexity());
-        println!("{}. {} {} [{}]", i + 1, emoji, func.name, func.file_path);
+        println!("{}. {} {}", i + 1, emoji, func_location(func));
         println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {}",
             func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aird, func.aicp, func.external_calls
         );
@@ -2682,6 +2688,19 @@ mod tests {
             external_calls: 0,
             state_coupling: coupling,
         }
+    }
+
+    /// file:line:name locator (FEEDBACK #6) so editors can jump from any line.
+    #[test]
+    fn test_func_location() {
+        let mut f = fixture(0, 0, 0, 0, 0);
+        f.file_path = "src/input.rs".into();
+        f.name = "dispatch".into();
+        f.start_line = 656;
+        assert_eq!(func_location(&f), "src/input.rs:656:dispatch");
+        // Fallback when the path is unknown (matches the violation-block format).
+        f.file_path = String::new();
+        assert_eq!(func_location(&f), "dispatch:656");
     }
 
     /// The motivating case from FEEDBACK.md #1: a function dominated by cognitive
