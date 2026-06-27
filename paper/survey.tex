@@ -180,25 +180,32 @@ expressions) are counted as additional expression complexity contributors.
 This statement/expression decomposition is absent from all general-purpose
 tools surveyed and has no counterpart in the original McCabe definition.
 
-For Rust, Mozilla's \texttt{rust-code-analysis} (rca) counts the
-\texttt{?} (try) operator as a branch, because it represents a genuine
-early-exit path: execution either propagates the error or continues.
-General-purpose tools such as lizard do not count \texttt{?}.  knots
-follows the lizard convention and excludes \texttt{?} from its cyclomatic
-count, on the grounds that \texttt{?}-based error propagation is mechanical
-rather than decision logic and does not reflect a meaningful choice about
-program behaviour.  rca also rolls up the cyclomatic complexity of
-anonymous closures into the enclosing function's total, whereas knots
-scores each callable independently.
+For Rust, both Mozilla's \texttt{rust-code-analysis} (rca) and lizard
+count the \texttt{?} (try) operator as a branch, because it represents a
+genuine early-exit path: execution either propagates the error or
+continues, constituting a decision point in the control-flow graph.
+knots adopts the same convention---each \texttt{?} occurrence adds $+1$
+to cyclomatic complexity.  Cognitive complexity is unaffected: a chain of
+\texttt{?} operators is a linear error-propagation pipeline with no
+nesting structure and imposes no meaningful cognitive burden beyond a
+sequence of calls.
 
-The combined effect is systematically lower McCabe scores for idiomatic
-Rust in knots than in rca.  In a benchmark on \texttt{todo-sqlite-cli}, a
-73-SLOC function with 8 classical decision points scored McCabe~9 in knots
-versus cyclomatic~24 in rca; the 15-point gap decomposes as 9~\texttt{?}
-usages and 6~single-line closures whose cyclomatic contribution rca rolls
-into the parent.  The calibration consequence is that McCabe thresholds
-calibrated against C or Python code should not be applied to Rust without
-accounting for the absence of \texttt{?} counting.
+knots extends this treatment uniformly to analogous short-circuit operators
+in other supported languages: optional chaining (\texttt{?.}) in
+JavaScript, TypeScript, and C\#; the Elvis operator (\texttt{?:}) in
+Kotlin; and \texttt{try?} in Swift, which converts a throwing call to an
+\texttt{Optional} and is the only Swift try-variant that constitutes a
+branch---plain \texttt{try} and \texttt{try!} are excluded because they
+propagate or crash rather than branch.  Null-coalescing (\texttt{??}) was
+already counted via the binary-expression operator path.
+
+rca also rolls up the cyclomatic complexity of anonymous closures into the
+enclosing function's total, whereas knots scores each callable
+independently.  In a benchmark on \texttt{todo-sqlite-cli}, a 73-SLOC
+function with 8 classical decision points and 9~\texttt{?} usages scored
+McCabe~18 in knots versus cyclomatic~24 in rca; the remaining 6-point gap
+is attributable entirely to single-line closures whose contribution rca
+folds into the parent.
 
 \textbf{Limitation for AI cost:} McCabe counts branches but not nesting
 depth.  A deeply nested function with 10 branches scores identically to a

@@ -44,6 +44,23 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         "while_expression" | "for_expression" | "loop_expression" => *complexity += 1,
         // Rust match: same treatment as C switch (+1 for the whole expression)
         "match_expression" => *complexity += 1,
+        // Rust ? operator / Swift try? — both use node kind "try_expression".
+        // Rust: no named try_operator child (the ? is an anonymous token on the expression).
+        // Swift: has a named try_operator child whose text is "try", "try?", or "try!".
+        // Only try? is a branch; try and try! are not (they throw or crash, not short-circuit).
+        "try_expression" => {
+            let mut cur = node.walk();
+            let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
+            match try_op {
+                None => *complexity += 1, // Rust ? operator — always a CFG branch
+                Some(op) => {
+                    if op.utf8_text(source_code).ok() == Some("try?") {
+                        *complexity += 1; // Swift try? — short-circuits to nil on error
+                    }
+                    // Swift try / try! — no branch
+                }
+            }
+        }
 
         // Python elif: each elif clause is an additional branch
         "elif_clause" => *complexity += 1,
@@ -54,12 +71,17 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
 
         // JavaScript: for...in and for...of share for_in_statement
         "for_in_statement" => *complexity += 1,
+        // JS/TS optional chaining: a?.b short-circuits to undefined when a is null/undefined
+        "optional_chain" => *complexity += 1,
 
         // Logical operators (each adds a path)
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "&&" || op_text == "||" || op_text == "??" {
+                    // && / || — short-circuit boolean ops (all languages)
+                    // ?? — null-coalescing (JS/TS/C#): already counted
+                    // ?: — Kotlin Elvis: same semantics as ?? in other languages
+                    if op_text == "&&" || op_text == "||" || op_text == "??" || op_text == "?:" {
                         *complexity += 1;
                     }
                 }
@@ -143,8 +165,8 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Java: enhanced for-each loop and switch expressions each add one path.
         "enhanced_for_statement" | "switch_expression" => *complexity += 1,
 
-        // C#: foreach loop.
-        "foreach_statement" => *complexity += 1,
+        // C#: foreach loop and null-conditional operator (a?.b short-circuits on null)
+        "foreach_statement" | "conditional_access_expression" => *complexity += 1,
 
         // Kotlin: do-while loop, when expression (like switch), catch block.
         "do_while_statement" | "when_expression" | "catch_block" => *complexity += 1,
@@ -773,6 +795,19 @@ fn visit_node_abc(
         // Conditions (Rust)
         "if_expression" | "while_expression" | "for_expression" | "loop_expression"
         | "match_expression" => *conditions += 1,
+        // Rust ? / Swift try? — same grammar-level discrimination as visit_node_mccabe
+        "try_expression" => {
+            let mut cur = node.walk();
+            let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
+            match try_op {
+                None => *conditions += 1,
+                Some(op) => {
+                    if op.utf8_text(source_code).ok() == Some("try?") {
+                        *conditions += 1;
+                    }
+                }
+            }
+        }
 
         // Conditions (Python)
         "elif_clause" | "match_statement" => *conditions += 1,
@@ -802,7 +837,7 @@ fn visit_node_abc(
         "enhanced_for_statement" | "switch_expression" => *conditions += 1,
 
         // Conditions (C#)
-        "foreach_statement" => *conditions += 1,
+        "foreach_statement" | "conditional_access_expression" => *conditions += 1,
 
         // Conditions (Kotlin)
         "do_while_statement" | "when_expression" => *conditions += 1,
@@ -810,11 +845,14 @@ fn visit_node_abc(
         // Conditions (Swift)
         "guard_statement" | "repeat_while_statement" => *conditions += 1,
 
-        // Logical operators (C/C++/Rust: &&/||; JavaScript also: ??)
+        // JS/TS optional chaining: a?.b
+        "optional_chain" => *conditions += 1,
+
+        // Logical operators (C/C++/Rust: &&/||; JS/TS/C#: ??; Kotlin Elvis: ?:)
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "&&" || op_text == "||" || op_text == "??" {
+                    if op_text == "&&" || op_text == "||" || op_text == "??" || op_text == "?:" {
                         *conditions += 1;
                     }
                 }
@@ -3270,5 +3308,227 @@ mod tests {
         let tree = parse_ada(code);
         let node = tree.root_node();
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    // ---- Rust ? operator tests ----
+
+    #[test]
+    fn test_rust_try_operator_mccabe() {
+        // Each ? is a CFG branch: base 1 + 3 ? = 4
+        let code = "fn f() -> Result<(), std::io::Error> { a()?; b()?; c()?; Ok(()) }";
+        let tree = parse_rust(code);
+        assert_eq!(calculate_mccabe_complexity(tree.root_node(), code.as_bytes()), 4);
+    }
+
+    #[test]
+    fn test_rust_try_operator_single_mccabe() {
+        let code = "fn f() -> Result<i32, String> { let x = g()?; Ok(x) }";
+        let tree = parse_rust(code);
+        // base 1 + 1 ? = 2
+        assert_eq!(calculate_mccabe_complexity(tree.root_node(), code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_rust_try_operator_cognitive() {
+        // ? does not add to cognitive complexity (linear error-propagation pipeline)
+        let code = "fn f() -> Result<(), std::io::Error> { a()?; b()?; c()?; Ok(()) }";
+        let tree = parse_rust(code);
+        assert_eq!(calculate_cognitive_complexity(tree.root_node(), code.as_bytes()), 0);
+    }
+
+    #[test]
+    fn test_rust_try_operator_abc() {
+        // Each ? adds +1 condition in ABC
+        let code = "fn f() -> Result<(), std::io::Error> { a()?; b()?; Ok(()) }";
+        let tree = parse_rust(code);
+        let abc = calculate_abc_complexity(tree.root_node(), code.as_bytes());
+        assert_eq!(abc.conditions, 2);
+    }
+
+    // ---- JS/TS optional chaining tests ----
+
+    fn parse_ts_function(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+            .unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    #[test]
+    fn test_js_optional_chain_mccabe() {
+        // a?.b: null-check branch; base 1 + 1 optional_chain = 2
+        let code = "function f(a) { return a?.b; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_js_optional_chain_multiple_mccabe() {
+        // Two chained ?. operators; each optional_chain is a separate branch
+        let code = "function f(a) { return a?.b?.c; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_js_optional_chain_abc() {
+        let code = "function f(a) { return a?.b; }";
+        let tree = parse_js_function(code);
+        let node = js_func_node(&tree);
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        assert_eq!(abc.conditions, 1);
+    }
+
+    #[test]
+    fn test_ts_optional_chain_mccabe() {
+        let code = "function f(a: any) { return a?.foo; }";
+        let tree = parse_ts_function(code);
+        let node = js_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    // ---- C# conditional_access_expression (?.) tests ----
+
+    fn parse_cs(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
+            .unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    fn cs_method_node(tree: &tree_sitter::Tree) -> tree_sitter::Node<'_> {
+        fn find(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+            if node.kind() == "method_declaration" {
+                return Some(node);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(f) = find(child) {
+                    return Some(f);
+                }
+            }
+            None
+        }
+        find(tree.root_node()).expect("no method_declaration found")
+    }
+
+    #[test]
+    fn test_cs_null_conditional_mccabe() {
+        // a?.Length: null-check branch; base 1 + 1 conditional_access_expression = 2
+        let code = "class C { int? F(string a) { return a?.Length; } }";
+        let tree = parse_cs(code);
+        let node = cs_method_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_cs_null_conditional_abc() {
+        let code = "class C { int? F(string a) { return a?.Length; } }";
+        let tree = parse_cs(code);
+        let node = cs_method_node(&tree);
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        assert_eq!(abc.conditions, 1);
+    }
+
+    // ---- Kotlin Elvis (?:) tests ----
+
+    fn parse_kotlin(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_kotlin_ng::LANGUAGE.into())
+            .unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    fn kotlin_func_node(tree: &tree_sitter::Tree) -> tree_sitter::Node<'_> {
+        fn find(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+            if node.kind() == "function_declaration" {
+                return Some(node);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(f) = find(child) {
+                    return Some(f);
+                }
+            }
+            None
+        }
+        find(tree.root_node()).expect("no function_declaration found")
+    }
+
+    #[test]
+    fn test_kotlin_elvis_mccabe() {
+        // b ?: 0 — Elvis operator is a binary_expression with operator ?:; base 1 + 1 = 2
+        let code = "fun f(b: String?): Int { return b?.length ?: 0 }";
+        let tree = parse_kotlin(code);
+        let node = kotlin_func_node(&tree);
+        // ?: adds 1; ?. safe call is not counted (navigation expression, not binary)
+        assert!(calculate_mccabe_complexity(node, code.as_bytes()) >= 2);
+    }
+
+    #[test]
+    fn test_kotlin_elvis_abc() {
+        let code = "fun f(b: String?): Int { return b ?: 0 }";
+        let tree = parse_kotlin(code);
+        let node = kotlin_func_node(&tree);
+        let abc = calculate_abc_complexity(node, code.as_bytes());
+        assert_eq!(abc.conditions, 1);
+    }
+
+    // ---- Swift try? tests ----
+
+    fn parse_swift(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_swift::LANGUAGE.into())
+            .unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    fn swift_func_node(tree: &tree_sitter::Tree) -> tree_sitter::Node<'_> {
+        fn find(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+            if matches!(node.kind(), "function_declaration" | "init_declaration") {
+                return Some(node);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(f) = find(child) {
+                    return Some(f);
+                }
+            }
+            None
+        }
+        find(tree.root_node()).expect("no function_declaration found")
+    }
+
+    #[test]
+    fn test_swift_try_optional_mccabe() {
+        // try? converts a throw to Optional — a real branch; base 1 + 1 = 2
+        let code = "func f() -> Int? { let x = try? g(); return x }";
+        let tree = parse_swift(code);
+        let node = swift_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_swift_try_plain_not_counted_mccabe() {
+        // plain try propagates the error — not a branch in the CFG; base 1 + 0 = 1
+        let code = "func f() throws -> Int { let x = try g(); return x }";
+        let tree = parse_swift(code);
+        let node = swift_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_swift_try_force_not_counted_mccabe() {
+        // try! crashes on failure — no branch; base 1 + 0 = 1
+        let code = "func f() -> Int { let x = try! g(); return x }";
+        let tree = parse_swift(code);
+        let node = swift_func_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 1);
     }
 }
