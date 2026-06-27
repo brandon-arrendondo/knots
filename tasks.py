@@ -42,10 +42,14 @@ def bump_version(c, new_version=None):
     current = _read_cargo_version()
 
     # Files that embed a bare version number (no 'v' prefix)
+    # The man-page patterns match ANY version, not `current`: the .TH line can
+    # drift out of sync (it has, historically), and a pattern keyed to `current`
+    # silently no-ops in that case instead of healing it.
     bare_version_files = [
         # (path, regex-pattern-to-match, replacement-template)
-        ("Cargo.toml",        rf'^(version = "){re.escape(current)}(")',   r"\g<1>{new}\g<2>"),
-        ("man/knots.1",       rf'("knots ){re.escape(current)}(")',        r"\g<1>{new}\g<2>"),
+        ("Cargo.toml",                  rf'^(version = "){re.escape(current)}(")', r"\g<1>{new}\g<2>"),
+        ("man/knots.1",                 r'("knots )\d+\.\d+\.\d+(")',              r"\g<1>{new}\g<2>"),
+        ("man/knots-test-complexity.1", r'("knots )\d+\.\d+\.\d+(")',              r"\g<1>{new}\g<2>"),
     ]
 
     # Files that embed a 'v'-prefixed tag (rev: vX.Y.Z or /vX.Y.Z/ in URLs)
