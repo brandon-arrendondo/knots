@@ -22,7 +22,7 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         "for_statement" | "for_range_loop" => *complexity += 1,
 
         // Throw creates exceptional control flow path (like goto)
-        "throw_statement" => *complexity += 1,
+        "throw_statement" | "raise_statement" | "raise_expression" => *complexity += 1,
 
         // Switch statement: pmccabe compatibility - count as +1 regardless of cases
         // This matches pmccabe's simpler approach
@@ -239,7 +239,7 @@ fn visit_node_cognitive(
         }
 
         // Jump statements: goto and throw (flat +1, no nesting penalty)
-        "goto_statement" | "throw_statement" => {
+        "goto_statement" | "throw_statement" | "raise_statement" | "raise_expression" => {
             *complexity += 1;
         }
 
@@ -626,7 +626,8 @@ fn visit_node_abc(
         "procedure_call_statement" | "function_call" => *branches += 1,
 
         // Branches: throw, new, delete create control flow paths (C/C++)
-        "throw_statement" | "new_expression" | "delete_expression" => *branches += 1,
+        "throw_statement" | "new_expression" | "delete_expression"
+        | "raise_statement" | "raise_expression" => *branches += 1,
 
         // Conditions (C/C++)
         "if_statement"
@@ -2885,5 +2886,23 @@ mod tests {
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
         assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_ada_raise_statement_mccabe() {
+        // raise adds +1 like throw; base = 1 → total 2
+        let code = "procedure P is begin raise Constraint_Error; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_ada_raise_statement_cognitive() {
+        // raise adds +1 flat like goto/throw
+        let code = "procedure P is begin raise Constraint_Error; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
     }
 }
