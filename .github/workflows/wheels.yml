@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   build:
-    name: build ${{ matrix.package.name }} (${{ matrix.platform.target }})
+    name: build ${{ matrix.package.name }} (${{ matrix.platform.id }})
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
@@ -28,13 +28,16 @@ jobs:
           - { name: knots, manifest: Cargo.toml }
           - { name: knots-test-complexity, manifest: knots-test-complexity/Cargo.toml }
         platform:
-          - { runner: ubuntu-22.04, target: x86_64, manylinux: auto }
-          - { runner: ubuntu-22.04, target: aarch64, manylinux: auto }
-          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2 }
-          - { runner: ubuntu-22.04, target: aarch64-unknown-linux-musl, manylinux: musllinux_1_2 }
-          - { runner: macos-13, target: x86_64 }
-          - { runner: macos-14, target: aarch64 }
-          - { runner: windows-2022, target: x64 }
+          # `id` must be unique per row — macOS and Linux share the bare
+          # x86_64/aarch64 target labels, which would otherwise collide as
+          # artifact names (upload-artifact@v4 rejects duplicate names).
+          - { id: linux-x86_64,  runner: ubuntu-22.04, target: x86_64, manylinux: auto }
+          - { id: linux-aarch64, runner: ubuntu-22.04, target: aarch64, manylinux: auto }
+          - { id: musl-x86_64,   runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2 }
+          - { id: musl-aarch64,  runner: ubuntu-22.04, target: aarch64-unknown-linux-musl, manylinux: musllinux_1_2 }
+          - { id: macos-x86_64,  runner: macos-13, target: x86_64 }
+          - { id: macos-aarch64, runner: macos-14, target: aarch64 }
+          - { id: windows-x64,   runner: windows-2022, target: x64 }
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +54,7 @@ jobs:
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wheel-${{ matrix.package.name }}-${{ matrix.platform.target }}
+          name: wheel-${{ matrix.package.name }}-${{ matrix.platform.id }}
           path: dist/*.whl
 
   sdist:
