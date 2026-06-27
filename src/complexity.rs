@@ -83,7 +83,11 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         "loop_statement" => *complexity += 1,
         // Ada: each elsif branch is an additional path
         "elsif_statement_item" => *complexity += 1,
-        // Ada: each case alternative (when branch) is an additional path
+        // Ada: each case alternative (when branch) is an additional path.
+        // Calibration note: large Ada dispatch tables (e.g. 20 `when` arms) push McCabe
+        // well above thresholds calibrated for C/Rust. Cognitive complexity charges only
+        // +1+nesting for the whole case_statement, making it the better primary metric
+        // for Ada files with large case/dispatch patterns. See CLAUDE.md §Calibration.
         "case_statement_alternative" => *complexity += 1,
         // Ada: each exception handler (when clause) is an additional path
         "exception_handler" => *complexity += 1,

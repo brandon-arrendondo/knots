@@ -125,6 +125,21 @@ Cover: plain function, method on a type, multiple functions, anonymous/closure (
 
 ---
 
+## Language-specific calibration notes
+
+### Ada — McCabe vs Cognitive for case/dispatch patterns
+
+Ada's `case_statement` counts each `when` alternative as +1 to McCabe (correct per the McCabe definition). A dispatch table with 20 `when` arms contributes 20 to McCabe even if each arm is a single assignment. The same construct contributes only `1 + nesting` to Cognitive complexity.
+
+**Consequence:** McCabe thresholds calibrated against C/Rust code (e.g. the default threshold of 10–15) will fire on routine Ada dispatch tables that are not genuinely complex.
+
+**Recommendation when analysing Ada code:**
+- Use **Cognitive complexity** as the primary gate; McCabe as secondary.
+- If using McCabe thresholds, raise them for Ada (20–25 is a reasonable starting point for code that uses large case statements).
+- `select_alternative` in task bodies has the same per-branch counting, so selective_accept with many alternatives inflates McCabe the same way.
+
+---
+
 ## Languages currently supported
 
 This table is generated from the `LANGUAGES` table in `src/lib.rs` — the single
