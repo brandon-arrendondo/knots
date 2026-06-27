@@ -100,6 +100,16 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
             }
         }
 
+        // Ada: exit when Condition — conditional loop exit is a branch point.
+        // Bare `exit` (no condition) is not a branch; only `exit when` adds a path.
+        "exit_statement" => {
+            let mut cursor = node.walk();
+            let has_when = node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "when");
+            if has_when {
+                *complexity += 1;
+            }
+        }
+
         _ => {}
     }
 
@@ -316,6 +326,18 @@ fn visit_node_cognitive(
                         last_op = Some(op);
                     }
                 }
+            }
+        }
+
+        // Ada: exit when Condition — flat +1 (conditional jump, like goto/break with condition).
+        "exit_statement" => {
+            let has_when = {
+                let mut cur = node.walk();
+                let found = node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "when");
+                found
+            };
+            if has_when {
+                *complexity += 1;
             }
         }
 
@@ -660,6 +682,15 @@ fn visit_node_abc(
                 if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
                     *conditions += 1;
                 }
+            }
+        }
+
+        // Ada: exit when Condition — the `when` makes it a conditional branch.
+        "exit_statement" => {
+            let mut cursor = node.walk();
+            let has_when = node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "when");
+            if has_when {
+                *conditions += 1;
             }
         }
 
@@ -2836,5 +2867,23 @@ mod tests {
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_exit_when_mccabe() {
+        // loop = +1; exit when = +1; base = 1 → total 3
+        let code = "procedure P is begin loop exit when X > 0; end loop; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_exit_unconditional_mccabe() {
+        // bare `exit` has no condition — no branch, loop = +1, base = 1 → total 2
+        let code = "procedure P is begin loop exit; end loop; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
     }
 }
