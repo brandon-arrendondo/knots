@@ -88,6 +88,18 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Ada: each exception handler (when clause) is an additional path
         "exception_handler" => *complexity += 1,
 
+        // Ada: logical operators (and then / or else / xor / and / or).
+        // The `expression` node is flat: relations separated by unnamed keyword tokens.
+        // Count each `and`, `or`, or `xor` child — each one is a branch point.
+        "expression" => {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                    *complexity += 1;
+                }
+            }
+        }
+
         _ => {}
     }
 
@@ -279,6 +291,22 @@ fn visit_node_cognitive(
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
+        }
+
+        // Ada: logical operators (and then / or else / xor / and / or).
+        // Count each new operator sequence (+1 per distinct contiguous sequence).
+        "expression" => {
+            let mut last_op: Option<&str> = None;
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                    let op = child.kind();
+                    if last_op != Some(op) {
+                        *complexity += 1;
+                        last_op = Some(op);
+                    }
+                }
+            }
         }
 
         _ => {}
@@ -610,6 +638,17 @@ fn visit_node_abc(
                     if op_text == "and" || op_text == "or" {
                         *conditions += 1;
                     }
+                }
+            }
+        }
+
+        // Logical operators (Ada: and then / or else / xor / and / or).
+        // Count each and/or/xor child as a condition branch point.
+        "expression" => {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                    *conditions += 1;
                 }
             }
         }
@@ -2648,5 +2687,76 @@ mod tests {
         let node = js_func_node(&tree);
         let abc = calculate_abc_complexity(node, code.as_bytes());
         assert!(abc.conditions >= 1);
+    }
+
+    // ---- Ada complexity tests ----
+
+    fn parse_ada(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_ada::LANGUAGE.into()).unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    fn ada_subprogram_node(tree: &tree_sitter::Tree) -> tree_sitter::Node<'_> {
+        fn find(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+            if matches!(node.kind(), "subprogram_body" | "expression_function_declaration") {
+                return Some(node);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(found) = find(child) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        find(tree.root_node()).expect("no subprogram node found")
+    }
+
+    #[test]
+    fn test_ada_and_then_mccabe() {
+        // `if A and then B` → base 1 (if) + 1 (and then) = 2
+        let code = "procedure P is begin if A > 0 and then B > 0 then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3); // base 1 + if 1 + and 1
+    }
+
+    #[test]
+    fn test_ada_or_else_mccabe() {
+        // `if X or else Y` → base 1 + if 1 + or 1 = 3
+        let code = "procedure P is begin if X = 1 or else Y = 2 then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_and_then_chain_mccabe() {
+        // `A and then B and then C` → 2 `and` tokens → +2 logical, +1 if = 4 total
+        let code = "procedure P is begin if A and then B and then C then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 4);
+    }
+
+    #[test]
+    fn test_ada_and_then_cognitive() {
+        // `and then` chain of 2 → one sequence → +1; if → +1; base is not counted
+        let code = "procedure P is begin if A > 0 and then B > 0 then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        // if (nesting 0) = +1; and then (same-type chain) = +1 total for sequence
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_ada_and_then_or_else_cognitive() {
+        // Two distinct operator sequences: `and` then `or` → +2 logical; if → +1
+        // `(A and then B) or else C` — needs parens in Ada to mix operators
+        let code = "procedure P is begin if (A and then B) or else C then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
     }
 }
