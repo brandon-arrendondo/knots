@@ -69,7 +69,29 @@ Pre-commit Hook
 ---------------
 
 Knots integrates with the `pre-commit <https://pre-commit.com>`_ framework.
-Add to ``.pre-commit-config.yaml``:
+There are two ways to wire it up.
+
+**Recommended — prebuilt wheel (fast first run).** Point pre-commit at the
+``knots-pre-commit`` mirror repo. Its hooks are ``language: python`` and install
+the prebuilt ``knots`` wheel from PyPI, so the first run is seconds with no Rust
+toolchain and no from-source compile:
+
+.. code-block:: yaml
+
+    repos:
+      - repo: https://github.com/brandon-arrendondo/knots-pre-commit
+        rev: v1.10.1            # pin to a released knots version
+        hooks:
+          - id: knots          # default thresholds
+          # - id: knots-verbose  # same thresholds, per-function detail
+          # - id: knots-strict   # stricter: McCabe 10, Cognitive 10
+
+**Alternative — build from source / bring your own binary.** The main knots repo
+also ships hooks. ``id: knots`` there is ``language: rust`` and compiles knots on
+first use (slow first run, but no PyPI dependency); the ``knots-system`` /
+``knots-system-strict`` variants are ``language: system`` and run a ``knots``
+already on your ``PATH`` (e.g. installed via ``pipx install knots`` — see
+:doc:`installation`):
 
 .. code-block:: yaml
 
@@ -77,9 +99,8 @@ Add to ``.pre-commit-config.yaml``:
       - repo: https://github.com/brandon-arrendondo/knots
         rev: v1.10.1
         hooks:
-          - id: knots          # default thresholds
-          # - id: knots-verbose  # same thresholds, per-function detail
-          # - id: knots-strict   # stricter: McCabe 10, Cognitive 10
+          - id: knots          # language: rust — compiles from source
+          # - id: knots-system   # language: system — uses knots from PATH
 
 Then install:
 
@@ -87,7 +108,7 @@ Then install:
 
     pre-commit install
 
-Custom thresholds via ``args``:
+Custom thresholds via ``args`` (works with either repo):
 
 .. code-block:: yaml
 

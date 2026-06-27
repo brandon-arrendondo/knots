@@ -18,6 +18,14 @@ are genuinely expensive to modify with AI assistance.
 
 ## Installation
 
+Prebuilt binary from PyPI (no Rust toolchain, installs in seconds):
+
+```bash
+pipx install knots          # or: uv tool install knots
+```
+
+From crates.io:
+
 ```bash
 cargo install knots
 ```

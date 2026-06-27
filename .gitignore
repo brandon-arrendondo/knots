@@ -4,5 +4,9 @@ THIRD_PARTY_LICENSES.txt
 *.cdx.json
 docs/_build/
 
+# maturin / PyPI build output
+dist/
+*.whl
+
 .todo-sqlite-cli
 *.db

@@ -1,0 +1,100 @@
+name: Wheels (PyPI)
+
+# Build per-platform wheels + sdists for the `knots` and `knots-test-complexity`
+# binaries with maturin (bindings = "bin"), and publish them to PyPI via Trusted
+# Publishing (OIDC, no API token) on a v*.*.* tag. These prebuilt wheels are what
+# the knots-pre-commit mirror repo installs, giving a zero-compile first run.
+#
+# Validate the matrix without publishing by running this workflow manually
+# (Actions tab -> "Wheels (PyPI)" -> Run workflow); publish only happens on tags.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build ${{ matrix.package.name }} (${{ matrix.platform.target }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - { name: knots, manifest: Cargo.toml }
+          - { name: knots-test-complexity, manifest: knots-test-complexity/Cargo.toml }
+        platform:
+          - { runner: ubuntu-22.04, target: x86_64, manylinux: auto }
+          - { runner: ubuntu-22.04, target: aarch64, manylinux: auto }
+          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2 }
+          - { runner: ubuntu-22.04, target: aarch64-unknown-linux-musl, manylinux: musllinux_1_2 }
+          - { runner: macos-13, target: x86_64 }
+          - { runner: macos-14, target: aarch64 }
+          - { runner: windows-2022, target: x64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.platform.target }}
+          # bindings = "bin" comes from each crate's pyproject.toml; -m selects it.
+          args: --release --out dist -m ${{ matrix.package.manifest }}
+          manylinux: ${{ matrix.platform.manylinux }}
+          sccache: 'true'
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.package.name }}-${{ matrix.platform.target }}
+          path: dist/*.whl
+
+  sdist:
+    name: sdist ${{ matrix.package.name }}
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        package:
+          - { name: knots, manifest: Cargo.toml }
+          - { name: knots-test-complexity, manifest: knots-test-complexity/Cargo.toml }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist -m ${{ matrix.package.manifest }}
+
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist-${{ matrix.package.name }}
+          path: dist/*.tar.gz
+
+  publish:
+    name: Publish to PyPI
+    needs: [build, sdist]
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: release
+    permissions:
+      id-token: write          # required for PyPI Trusted Publishing (OIDC)
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true   # flatten wheel-*/ and sdist-*/ into dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          # Files route to their PyPI project by name: knots-* vs
+          # knots_test_complexity-*. Both projects must trust this workflow.
