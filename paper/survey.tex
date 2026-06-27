@@ -44,15 +44,18 @@ through Cognitive Complexity~\cite{cognitive-complexity} in 2018.  These
 metrics were designed to model \emph{human} cognitive load.  The rise of
 AI-assisted development introduces a different cost model: the effort and
 token budget an LLM requires to safely modify a function.  This survey
-reviews 10 established complexity metrics, evaluates 8 open-source
-analysis tools across 5 dimensions (metric coverage, language support,
-CI integration, output formats, and speed), and characterizes the gap
-between existing metrics and the requirements of AI-cost modeling.  No
-surveyed tool computes metrics oriented toward LLM modification cost, and
-only two support the multi-language, CI-native deployment model needed for
-modern polyglot codebases.  We describe the design requirements for an
-AI-cost-aware complexity tool and position knots~\cite{knots} as the first
-open-source tool to address this gap.
+reviews 10 established complexity metrics, evaluates 10 analysis tools
+across 5 dimensions (metric coverage, language support, CI integration,
+output formats, and speed), and characterizes the gap between existing
+metrics and the requirements of AI-cost modeling.  No surveyed tool
+computes metrics oriented toward LLM modification cost, and only two
+support the multi-language, CI-native deployment model needed for modern
+polyglot codebases.  We further identify that safety-critical domain
+languages such as Ada lack Cognitive Complexity support entirely across
+all surveyed tools, and that no existing tool applies AI-cost metrics to
+Ada code.  We describe the design requirements for an AI-cost-aware
+complexity tool and position knots~\cite{knots} as the first open-source
+tool to address this gap.
 \end{abstract}
 
 %% ============================================================
@@ -96,8 +99,9 @@ This survey makes three contributions:
 \begin{enumerate}
     \item A structured review of 10 established complexity metrics,
         organized by what aspect of complexity each models.
-    \item A comparative evaluation of 8 open-source analysis tools on
-        5 dimensions relevant to CI-native deployment.
+    \item A comparative evaluation of 10 analysis tools on 5 dimensions
+        relevant to CI-native deployment, including two Ada-focused tools
+        used in safety-critical certification contexts.
     \item A characterization of the gap between existing tools and
         AI-cost-aware complexity analysis, motivating the AIRD and AICP
         metrics described in the companion paper~\cite{knots-aird}.
@@ -160,6 +164,21 @@ achieve branch coverage.  It is the most widely deployed complexity metric:
 tools, linters, and style guides from NASA's JPL~\cite{jpl} to MISRA
 C~\cite{misra} cite McCabe thresholds (typically 10--15 as a warning
 threshold, 25 as a hard limit).
+
+\textbf{Language-specific adaptations.}
+GNATmetric~\cite{gnatmetric}, part of AdaCore's GNAT Static Analysis
+Suite, demonstrates that McCabe complexity requires language-specific
+adaptation.  For Ada, GNATmetric decomposes cyclomatic complexity into
+two sub-scores: \emph{statement complexity} (control statements only,
+excluding short-circuit forms) and \emph{expression complexity}
+(short-circuit forms only), summed for the total.  GNATmetric also
+defines an \emph{Ada Essential Complexity} variant that excludes pure
+structural Ada control statements and does not penalize short-circuit
+forms as unstructured---a deliberate divergence from McCabe's original
+formulation.  Ada~2012 constructs (conditional expressions and quantified
+expressions) are counted as additional expression complexity contributors.
+This statement/expression decomposition is absent from all general-purpose
+tools surveyed and has no counterpart in the original McCabe definition.
 
 \textbf{Limitation for AI cost:} McCabe counts branches but not nesting
 depth.  A deeply nested function with 10 branches scores identically to a
@@ -309,7 +328,7 @@ no precedent in the prior metrics literature.
 \section{Tool Evaluation}
 \label{sec:tools}
 
-We evaluate 8 open-source tools against 5 dimensions: metric coverage,
+We evaluate 10 tools against 5 dimensions: metric coverage,
 language support, CI integration ergonomics, structured output formats,
 and analysis speed.  \Cref{tab:tools} gives the overview; the subsections
 provide detail on notable characteristics.
@@ -318,23 +337,26 @@ provide detail on notable characteristics.
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}lllllll@{}}
+\begin{tabular}{@{}llp{4.2cm}llll@{}}
 \toprule
-\textbf{Tool} & \textbf{Lang(s)} & \textbf{Metrics} & \textbf{CI exit} & \textbf{JSON} & \textbf{pre-commit} & \textbf{Speed} \\
+\textbf{Tool} & \textbf{Lang(s)} & \textbf{Metrics} & \textbf{CI} & \textbf{JSON} & \textbf{hook} & \textbf{Speed} \\
 \midrule
-pmccabe~\cite{pmccabe}              & C, C++           & CC                       & \checkmark & --         & --         & Fast \\
-lizard~\cite{lizard}                & 27 langs         & CC, SLOC, params, tokens & \checkmark & \checkmark & --         & Fast \\
-radon~\cite{radon}                  & Python only      & CC, Halstead, MI, SLOC   & \checkmark & \checkmark & --         & Fast \\
-rust-code-analysis~\cite{rca}       & Rust, C, C++, JS & CC, Cognitive, Halstead, SLOC, many more & -- & \checkmark & -- & Fast \\
-tokei~\cite{tokei}                  & 150+ langs       & SLOC only                & --         & \checkmark & --         & Very fast \\
-SonarQube~\cite{sonarqube}          & 30+ langs        & CC, Cognitive, SLOC, duplications, smells & -- & REST API & -- & Slow (server) \\
-understand~\cite{understand}        & 20+ langs        & CC, Halstead, many more  & --         & --         & --         & Moderate \\
-knots~\cite{knots}                  & C, C++, Rust, Py, JS & CC, Cognitive, Nesting, SLOC, ABC, Returns, TestScore, ExternalCalls, AIRD, AICP, StateCoupling & \checkmark & \checkmark & \checkmark & Fast \\
+pmccabe~\cite{pmccabe}              & C, C++           & CC                                        & \checkmark & --         & --         & Fast \\
+lizard~\cite{lizard}                & 27 langs         & CC, SLOC, params, tokens                  & \checkmark & \checkmark & --         & Fast \\
+radon~\cite{radon}                  & Python only      & CC, Halstead, MI, SLOC                    & \checkmark & \checkmark & --         & Fast \\
+rca~\cite{rca}                       & Rust, C, C++, JS & CC, Cognitive, Halstead, SLOC, many more  & --         & \checkmark & --         & Fast \\
+tokei~\cite{tokei}                  & 150+ langs       & SLOC only                                 & --         & \checkmark & --         & Very fast \\
+SonarQube~\cite{sonarqube}          & 30+ langs        & CC, Cognitive, SLOC, duplications, smells & --         & REST API   & --         & Slow \\
+understand~\cite{understand}        & 20+ langs (Ada)  & CC (CC1/2/3), Halstead, many more         & --         & --         & --         & Moderate \\
+GNATmetric~\cite{gnatmetric}        & Ada only         & McCabe CC (stmt/expr), Essential CC, Loop Nesting, Exit Pts & \checkmark & -- & -- & Fast \\
+AdaControl~\cite{adacontrol}        & Ada only         & Expression complexity (structural)        & \checkmark & --         & --         & Fast \\
+knots~\cite{knots}                  & C/C++, Rust, Py, JS, TS & CC, Cognitive, Nesting, SLOC, ABC, AIRD, AICP, + 4 more & \checkmark & \checkmark & \checkmark & Fast \\
 \bottomrule
 \end{tabular}
-\caption{Open-source complexity tools surveyed.  ``CI exit'' = tool exits non-zero on threshold
-violation.  ``pre-commit'' = native pre-commit framework integration.  ``Speed'' = qualitative
-assessment on a 100K-LOC codebase.  CC = cyclomatic complexity.}
+\caption{Complexity tools surveyed.  GNATmetric and AdaControl are Ada-specific;
+all others are general-purpose.  ``CI exit'' = tool exits non-zero on threshold violation.
+``pre-commit'' = native pre-commit framework integration.
+``Speed'' = qualitative assessment on a 100K-LOC codebase.  CC = cyclomatic complexity.}
 \label{tab:tools}
 \end{table*}
 
@@ -421,6 +443,41 @@ comprehensive tool in the survey in raw metric count, but it is
 commercial, requires manual invocation through a GUI or script, and
 does not integrate into pre-commit or lightweight CI workflows.
 
+\subsection{GNATmetric}
+
+GNATmetric is the primary Ada complexity tool, part of AdaCore's GNAT
+Static Analysis Suite (GNAT SAS, v27.0w as of June 2026)~\cite{gnatmetric}.
+It defines four complexity metrics for Ada executable bodies: McCabe
+Cyclomatic Complexity (decomposed into statement and expression sub-totals),
+McCabe Essential Complexity (an Ada-specific adaptation that excludes
+pure structural control statements and does not penalize short-circuit forms),
+Maximal Loop Nesting Level, and Extra Exit Points.
+
+GNATmetric is explicitly positioned for DO-178C and ISO~26262 safety
+certification contexts.  Threshold enforcement is provided via the companion
+GNATcheck tool using rules \texttt{Metrics\_Cyclomatic\_Complexity} and
+\texttt{Overly\_Nested\_Control\_Structures}, for which AdaCore publishes
+qualification kits supporting DO-178C Level~A certification.
+
+\textbf{Notable gap.}  GNATmetric does not implement Cognitive
+Complexity~\cite{cognitive-complexity}, and no Ada tool in our survey
+does.  The SonarSource specification provides no Ada-specific guidance
+for tasking constructs (rendezvous, protected objects,
+\texttt{select}/\texttt{accept} statements), which would require novel
+treatment analogous to GNATmetric's Essential Complexity adaptation.
+
+\subsection{AdaControl}
+
+AdaControl~\cite{adacontrol} (Adalog, v1.23b4, open-source GMGPL) is a
+rule-based Ada static analysis tool that uses ASIS (Ada Semantic Interface
+Specification) for its underlying representation, in contrast to GNATcheck
+which uses libadalang~\cite{adalog-benchmark}.  Its primary
+complexity-related rule is \texttt{Max\_Expression\_Items}, which enforces
+a configurable threshold on expression structural complexity.  AdaControl
+does not compute McCabe cyclomatic or Cognitive Complexity; it is more
+accurately characterized as a coding-standards enforcer with structural
+complexity guards than a standalone metrics tool.
+
 \subsection{knots}
 
 Knots~\cite{knots} is a Rust-based, multi-language complexity analyzer
@@ -432,9 +489,9 @@ AIRD, AICP, and state coupling.
 Knots was validated against reference implementations: 100\% McCabe match
 against pmccabe across 32,205 functions; 1.004$\times$ mean Cognitive
 match against rust-code-analysis across 11,365 Rust functions.  It
-supports C, C++, Rust, Python, and JavaScript via tree-sitter, exits
-non-zero on configurable threshold violations, produces JSON/NDJSON/SARIF/CSV
-output, and ships a pre-commit framework hook.
+supports C, C++, Rust, Python, JavaScript, TypeScript, and TSX via
+tree-sitter, exits non-zero on configurable threshold violations, produces
+JSON/NDJSON/SARIF/CSV output, and ships a pre-commit framework hook.
 
 The metrics not found in any other surveyed tool are AIRD, AICP, and state
 coupling, which are covered in the companion paper~\cite{knots-aird}.
@@ -495,6 +552,19 @@ output~\cite{sarif} is increasingly required for integration with GitHub
 Code Scanning and similar platforms.  Of the surveyed tools, only SonarQube
 and knots produce SARIF; lizard and radon produce JSON but not SARIF.
 
+\textbf{Safety-critical language domains are underserved.}  Ada is the
+dominant language for safety-critical embedded systems in avionics
+(DO-178C), automotive ADAS (ISO~26262), and medical devices (IEC~62304).
+The developers writing Ada code operate under the strongest complexity
+mandates of any engineering discipline, yet no Ada tool in our survey
+computes Cognitive Complexity~\cite{cognitive-complexity}, and no
+existing tool applies AI-cost metrics (AIRD, AICP) to Ada code.
+NASA TM-20205011566~\cite{nasa-cc-study} notes that academic research
+on complexity metrics remains inconclusive across languages including Ada,
+and that DO-178C does not mandate cyclomatic complexity thresholds directly.
+The gap between the safety community's need for rigorous, modern metrics and
+the available tooling is wider for Ada than for any other mainstream language.
+
 \subsection{Threshold Calibration}
 
 Threshold recommendations in the literature vary widely and are rarely
@@ -542,11 +612,29 @@ multiple metrics into a single remediation cost estimate.  Neither was
 designed for LLM cost estimation, but the composite-metric approach
 informed AIRD's design.
 
+\textbf{Ada and safety-critical complexity.}
+The Ada complexity tooling landscape is dominated by AdaCore's
+GNATmetric~\cite{gnatmetric}, which defines four Ada-specific complexity
+metrics and has remained stable across GNAT releases since at least
+GCC~4.7.  McCabe's essential complexity concept was adapted specifically
+for Ada's structured control flow and short-circuit evaluation semantics,
+producing a language-specific variant absent from all general-purpose
+tools.  LDRA Testbed~\cite{ldra} and Scientific Toolworks'
+Understand~\cite{understand} also support Ada; Understand provides all
+three McCabe CC variants (CC1, CC2, CC3) as documented by NASA
+TM-20205011566~\cite{nasa-cc-study}, the strongest available survey
+of complexity tools for safety-critical software.  AdaControl~\cite{adacontrol}
+provides open-source rule enforcement.  A 2025 Adalog-fr
+benchmark~\cite{adalog-benchmark} compares GNATcheck, AdaControl, and
+the emerging Cogralys engine (graph-database-backed, v0.1.0).  Notably,
+no surveyed tool computes Cognitive Complexity for Ada, and no tool
+applies AI-cost metrics to Ada code---both represent open contributions.
+
 %% ============================================================
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have surveyed 10 complexity metrics and 8 open-source tools, characterizing
+We have surveyed 10 complexity metrics and 10 analysis tools, characterizing
 where existing work falls short for AI-cost-aware complexity analysis.  The
 gaps are consistent: no existing metric captures LLM context pressure or
 state access patterns; no tool other than knots ships both multi-language
@@ -692,6 +780,36 @@ J.-L. Letouzey.
 \newblock {The SQALE Method for Evaluating Technical Debt}.
 \newblock In \emph{Proc.\ 3rd Intl.\ Workshop on Managing Technical Debt},
   pages 31--36, 2012.
+
+\bibitem{gnatmetric}
+{AdaCore}.
+\newblock {GNATmetric User's Guide, GNAT SAS v27.0w}.
+\newblock \url{https://docs.adacore.com/live/wave/gnatsas/html/gnatmetric/gnatmetrics.html},
+  2026.
+
+\bibitem{adacontrol}
+J.-P. Rosen.
+\newblock {AdaControl}: An Ada rule checker.
+\newblock Adalog, \url{https://www.adalog.fr/en/adacontrol.html}, 2021.
+\newblock Version~1.23b4.
+
+\bibitem{nasa-cc-study}
+{NASA Engineering and Safety Center}.
+\newblock Cyclomatic complexity and basis path testing study.
+\newblock Technical Report NASA/TM-20205011566, NESC-RP-20-01515, NASA, 2020.
+\newblock \url{https://ntrs.nasa.gov/citations/20205011566}.
+
+\bibitem{ldra}
+{LDRA Ltd.}
+\newblock {LDRA Testbed}: Static and dynamic analysis for safety-critical
+  software.
+\newblock \url{https://ldra.com/products/ldra-testbed-tbvision/}, 2025.
+
+\bibitem{adalog-benchmark}
+{Adalog-fr}.
+\newblock Ada static code analysis tools benchmark.
+\newblock \url{https://github.com/Adalog-fr/ada-static-code-analysis-tools-benchmark},
+  2025.
 
 \end{thebibliography}
 
