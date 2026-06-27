@@ -159,4 +159,5 @@ crates are the `tree_sitter_*` re-exports at the top of `src/lib.rs`.
 | Ada | `.adb` `.ada` | `.ads` |
 | Go | `.go` | — |
 | Java | `.java` | — |
+| C# | `.cs` | — |
 <!-- END:supported-languages -->

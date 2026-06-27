@@ -1330,7 +1330,8 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "task_body"
         | "method_declaration"
         | "func_literal"
-        | "constructor_declaration" => {
+        | "constructor_declaration"
+        | "local_function_statement" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -1383,8 +1384,10 @@ fn handle_call_node(
             }
         }
         // Rust path (Foo::bar()), Python attribute (obj.method()), JS member (obj.method()),
-        // Go selector (pkg.Func / obj.Method) — all qualify as external by definition
-        "scoped_identifier" | "attribute" | "member_expression" | "selector_expression" => {
+        // Go selector (pkg.Func / obj.Method), C# member access (obj.Method() / Ns.Class.Method())
+        // — all qualify as external by definition
+        "scoped_identifier" | "attribute" | "member_expression" | "selector_expression"
+        | "member_access_expression" => {
             if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
                 external.insert(name.to_string());
             }
@@ -1409,7 +1412,9 @@ fn collect_external_calls_recursive(
     local_names: &HashSet<String>,
     external: &mut HashSet<String>,
 ) {
-    if node.kind() == "call_expression" || node.kind() == "call" {
+    if node.kind() == "call_expression" || node.kind() == "call"
+        || node.kind() == "invocation_expression"
+    {
         handle_call_node(node, source_code, local_names, external);
     }
     // Ada: procedure_call_statement and function_call use 'name' field, not 'function'
@@ -2308,6 +2313,7 @@ where
             | "method_declaration"
             | "func_literal"
             | "constructor_declaration"
+            | "local_function_statement"
     ) {
         callback(node, source_code);
     }
@@ -2381,6 +2387,14 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
     // Go func_literal: anonymous closure — no name.
     if node.kind() == "func_literal" {
         return None;
+    }
+
+    // C# local_function_statement: named nested function — reads 'name' field.
+    if node.kind() == "local_function_statement" {
+        return node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string());
     }
 
     // Ada task_body: name is the first identifier child.
@@ -3272,5 +3286,68 @@ mod tests {
         let mut names = discover_java_functions(code);
         names.sort();
         assert_eq!(names, vec!["Foo", "greet"]);
+    }
+
+    // ---- C# function discovery tests ----
+
+    fn discover_cs_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_c_sharp::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_cs_discover_method() {
+        let code = "class Foo { int Add(int a, int b) { return a + b; } }";
+        let names = discover_cs_functions(code);
+        assert_eq!(names, vec!["Add"]);
+    }
+
+    #[test]
+    fn test_cs_discover_constructor() {
+        let code = "class Foo { Foo(int x) { this.x = x; } }";
+        let names = discover_cs_functions(code);
+        assert_eq!(names, vec!["Foo"]);
+    }
+
+    #[test]
+    fn test_cs_discover_multiple_methods() {
+        let code = "class Foo { void Foo2() {} void Bar() {} }";
+        let mut names = discover_cs_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["Bar", "Foo2"]);
+    }
+
+    #[test]
+    fn test_cs_discover_constructor_and_method() {
+        let code = "class Foo { Foo() {} void Greet() {} }";
+        let mut names = discover_cs_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["Foo", "Greet"]);
+    }
+
+    #[test]
+    fn test_cs_discover_local_function() {
+        let code = "class Foo { void Outer() { int Inner(int x) { return x * 2; } } }";
+        let mut names = discover_cs_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["Inner", "Outer"]);
+    }
+
+    #[test]
+    fn test_cs_lambda_skipped() {
+        let code = "class Foo { void Outer() { var f = (int x) => x * 2; } }";
+        let names = discover_cs_functions(code);
+        assert_eq!(names, vec!["Outer"]);
     }
 }

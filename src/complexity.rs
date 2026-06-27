@@ -137,6 +137,9 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Java: enhanced for-each loop and switch expressions each add one path.
         "enhanced_for_statement" | "switch_expression" => *complexity += 1,
 
+        // C#: foreach loop.
+        "foreach_statement" => *complexity += 1,
+
         _ => {}
     }
 
@@ -237,7 +240,10 @@ fn visit_node_cognitive(
         // No +1 base cost: a closure is not itself a decision point.
         // "lambda" covers Python lambdas; "lambda_expression"/"closure_expression" cover C++/Rust.
         // "arrow_function" covers JavaScript arrow functions (() => ...).
-        "lambda_expression" | "closure_expression" | "lambda" | "arrow_function" => {
+        // "anonymous_method_expression" covers C# delegate expressions (delegate { ... }).
+        // "local_function_statement" covers C# named local functions nested inside a method.
+        "lambda_expression" | "closure_expression" | "lambda" | "arrow_function"
+        | "anonymous_method_expression" | "local_function_statement" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -405,6 +411,13 @@ fn visit_node_cognitive(
             return;
         }
 
+        // C#: foreach loop.
+        "foreach_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
         _ => {}
     }
 
@@ -488,7 +501,9 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         | "expression_switch_statement" | "type_switch_statement" | "select_statement"
         | "func_literal"
         // Java control structures
-        | "enhanced_for_statement" | "switch_expression" => {
+        | "enhanced_for_statement" | "switch_expression"
+        // C# control structures
+        | "foreach_statement" | "anonymous_method_expression" | "local_function_statement" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -689,8 +704,8 @@ fn visit_node_abc(
         // Assignments — Ada (:= operator)
         "assignment_statement" => *assignments += 1,
 
-        // Branches — function calls (C/C++/Rust use call_expression, Python uses call)
-        "call_expression" | "call" => *branches += 1,
+        // Branches — function calls (C/C++/Rust use call_expression, Python uses call, C# uses invocation_expression)
+        "call_expression" | "call" | "invocation_expression" => *branches += 1,
         // Ada: procedure and function invocations
         "procedure_call_statement" | "function_call" => *branches += 1,
 
@@ -740,6 +755,9 @@ fn visit_node_abc(
 
         // Conditions (Java)
         "enhanced_for_statement" | "switch_expression" => *conditions += 1,
+
+        // Conditions (C#)
+        "foreach_statement" => *conditions += 1,
 
         // Logical operators (C/C++/Rust: &&/||; JavaScript also: ??)
         "binary_expression" => {
@@ -1390,7 +1408,9 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
         // Go: method_declaration (receiver is separate; count only the regular parameters).
         // Go: func_literal (anonymous function/closure).
         // Java: method_declaration and constructor_declaration both use formal_parameter.
-        "method_declaration" | "func_literal" | "constructor_declaration" => {
+        // C#: method_declaration, constructor_declaration, and local_function_statement use parameter.
+        "method_declaration" | "func_literal" | "constructor_declaration"
+        | "local_function_statement" => {
             if let Some(params) = node.child_by_field_name("parameters") {
                 let mut cursor = params.walk();
                 return params
@@ -1402,6 +1422,8 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                             "parameter_declaration" | "variadic_parameter_declaration"
                             // Java parameter kinds
                             | "formal_parameter" | "spread_parameter"
+                            // C# parameter kind
+                            | "parameter"
                         )
                     })
                     .count() as u32;
@@ -1533,6 +1555,18 @@ fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut Ha
             if obj.utf8_text(source_code).unwrap_or("") == "this" {
                 if let Some(field) = node.child_by_field_name("field") {
                     if let Ok(name) = field.utf8_text(source_code) {
+                        fields.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    // C#: member_access_expression where 'expression' is 'this'
+    if node.kind() == "member_access_expression" {
+        if let Some(obj) = node.child_by_field_name("expression") {
+            if obj.utf8_text(source_code).unwrap_or("") == "this" {
+                if let Some(prop) = node.child_by_field_name("name") {
+                    if let Ok(name) = prop.utf8_text(source_code) {
                         fields.insert(name.to_string());
                     }
                 }
