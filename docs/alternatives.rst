@@ -42,11 +42,36 @@ Feature Comparison
      - ✓
      - ✓
      - ✗
-   * - 30+ other languages
+   * - TypeScript
+     - ✓
+     - ✓
+     - ✓
      - ✗
+   * - Go
      - ✓
      - ✓
      - ✗
+     - ✗
+   * - Java
+     - ✓
+     - ✓
+     - ✓
+     - ✗
+   * - C#
+     - ✓
+     - ✓
+     - ✗
+     - ✗
+   * - Ada
+     - ✓
+     - ✗
+     - ✗
+     - ✗
+   * - Language count
+     - 10
+     - ~25
+     - 11
+     - 1 (Rust only)
    * - **Metrics**
      -
      -
