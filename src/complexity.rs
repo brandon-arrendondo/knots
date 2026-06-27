@@ -13,6 +13,12 @@ pub fn calculate_mccabe_complexity(node: Node, source_code: &[u8]) -> u32 {
 }
 
 fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
+    // Skip unnamed/anonymous tokens (keyword literals, punctuation). Without this guard,
+    // the Ada "guard" rule would fire on Swift's unnamed `guard` keyword token, and similar
+    // unnamed keywords from one grammar would spuriously match rules for another language.
+    if !node.is_named() {
+        return;
+    }
     // Decision points that increase cyclomatic complexity
     match node.kind() {
         // C/C++ conditional statements
@@ -142,6 +148,9 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
 
         // Kotlin: do-while loop, when expression (like switch), catch block.
         "do_while_statement" | "when_expression" | "catch_block" => *complexity += 1,
+
+        // Swift: guard_statement (conditional early-exit) and repeat_while_statement (do-while loop).
+        "guard_statement" | "repeat_while_statement" => *complexity += 1,
 
         _ => {}
     }
@@ -440,6 +449,15 @@ fn visit_node_cognitive(
             return;
         }
 
+        // Swift: guard_statement (conditional early-exit) and repeat_while_statement (do-while loop).
+        "guard_statement" | "repeat_while_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Swift: lambda_literal is already covered above (Kotlin re-uses the same node kind).
+
         _ => {}
     }
 
@@ -528,7 +546,9 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         | "foreach_statement" | "anonymous_method_expression" | "local_function_statement"
         // Kotlin control structures
         | "do_while_statement" | "when_expression" | "catch_block"
-        | "lambda_literal" | "anonymous_function" | "annotated_lambda" => {
+        | "lambda_literal" | "anonymous_function" | "annotated_lambda"
+        // Swift control structures
+        | "guard_statement" | "repeat_while_statement" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -786,6 +806,9 @@ fn visit_node_abc(
 
         // Conditions (Kotlin)
         "do_while_statement" | "when_expression" => *conditions += 1,
+
+        // Conditions (Swift)
+        "guard_statement" | "repeat_while_statement" => *conditions += 1,
 
         // Logical operators (C/C++/Rust: &&/||; JavaScript also: ??)
         "binary_expression" => {
@@ -1441,8 +1464,27 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                         .count() as u32;
                 }
             }
+            // Swift: 'parameter' nodes are direct children of function_declaration (no wrapper field).
+            {
+                let mut cursor = node.walk();
+                let count = node
+                    .children(&mut cursor)
+                    .filter(|c| c.kind() == "parameter")
+                    .count() as u32;
+                if count > 0 {
+                    return count;
+                }
+            }
             // C/C++: no 'parameters' field, drill into declarator chain
             count_c_params_in_subtree(node, source_code)
+        }
+        // Swift: init_declaration — 'parameter' nodes are direct children (same layout as function_declaration).
+        "init_declaration" => {
+            let mut cursor = node.walk();
+            return node
+                .children(&mut cursor)
+                .filter(|c| c.kind() == "parameter")
+                .count() as u32;
         }
         // Go: method_declaration (receiver is separate; count only the regular parameters).
         // Go: func_literal (anonymous function/closure).
@@ -1617,6 +1659,23 @@ fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut Ha
                 if let Some(prop) = node.child_by_field_name("name") {
                     if let Ok(name) = prop.utf8_text(source_code) {
                         fields.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    // Swift: navigation_expression where first named child is self_expression (self.field).
+    // AST: navigation_expression { self_expression, navigation_suffix { simple_identifier "field" } }
+    if node.kind() == "navigation_expression" {
+        if let Some(first) = node.named_child(0) {
+            if first.kind() == "self_expression" {
+                if let Some(suffix) = node.named_child(1) {
+                    if suffix.kind() == "navigation_suffix" {
+                        if let Some(name_node) = suffix.named_child(0) {
+                            if let Ok(name) = name_node.utf8_text(source_code) {
+                                fields.insert(name.to_string());
+                            }
+                        }
                     }
                 }
             }

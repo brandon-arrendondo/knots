@@ -1331,7 +1331,8 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "method_declaration"
         | "func_literal"
         | "constructor_declaration"
-        | "local_function_statement" => {
+        | "local_function_statement"
+        | "init_declaration" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -1438,15 +1439,18 @@ fn collect_external_calls_recursive(
             }
         }
     }
-    // Kotlin: call_expression has no 'function' field; the callee is the first named child
-    // that isn't value_arguments / type_arguments / annotated_lambda.
+    // Kotlin/Swift: call_expression has no 'function' field; the callee is the first named child
+    // that isn't the argument list. Kotlin uses value_arguments/annotated_lambda; Swift uses call_suffix.
     if node.kind() == "call_expression" && node.child_by_field_name("function").is_none() {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             if !child.is_named() {
                 continue;
             }
-            if matches!(child.kind(), "value_arguments" | "type_arguments" | "annotated_lambda") {
+            if matches!(
+                child.kind(),
+                "value_arguments" | "type_arguments" | "annotated_lambda" | "call_suffix"
+            ) {
                 continue;
             }
             let text = child.utf8_text(source_code.as_bytes()).unwrap_or("").to_string();
@@ -2334,6 +2338,7 @@ where
             | "func_literal"
             | "constructor_declaration"
             | "local_function_statement"
+            | "init_declaration"
     ) {
         callback(node, source_code);
     }
@@ -2361,6 +2366,7 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
     // JavaScript: function_declaration, function_expression, method_definition,
     // generator_function_declaration, and generator_function all have a direct 'name' field.
     // function_expression and generator_function may be anonymous (name field absent).
+    // Swift function_declaration has no 'name' field; its name is the first simple_identifier child.
     if matches!(
         node.kind(),
         "function_declaration"
@@ -2369,10 +2375,31 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
             | "generator_function_declaration"
             | "generator_function"
     ) {
-        return node
+        if let Some(name) = node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string());
+            .map(|s| s.to_string())
+        {
+            return Some(name);
+        }
+        // Swift fallback: first simple_identifier child is the function name.
+        if node.kind() == "function_declaration" {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "simple_identifier" {
+                    return child
+                        .utf8_text(source_code.as_bytes())
+                        .ok()
+                        .map(|s| s.to_string());
+                }
+            }
+        }
+        return None; // anonymous function_expression / generator_function
+    }
+
+    // Swift: init_declaration — always named "init" (Swift initializer).
+    if node.kind() == "init_declaration" {
+        return Some("init".to_string());
     }
 
     // Python function_definition also has a direct 'name' field.
@@ -3416,5 +3443,65 @@ mod tests {
         let code = "fun outer() { val f = { x: Int -> x * 2 } }";
         let names = discover_kotlin_functions(code);
         assert_eq!(names, vec!["outer"]);
+    }
+
+    fn discover_swift_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_swift::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_swift_discover_top_level_function() {
+        let code = "func greet(name: String) -> String { return \"Hello\" }";
+        let names = discover_swift_functions(code);
+        assert_eq!(names, vec!["greet"]);
+    }
+
+    #[test]
+    fn test_swift_discover_init() {
+        let code = "class Foo { init(x: Int) { self.x = x } }";
+        let names = discover_swift_functions(code);
+        assert_eq!(names, vec!["init"]);
+    }
+
+    #[test]
+    fn test_swift_discover_method() {
+        let code = "class Counter { func increment() { } }";
+        let names = discover_swift_functions(code);
+        assert_eq!(names, vec!["increment"]);
+    }
+
+    #[test]
+    fn test_swift_discover_multiple_functions() {
+        let code = "func foo() {} func bar() {}";
+        let mut names = discover_swift_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_swift_lambda_skipped() {
+        let code = "func outer() { let f = { (x: Int) -> Int in x * 2 } }";
+        let names = discover_swift_functions(code);
+        assert_eq!(names, vec!["outer"]);
+    }
+
+    #[test]
+    fn test_swift_discover_init_and_method() {
+        let code = "class Foo { init(x: Int) {} func bar() {} }";
+        let mut names = discover_swift_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "init"]);
     }
 }
