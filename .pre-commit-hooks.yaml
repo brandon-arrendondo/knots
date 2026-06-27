@@ -18,7 +18,7 @@
   entry: knots
   args: [--aird-threshold=85]
   language: rust
-  types_or: [c, c++, rust, python, javascript]
+  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
 
 # Verbose variant — same overridable defaults, adds per-function detail to stdout
 - id: knots-verbose
@@ -27,17 +27,17 @@
   entry: knots
   args: [--verbose, --aird-threshold=85]
   language: rust
-  types_or: [c, c++, rust, python, javascript]
+  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
 
 # Strict variant — baked-in conservative thresholds for teams that want a
 # tighter baseline without managing args themselves
 - id: knots-strict
   name: Code Complexity Check (Strict)
-  description: Strict thresholds for C, C++, Rust, Python, and JavaScript (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
+  description: Strict thresholds for C, C++, Rust, Python, JavaScript, and TypeScript (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
   entry: knots
   args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=5.0, --return-threshold=3]
   language: rust
-  types_or: [c, c++, rust, python, javascript]
+  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
 
 # system variants — require knots on PATH; skip the Rust toolchain install.
 # Use these when your team installs knots via a released binary or package manager.
@@ -47,7 +47,7 @@
   entry: knots
   args: [--aird-threshold=85]
   language: system
-  types_or: [c, c++, rust, python, javascript]
+  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
 
 - id: knots-system-strict
   name: Code Complexity Check (system, strict)
@@ -55,7 +55,7 @@
   entry: knots
   args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=5.0, --return-threshold=3]
   language: system
-  types_or: [c, c++, rust, python, javascript]
+  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
 
 # Test quality checker - validates tests have sufficient complexity and boundary coverage
 # Default discovery: naming convention (test_foo.c / foo_test.c -> foo.c)
