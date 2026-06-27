@@ -284,6 +284,11 @@ struct Args {
     /// needed. E.g. `knots --explain aird`.
     #[arg(long, value_name = "METRIC", value_enum)]
     explain: Option<ExplainMetric>,
+
+    /// Suppress all output except threshold violation lines. Exit code is still
+    /// 1 when violations are found. Useful for edit→check loops and CI logs.
+    #[arg(long, short = 'q')]
+    quiet: bool,
 }
 
 /// Metrics that `--explain` can describe at the command line.
@@ -1097,7 +1102,9 @@ fn main() -> Result<()> {
             );
         }
 
-        display_testability_matrix(&all_metrics, files.len(), skipped_files);
+        if !args.quiet {
+            display_testability_matrix(&all_metrics, files.len(), skipped_files);
+        }
         check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
         return Ok(());
     }
@@ -1110,14 +1117,16 @@ fn main() -> Result<()> {
 
         let tree = parse_file(file, &source_code)?;
 
-        analyze_code(
-            &tree,
-            &source_code,
-            file.to_str().unwrap_or(""),
-            args.verbose,
-            &include_rules,
-            &exclude_rules,
-        )?;
+        if !args.quiet {
+            analyze_code(
+                &tree,
+                &source_code,
+                file.to_str().unwrap_or(""),
+                args.verbose,
+                &include_rules,
+                &exclude_rules,
+            )?;
+        }
         let metrics = collect_function_metrics(
             &tree,
             &source_code,
@@ -1173,8 +1182,9 @@ fn main() -> Result<()> {
         write_detailed_report(&all_metrics, args.verbose, report_path)?;
     }
 
-    // Display summary with top 5 worst functions and totals/averages
-    display_recursive_summary(&all_metrics, files.len(), skipped_files, args.report.as_deref());
+    if !args.quiet {
+        display_recursive_summary(&all_metrics, files.len(), skipped_files, args.report.as_deref());
+    }
 
     check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
     Ok(())
