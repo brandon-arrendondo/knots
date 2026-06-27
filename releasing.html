@@ -1,0 +1,225 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Releasing &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Troubleshooting" href="troubleshooting.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filter Rules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Releasing</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#one-time-setup">One-time setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#release-steps">Release steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#verifying-a-release">Verifying a release</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-recovery">Notes &amp; recovery</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Releasing</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/releasing.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="releasing">
+<h1>Releasing<a class="headerlink" href="#releasing" title="Link to this heading"></a></h1>
+<p>This page documents the maintainer release process: how a tagged version becomes
+prebuilt PyPI wheels and a matching <code class="docutils literal notranslate"><span class="pre">knots-pre-commit</span></code> release.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The version is single-sourced in <code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code> under
+<code class="docutils literal notranslate"><span class="pre">[workspace.package].version</span></code> (both crates inherit it).</p></li>
+<li><p>Pushing a <code class="docutils literal notranslate"><span class="pre">v*.*.*</span></code> tag to the <code class="docutils literal notranslate"><span class="pre">knots</span></code> repo triggers
+<code class="docutils literal notranslate"><span class="pre">.github/workflows/wheels.yml</span></code>, which builds per-platform wheels + sdists for
+<strong>knots</strong> and <strong>knots-test-complexity</strong> with maturin and publishes them to PyPI
+via Trusted Publishing (OIDC — no API token).</p></li>
+<li><p>The separate <a class="reference external" href="https://github.com/brandon-arrendondo/knots-pre-commit">knots-pre-commit</a> repo is a pure-Python
+shim that pins <code class="docutils literal notranslate"><span class="pre">knots==&lt;version&gt;</span></code>; its <code class="docutils literal notranslate"><span class="pre">language:</span> <span class="pre">python</span></code> hooks install the
+prebuilt wheel so users get a zero-compile first run. It is tagged to match each
+knots release. See <a class="reference internal" href="ci-integration.html"><span class="doc">CI Integration</span></a> for the user-facing setup.</p></li>
+</ul>
+</section>
+<section id="one-time-setup">
+<h2>One-time setup<a class="headerlink" href="#one-time-setup" title="Link to this heading"></a></h2>
+<p>On PyPI, configure a <strong>Trusted Publisher</strong> for each project (<code class="docutils literal notranslate"><span class="pre">knots</span></code> and
+<code class="docutils literal notranslate"><span class="pre">knots-test-complexity</span></code>). Until a project’s first publish, add it as a <em>pending</em>
+publisher at <a class="reference external" href="https://pypi.org/manage/account/publishing/">https://pypi.org/manage/account/publishing/</a> with:</p>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>PyPI Project Name</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">knots</span></code> / <code class="docutils literal notranslate"><span class="pre">knots-test-complexity</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Owner</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">brandon-arrendondo</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Repository name</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">knots</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Workflow name</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">wheels.yml</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Environment name</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">release</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>PyPI Project Name must exactly match</strong> the package name in each crate’s
+<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> (normalized) — a mismatch yields a <code class="docutils literal notranslate"><span class="pre">400</span> <span class="pre">Non-user</span> <span class="pre">identities</span>
+<span class="pre">cannot</span> <span class="pre">create</span> <span class="pre">new</span> <span class="pre">projects</span></code> error at publish time.</p>
+</section>
+<section id="release-steps">
+<h2>Release steps<a class="headerlink" href="#release-steps" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">X.Y.Z</span></code> is the new version.</p>
+<ol class="arabic">
+<li><p><strong>Bump the version.</strong> Edit <code class="docutils literal notranslate"><span class="pre">[workspace.package].version</span></code> in <code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code>,
+update the documented <code class="docutils literal notranslate"><span class="pre">rev:</span></code> pins (<code class="docutils literal notranslate"><span class="pre">docs/</span></code>, <code class="docutils literal notranslate"><span class="pre">example-pre-commit-config.yaml</span></code>),
+then <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">build</span></code> to refresh <code class="docutils literal notranslate"><span class="pre">Cargo.lock</span></code>. Commit.</p></li>
+<li><p><strong>Tag and push knots.</strong> This publishes both wheels:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>tag<span class="w"> </span>vX.Y.Z
+git<span class="w"> </span>push<span class="w"> </span>--follow-tags
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">wheels.yml</span></code> builds manylinux + musllinux (x86_64, aarch64), macOS
+(x86_64 cross-compiled on Apple Silicon, aarch64), and Windows x64 wheels plus
+sdists, then publishes to PyPI. Watch it under the repo’s Actions tab.</p>
+</li>
+<li><p><strong>Bump and tag the mirror.</strong> Once knots is on PyPI, point the shim at it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>../knots-pre-commit
+./bump.sh<span class="w"> </span>X.Y.Z
+git<span class="w"> </span>commit<span class="w"> </span>-am<span class="w"> </span><span class="s2">&quot;knots X.Y.Z&quot;</span>
+git<span class="w"> </span>tag<span class="w"> </span>vX.Y.Z
+git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>main<span class="w"> </span>vX.Y.Z<span class="w">      </span><span class="c1"># push the tag explicitly</span>
+</pre></div>
+</div>
+<p><strong>Order matters:</strong> the mirror’s <code class="docutils literal notranslate"><span class="pre">knots==X.Y.Z</span></code> pin must reference a version
+already on PyPI, so always publish knots (step 2) <strong>before</strong> tagging the mirror.</p>
+</li>
+</ol>
+</section>
+<section id="verifying-a-release">
+<h2>Verifying a release<a class="headerlink" href="#verifying-a-release" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Wheel installs from PyPI with the binary on PATH</span>
+pipx<span class="w"> </span>run<span class="w"> </span>--spec<span class="w"> </span><span class="s2">&quot;knots==X.Y.Z&quot;</span><span class="w"> </span>knots<span class="w"> </span>--version
+
+<span class="c1"># End-to-end zero-compile pre-commit path</span>
+pre-commit<span class="w"> </span>try-repo<span class="w"> </span>https://github.com/brandon-arrendondo/knots-pre-commit<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>knots<span class="w"> </span>--ref<span class="w"> </span>vX.Y.Z<span class="w"> </span>--files<span class="w"> </span>path/to/source.rs
+</pre></div>
+</div>
+</section>
+<section id="notes-recovery">
+<h2>Notes &amp; recovery<a class="headerlink" href="#notes-recovery" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The publish step uses <code class="docutils literal notranslate"><span class="pre">skip-existing:</span> <span class="pre">true</span></code>, so re-runs are idempotent:
+already-published files are skipped rather than failing on “file already exists”.</p></li>
+<li><p><strong>Partial publish</strong> (one package uploaded, the other failed — e.g. a
+trusted-publisher misconfiguration): fix the cause, then re-push the tag
+(<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">push</span> <span class="pre">-f</span> <span class="pre">origin</span> <span class="pre">vX.Y.Z</span></code>). The rebuild re-runs publish; the package already
+on PyPI is skipped and the missing one uploads.</p></li>
+<li><p>PyPI versions are immutable — a published version cannot be re-uploaded or
+overwritten. To ship a fix, cut a new version.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wheels.yml</span></code> can be run manually (Actions → “Wheels (PyPI)” → Run workflow) to
+validate the build matrix without publishing (publish is gated to tags).</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="troubleshooting.html" class="btn btn-neutral float-left" title="Troubleshooting" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
