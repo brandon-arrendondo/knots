@@ -58,7 +58,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#warning-skipping-file-stream-did-not-contain-valid-utf-8">“Warning: Skipping &lt;file&gt;: stream did not contain valid UTF-8”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#no-supported-source-files-found-in-directory">“No supported source files found in directory”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#metrics-seem-lower-than-expected-for-rust-vs-clippy">Metrics seem lower than expected for Rust (vs. clippy)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#report-txt-not-generated"><code class="docutils literal notranslate"><span class="pre">report.txt</span></code> not generated</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#report-file-not-generated">Report file not generated</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sarif-has-no-results">SARIF has no results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#compile-commands-file-not-found-or-missing-files">Compile commands: “file not found” or missing files</a></li>
 </ul>
@@ -137,10 +137,10 @@ applies a nesting penalty. Clippy’s <code class="docutils literal notranslate"
 count loops and has no nesting penalty, producing scores 3–4× lower.</p>
 <p>Clippy threshold 25 ≈ knots threshold 75–100 for equivalent strictness.</p>
 </section>
-<section id="report-txt-not-generated">
-<h2><code class="docutils literal notranslate"><span class="pre">report.txt</span></code> not generated<a class="headerlink" href="#report-txt-not-generated" title="Link to this heading"></a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">report.txt</span></code> is only generated in <code class="docutils literal notranslate"><span class="pre">-r</span></code> (recursive) mode:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">src</span><span class="o">/</span>
+<section id="report-file-not-generated">
+<h2>Report file not generated<a class="headerlink" href="#report-file-not-generated" title="Link to this heading"></a></h2>
+<p>The per-function report file is opt-in: pass <code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code> (recursive mode):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">src</span><span class="o">/</span> <span class="o">--</span><span class="n">report</span> <span class="n">report</span><span class="o">.</span><span class="n">txt</span>
 </pre></div>
 </div>
 </section>

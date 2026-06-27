@@ -98,16 +98,21 @@
 </pre></div>
 </div>
 <p>Output shows per-function metrics:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>😊 init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
-😠 process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
-
-Summary:
-  Total Functions: 2
-  Average McCabe Complexity: 15.50
-  Average AIRD Score: 45.50
-  Average AICP Score: 40.00
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>😊 src/main.c:12:init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
+😠 src/main.c:30:process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
 </pre></div>
 </div>
+<p>Each line is prefixed with <code class="docutils literal notranslate"><span class="pre">file:line:</span></code> so an editor can jump straight to the
+function from any line of output (not just threshold violations).</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Summary:</dt><dd><p>Total Functions: 2
+Average McCabe Complexity: 15.50
+Average AIRD Score: 45.50
+Average AICP Score: 40.00</p>
+</dd>
+</dl>
+</div></blockquote>
 </section>
 <section id="verbose-mode">
 <h2>Verbose Mode<a class="headerlink" href="#verbose-mode" title="Link to this heading"></a></h2>
@@ -115,7 +120,7 @@ Summary:
 </pre></div>
 </div>
 <p>Shows a detailed per-function breakdown including all test scoring sub-axes:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Function: process_data 😠
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Function: src/main.c:30:process_data 😠
   McCabe Complexity: 28
   Cognitive Complexity: 45
   Nesting Depth: 8
@@ -145,13 +150,13 @@ Summary:
 <li><p>Scans all supported source files (see <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a> for the full extension list; headers skipped by default)</p></li>
 <li><p>Shows top 5 worst functions by complexity</p></li>
 <li><p>Displays totals and averages across all files</p></li>
-<li><p>Writes per-function detail to <code class="docutils literal notranslate"><span class="pre">report.txt</span></code></p></li>
+<li><p>Writes per-function detail to a file when <code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code> is given (opt-in)</p></li>
 <li><p>Reports file processing statistics</p></li>
 </ul>
 <p>Example output:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>=== TOP 5 WORST FUNCTIONS ===
 
-1. 😢 HAL_RCC_OscConfig [drivers/hal_rcc.c]
+1. 😢 drivers/hal_rcc.c:142:HAL_RCC_OscConfig
    McCabe: 71, Cognitive: 214, Nesting: 11, SLOC: 327, ABC: 134.90, Returns: 23, TestScore: 9
 
 === TOTALS &amp; AVERAGES ===
@@ -159,8 +164,6 @@ Summary:
   Total Functions: 3404
   Average McCabe Complexity: 2.02
   Average Cognitive Complexity: 1.65
-
-Detailed per-function output written to report.txt
 
 === FILES PROCESSED ===
 
@@ -249,7 +252,7 @@ Detailed per-function output written to report.txt
 </pre></div>
 </div>
 <p>Generate a comprehensive report:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">v</span> <span class="o">~/</span><span class="n">myproject</span><span class="o">/</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">v</span> <span class="o">~/</span><span class="n">myproject</span><span class="o">/</span> <span class="o">--</span><span class="n">report</span> <span class="n">report</span><span class="o">.</span><span class="n">txt</span>
 <span class="n">less</span> <span class="n">report</span><span class="o">.</span><span class="n">txt</span>
 </pre></div>
 </div>

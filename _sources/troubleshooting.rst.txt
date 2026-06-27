@@ -54,12 +54,12 @@ count loops and has no nesting penalty, producing scores 3–4× lower.
 
 Clippy threshold 25 ≈ knots threshold 75–100 for equivalent strictness.
 
-``report.txt`` not generated
------------------------------
+Report file not generated
+-------------------------
 
-``report.txt`` is only generated in ``-r`` (recursive) mode::
+The per-function report file is opt-in: pass ``--report <FILE>`` (recursive mode)::
 
-    knots -r src/
+    knots -r src/ --report report.txt
 
 SARIF has no results
 ---------------------
