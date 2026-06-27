@@ -52,6 +52,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#options">Options</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#threshold-flags">Threshold Flags</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#baseline-ratchet-mode">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#changed-function-scoping">Changed-Function Scoping</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#informational">Informational</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#exit-status">Exit Status</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#complexity-indicators">Complexity Indicators</a></li>
@@ -182,10 +183,11 @@ exceeds the specified value.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--return-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Return statement count.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AIRD score. Recommended value: <code class="docutils literal notranslate"><span class="pre">85</span></code> (empirically validated against
-Sonnet 4.6 and Opus 4.8).</p>
+<dt><code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AIRD (AI Reasoning Difficulty) score. Recommended value: <code class="docutils literal notranslate"><span class="pre">85</span></code>
+(empirically validated against Sonnet 4.6 and Opus 4.8). Run
+<code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--explain</span> <span class="pre">aird</span></code> for what drives the score and how to lower it.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--aicp-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AICP score.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">--aicp-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AICP (AI Context Pressure) score. Run <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--explain</span> <span class="pre">aicp</span></code> for details.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--external-calls-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>External call count.</p>
 </dd>
@@ -218,9 +220,52 @@ knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </sp
 </pre></div>
 </div>
 </section>
+<section id="changed-function-scoping">
+<h2>Changed-Function Scoping<a class="headerlink" href="#changed-function-scoping" title="Link to this heading"></a></h2>
+<p>Restrict threshold gating to the functions you actually touched, so a
+pre-existing over-threshold function in a file you edited does not block an
+unrelated change. knots intersects each function’s line range with the lines
+changed (per <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">diff</span></code>) and gates only the functions that overlap. This is
+complementary to <code class="docutils literal notranslate"><span class="pre">--baseline</span></code>: scoping narrows <em>which functions are checked</em>;
+the baseline decides <em>what counts as worse</em>. The two compose — gate the touched
+functions, and among those, only fail on new or worsened ones.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--since</span> <span class="pre">&lt;REF&gt;</span></code></dt><dd><p>Gate only functions overlapping lines changed in the working tree relative
+to the given git ref (e.g. <code class="docutils literal notranslate"><span class="pre">HEAD</span></code>, <code class="docutils literal notranslate"><span class="pre">main</span></code>, a commit SHA). Compares the
+current working tree against <code class="docutils literal notranslate"><span class="pre">&lt;REF&gt;</span></code>. Brand-new untracked files are treated
+as entirely changed, so all of their functions are in scope. Requires a git
+repository; an unknown ref or non-repo exits <code class="docutils literal notranslate"><span class="pre">1</span></code> with git’s error.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--changed</span></code></dt><dd><p>Gate only functions you changed in the working tree (uncommitted edits plus
+untracked files). Sugar for <code class="docutils literal notranslate"><span class="pre">--since</span> <span class="pre">HEAD</span></code>. Mutually exclusive with
+<code class="docutils literal notranslate"><span class="pre">--since</span></code>.</p>
+</dd>
+</dl>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># In a pre-commit / CI gate, only fail on functions in this change</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--aird-threshold<span class="w"> </span><span class="m">85</span><span class="w"> </span>--changed
+
+<span class="c1"># Gate everything that diverged from main (good for PR checks)</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--aird-threshold<span class="w"> </span><span class="m">85</span><span class="w"> </span>--since<span class="w"> </span>main
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Scoping affects <strong>gating only</strong> — text, JSON, SARIF, NDJSON, and CSV output
+still report every analyzed function. Only the threshold check is narrowed.</p>
+</div>
+</section>
 <section id="informational">
 <h2>Informational<a class="headerlink" href="#informational" title="Link to this heading"></a></h2>
-<dl class="simple">
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">--explain</span> <span class="pre">&lt;METRIC&gt;</span></code></dt><dd><p>Print a terminal-friendly explanation of a metric — what it measures and
+how to lower it — then exit <code class="docutils literal notranslate"><span class="pre">0</span></code>. No input files required. Valid metrics:
+<code class="docutils literal notranslate"><span class="pre">mccabe</span></code>, <code class="docutils literal notranslate"><span class="pre">cognitive</span></code>, <code class="docutils literal notranslate"><span class="pre">nesting</span></code>, <code class="docutils literal notranslate"><span class="pre">sloc</span></code>, <code class="docutils literal notranslate"><span class="pre">abc</span></code>, <code class="docutils literal notranslate"><span class="pre">returns</span></code>,
+<code class="docutils literal notranslate"><span class="pre">aird</span></code>, <code class="docutils literal notranslate"><span class="pre">aicp</span></code>, <code class="docutils literal notranslate"><span class="pre">external-calls</span></code>. Handy when you meet <code class="docutils literal notranslate"><span class="pre">AIRD</span> <span class="pre">98</span> <span class="pre">&gt;</span> <span class="pre">85</span></code>
+mid-commit and don’t want to leave the terminal:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>knots<span class="w"> </span>--explain<span class="w"> </span>aird
+</pre></div>
+</div>
+</dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-h</span></code>, <code class="docutils literal notranslate"><span class="pre">--help</span></code></dt><dd><p>Print help.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-V</span></code>, <code class="docutils literal notranslate"><span class="pre">--version</span></code></dt><dd><p>Print version.</p>
@@ -232,9 +277,11 @@ knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </sp
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">0</span></code></dt><dd><p>Successful analysis, no threshold violations.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>Error (file not found, parse error, unreadable baseline), or one or more
+<dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>Error (file not found, parse error, unreadable baseline, unknown git ref or
+not a git repository under <code class="docutils literal notranslate"><span class="pre">--since</span></code> / <code class="docutils literal notranslate"><span class="pre">--changed</span></code>), or one or more
 threshold violations when any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag is set. In
-<code class="docutils literal notranslate"><span class="pre">--baseline</span></code> mode, only new or worsened functions count as violations.</p>
+<code class="docutils literal notranslate"><span class="pre">--baseline</span></code> mode, only new or worsened functions count as violations; under
+<code class="docutils literal notranslate"><span class="pre">--since</span></code> / <code class="docutils literal notranslate"><span class="pre">--changed</span></code> only touched functions are checked.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">2</span></code></dt><dd><p>Invalid arguments (e.g. <code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code> without <code class="docutils literal notranslate"><span class="pre">--baseline</span></code>).</p>
 </dd>

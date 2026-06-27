@@ -192,8 +192,10 @@ another file reads as “new” until you regenerate.</p></li>
 <li><p><strong>Snapshot the whole tree.</strong> Generate the baseline with <code class="docutils literal notranslate"><span class="pre">-r</span> <span class="pre">.</span></code> (or your full
 source set) so every function has an entry; a partial snapshot will report
 un-snapshotted functions as new.</p></li>
-<li><p><strong>Per-touched-file scoping</strong> (only gate functions in the current diff) is a
-separate, complementary feature — see the <code class="docutils literal notranslate"><span class="pre">--changed</span></code> / <code class="docutils literal notranslate"><span class="pre">--since</span></code> proposal.</p></li>
+<li><p><strong>Touched-function scoping</strong> (only gate functions in the current diff) is a
+separate, complementary feature — see <code class="docutils literal notranslate"><span class="pre">--changed</span></code> / <code class="docutils literal notranslate"><span class="pre">--since</span></code> in
+<a class="reference internal" href="cli-reference.html"><span class="doc">CLI Reference</span></a>. The two compose: scope to what you touched, then fail
+only on what got worse.</p></li>
 </ul>
 </section>
 </section>

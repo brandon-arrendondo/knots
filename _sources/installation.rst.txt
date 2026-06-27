@@ -1,6 +1,27 @@
 Installation
 ============
 
+From PyPI (prebuilt, no Rust toolchain)
+---------------------------------------
+
+Knots is published to PyPI as a prebuilt binary wheel, so this installs in
+seconds with no compile and no Rust toolchain. Recommended via a tool installer:
+
+::
+
+    pipx install knots
+    # or
+    uv tool install knots
+
+The companion test-quality analyzer is a separate package:
+
+::
+
+    pipx install knots-test-complexity
+
+(Plain ``pip install knots`` works too, e.g. inside a virtualenv.) This is also
+what the ``knots-pre-commit`` hooks use under the hood — see :doc:`ci-integration`.
+
 From crates.io
 --------------
 
@@ -23,8 +44,9 @@ From Source
 Requirements
 ------------
 
-Rust 1.70 or higher. No C compiler, Python interpreter, build system, or language
-server required — knots uses tree-sitter grammars bundled as Rust dependencies.
+A Rust toolchain (install via `rustup <https://rustup.rs>`_). No C compiler,
+Python interpreter, build system, or language server required — knots uses
+tree-sitter grammars bundled as Rust dependencies.
 
 Supported Languages
 -------------------
