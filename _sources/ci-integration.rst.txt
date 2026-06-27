@@ -126,6 +126,26 @@ Exclude vendor/driver directories:
           args: [--mccabe-threshold=15, --cognitive-threshold=15]
           exclude: ^(Drivers/|Middlewares/|third_party/)
 
+JavaScript / TypeScript / React projects:
+
+.. code-block:: yaml
+
+        - id: knots
+          args:
+            - --aird-threshold=85
+            - --mccabe-threshold=20
+            - --cognitive-threshold=25
+
+The hooks already cover ``.js``, ``.jsx``, ``.ts``, and ``.tsx`` via
+``types_or: [javascript, jsx, ts, tsx]`` — no override needed. To limit
+coverage to a subset of languages, override ``types_or`` explicitly:
+
+.. code-block:: yaml
+
+        - id: knots
+          args: [--mccabe-threshold=20]
+          types_or: [python, javascript, jsx]   # Python + JS only, skip TS
+
 See ``example-pre-commit-config.yaml`` in the repository for a full example.
 
 Combining with Other Tools

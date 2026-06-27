@@ -195,6 +195,22 @@ already on your <code class="docutils literal notranslate"><span class="pre">PAT
 <span class="w">  </span><span class="nt">exclude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^(Drivers/|Middlewares/|third_party/)</span>
 </pre></div>
 </div>
+<p>JavaScript / TypeScript / React projects:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>
+<span class="w">  </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--aird-threshold=85</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--mccabe-threshold=20</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--cognitive-threshold=25</span>
+</pre></div>
+</div>
+<p>The hooks already cover <code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.jsx</span></code>, <code class="docutils literal notranslate"><span class="pre">.ts</span></code>, and <code class="docutils literal notranslate"><span class="pre">.tsx</span></code> via
+<code class="docutils literal notranslate"><span class="pre">types_or:</span> <span class="pre">[javascript,</span> <span class="pre">jsx,</span> <span class="pre">ts,</span> <span class="pre">tsx]</span></code> — no override needed. To limit
+coverage to a subset of languages, override <code class="docutils literal notranslate"><span class="pre">types_or</span></code> explicitly:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>
+<span class="w">  </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--mccabe-threshold=20</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">types_or</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">javascript</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">jsx</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># Python + JS only, skip TS</span>
+</pre></div>
+</div>
 <p>See <code class="docutils literal notranslate"><span class="pre">example-pre-commit-config.yaml</span></code> in the repository for a full example.</p>
 </section>
 <section id="combining-with-other-tools">
