@@ -1119,8 +1119,28 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             // C/C++ function_definition: drill into the declarator subtree
             count_c_params_in_subtree(node, source_code)
         }
-        "function_declaration" => count_c_params_in_subtree(node, source_code),
-        // JavaScript: function_declaration, method_definition, function_expression, etc.
+        "function_declaration" => {
+            // JavaScript/TypeScript: has a direct 'parameters' field (formal_parameters)
+            if let Some(params) = node.child_by_field_name("parameters") {
+                let mut cursor = params.walk();
+                return params
+                    .children(&mut cursor)
+                    .filter(|c| {
+                        matches!(
+                            c.kind(),
+                            "identifier"
+                                | "required_parameter"
+                                | "optional_parameter"
+                                | "rest_pattern"
+                                | "assignment_pattern"
+                        )
+                    })
+                    .count() as u32;
+            }
+            // C/C++: no 'parameters' field, drill into declarator chain
+            count_c_params_in_subtree(node, source_code)
+        }
+        // JavaScript/TypeScript: method_definition, function_expression, etc.
         "method_definition"
         | "function_expression"
         | "generator_function_declaration"
@@ -1186,6 +1206,18 @@ fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut Ha
             if obj.utf8_text(source_code).unwrap_or("") == "self" {
                 if let Some(attr) = node.child_by_field_name("attribute") {
                     if let Ok(name) = attr.utf8_text(source_code) {
+                        fields.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    // JavaScript/TypeScript: member_expression where 'object' is 'this'
+    if node.kind() == "member_expression" {
+        if let Some(obj) = node.child_by_field_name("object") {
+            if obj.utf8_text(source_code).unwrap_or("") == "this" {
+                if let Some(prop) = node.child_by_field_name("property") {
+                    if let Ok(name) = prop.utf8_text(source_code) {
                         fields.insert(name.to_string());
                     }
                 }

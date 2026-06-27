@@ -2661,6 +2661,59 @@ mod tests {
         assert_eq!(names, vec!["gen"]);
     }
 
+    // ---- TypeScript function discovery tests ----
+
+    fn discover_ts_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_typescript::language_typescript())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_ts_discover_typed_function() {
+        let names = discover_ts_functions("function add(a: number, b: number): number { return a + b; }");
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_ts_discover_class_method() {
+        let code = "class Greeter { greet(name: string): string { return `Hello, ${name}`; } }";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["greet"]);
+    }
+
+    #[test]
+    fn test_ts_discover_async_function() {
+        let code = "async function fetchData(url: string): Promise<string> { return url; }";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["fetchData"]);
+    }
+
+    #[test]
+    fn test_ts_discover_multiple_functions() {
+        let code = "function foo(): void {} function bar(): void {}";
+        let mut names = discover_ts_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_ts_discover_generator_function() {
+        let code = "function* gen(): Generator<number> { yield 1; }";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["gen"]);
+    }
+
     /// Build a FunctionMetrics fixture with the given AIRD-component raw values;
     /// fields not relevant to AIRD drivers are left at neutral defaults.
     fn fixture(cognitive: u32, sloc: u32, nesting: u32, test: i32, coupling: u32) -> FunctionMetrics {

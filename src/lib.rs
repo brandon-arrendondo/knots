@@ -15,6 +15,7 @@ pub use tree_sitter_cpp;
 pub use tree_sitter_javascript;
 pub use tree_sitter_python;
 pub use tree_sitter_rust;
+pub use tree_sitter_typescript;
 
 /// All source file extensions recognized by knots, grouped by language.
 /// This is the single source of truth — add new language extensions here.
@@ -31,6 +32,8 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "py",
     // JavaScript
     "js", "mjs", "cjs",
+    // TypeScript
+    "ts", "tsx",
 ];
 
 /// Returns the appropriate tree-sitter language for a file based on extension.
@@ -43,6 +46,8 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         Some("rs") => tree_sitter_rust::language(),
         Some("py") => tree_sitter_python::language(),
         Some("js") | Some("mjs") | Some("cjs") => tree_sitter_javascript::language(),
+        Some("ts") => tree_sitter_typescript::language_typescript(),
+        Some("tsx") => tree_sitter_typescript::language_tsx(),
         _ => tree_sitter_c::language(),
     }
 }
