@@ -19,27 +19,47 @@ All 13 metrics are computed. Python-specific notes:
   are counted as external references
 - **Limitations**: ``for_in_clause`` inside comprehensions is not counted
 
-JavaScript Language Support
----------------------------
+JavaScript and TypeScript Language Support
+------------------------------------------
 
-As of v1.8.0, knots supports JavaScript (``.js``, ``.mjs``, ``.cjs``).
-All 13 metrics are computed. JavaScript-specific notes:
+Knots supports JavaScript (``.js``, ``.mjs``, ``.cjs``, ``.jsx``) and
+TypeScript (``.ts``, ``.tsx``). All 13 metrics are computed. Notes:
 
 - **McCabe**: counts ``if``, ``while``, ``do``, ``for``, ``for...in``,
   ``for...of``, ``switch``, ``ternary`` (``?:``), ``&&``, ``||``, and ``??``
   (nullish coalescing)
-- **Cognitive**: ``for...in`` and ``for...of`` share ``for_in_statement`` and
-  are treated as loop structures (+1 + nesting penalty); arrow functions
-  (``() =>``) increment nesting depth without adding a base cost; ``??``
-  chains count once per contiguous sequence (same as ``&&``/``||``)
+- **Cognitive**: ``for...in`` and ``for...of`` are treated as loop structures
+  (+1 + nesting penalty); arrow functions (``() =>``) increment nesting depth
+  without adding a base cost; ``??`` chains count once per contiguous sequence
+  (same as ``&&``/``||``)
 - **SLOC**: ``//`` and ``/* */`` comments are excluded (same as C/C++)
 - **External calls**: member-expression calls (``obj.method()``,
   ``module.func()``) are counted as external references
-- **Function discovery**: ``function`` declarations, named ``function``
-  expressions, class methods, and generator functions are discovered;
-  anonymous arrow functions are not (no name to report)
-- **Limitations**: anonymous arrow functions do not appear in per-function
-  output; TypeScript (``.ts``, ``.tsx``) is not supported
+- **Function discovery**: ``function`` declarations, ``function`` expressions,
+  class methods, generator functions, and arrow functions are discovered.
+  Arrow functions are reported when a name can be inferred from the assignment
+  context — ``const foo = () => {}`` reports as ``foo``,
+  ``{ bar: () => {} }`` reports as ``bar``,
+  ``class C { baz = () => {} }`` reports as ``baz``.
+  Truly anonymous callbacks (e.g. ``array.map(x => x * 2)``) are not reported.
+
+.. note::
+
+   **Nested function complexity attribution**: a function's metrics include
+   all code within its body, including any nested function definitions.
+   If ``helper`` is defined inside ``Parent``, ``helper``'s decision points
+   count toward both ``helper``'s own score *and* ``Parent``'s score. Nested
+   functions also appear as standalone entries in the output.
+
+   This means a React component with several inline event handlers will show a
+   higher McCabe score than an equivalent component with those handlers hoisted
+   to module scope — even though the total logic is identical. The nested form
+   is not "more complex" in a meaningful sense; it is an artifact of how
+   complexity is attributed. If your goal is to gate on *structural* complexity
+   rather than total lines of logic, use ``--cognitive-threshold`` as the
+   primary gate: cognitive complexity adds a nesting increment for nested
+   functions but does not fully sum their bodies into the parent the way McCabe
+   does.
 
 McCabe Cyclomatic Complexity
 -----------------------------
@@ -172,6 +192,26 @@ or low-band functions.
 
 **Distribution**: heavily right-skewed. In mature codebases, 67–88% of
 functions score ≤10. The ≥76 bucket accounts for 1–2% of all functions.
+
+.. note::
+
+   **AIRD calibration for JavaScript / TypeScript / React projects**: the
+   ceiling values (cognitive 75, SLOC 200, nesting 8) were derived from a
+   C-heavy corpus (mosquitto, SQLite, curl, hostap, Lua, libcrc). JSX render
+   functions and React components can accumulate high McCabe and cognitive
+   scores from inline event handlers and render callbacks while staying under
+   AIRD 85 — meaning the headline ``--aird-threshold 85`` gate may pass
+   functions that are genuinely hard to maintain.
+
+   For JS/TS/React projects, pair the AIRD gate with explicit McCabe and
+   cognitive thresholds::
+
+       --aird-threshold 85 --mccabe-threshold 20 --cognitive-threshold 25
+
+   This catches both the AI-reasoning-difficulty axis (AIRD) and the
+   traditional human-maintainability axis (McCabe/Cognitive). The thresholds
+   above are a reasonable starting point; tighten them incrementally as the
+   codebase improves.
 
 AICP — AI Context Pressure
 ---------------------------
