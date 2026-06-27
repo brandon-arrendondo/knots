@@ -1327,7 +1327,9 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "generator_function"
         | "subprogram_body"
         | "expression_function_declaration"
-        | "task_body" => {
+        | "task_body"
+        | "method_declaration"
+        | "func_literal" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -1379,9 +1381,9 @@ fn handle_call_node(
                 }
             }
         }
-        // Rust path (Foo::bar()), Python attribute (obj.method()), JS member (obj.method()) —
-        // all qualify as external by definition
-        "scoped_identifier" | "attribute" | "member_expression" => {
+        // Rust path (Foo::bar()), Python attribute (obj.method()), JS member (obj.method()),
+        // Go selector (pkg.Func / obj.Method) — all qualify as external by definition
+        "scoped_identifier" | "attribute" | "member_expression" | "selector_expression" => {
             if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
                 external.insert(name.to_string());
             }
@@ -2283,6 +2285,8 @@ where
             | "subprogram_body"
             | "expression_function_declaration"
             | "task_body"
+            | "method_declaration"
+            | "func_literal"
     ) {
         callback(node, source_code);
     }
@@ -2334,6 +2338,19 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
                 .ok()
                 .map(|s| s.to_string());
         }
+    }
+
+    // Go method_declaration: name is in the 'name' field (field_identifier).
+    if node.kind() == "method_declaration" {
+        return node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string());
+    }
+
+    // Go func_literal: anonymous closure — no name.
+    if node.kind() == "func_literal" {
+        return None;
     }
 
     // Ada task_body: name is the first identifier child.
@@ -3130,5 +3147,52 @@ mod tests {
         let b = baseline_with_aird("nope_e.rs", "f", 98); // worsened 98 -> 99
         let c = changed_with("nope_e.rs", &[(12, 12)]);
         assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), Some(&c)).is_err());
+    }
+
+    // ---- Go function discovery tests ----
+
+    fn discover_go_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_go::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_go_discover_simple_function() {
+        let names = discover_go_functions("package p\nfunc add(a, b int) int { return a + b }");
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_go_discover_method() {
+        let code = "package p\ntype Foo struct{}\nfunc (f Foo) Bar() int { return 0 }";
+        let names = discover_go_functions(code);
+        assert_eq!(names, vec!["Bar"]);
+    }
+
+    #[test]
+    fn test_go_discover_multiple_functions() {
+        let code = "package p\nfunc foo() {}\nfunc bar() {}";
+        let mut names = discover_go_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_go_anonymous_func_literal_skipped() {
+        // func literals are visited but return no name — they must not appear in output
+        let code = "package p\nfunc outer() { f := func() { } ; _ = f }";
+        let names = discover_go_functions(code);
+        assert_eq!(names, vec!["outer"]);
     }
 }

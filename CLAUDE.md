@@ -157,4 +157,5 @@ crates are the `tree_sitter_*` re-exports at the top of `src/lib.rs`.
 | JavaScript | `.js` `.mjs` `.cjs` | — |
 | TypeScript | `.ts` `.tsx` | — |
 | Ada | `.adb` `.ada` | `.ads` |
+| Go | `.go` | — |
 <!-- END:supported-languages -->

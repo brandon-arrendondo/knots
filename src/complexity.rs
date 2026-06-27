@@ -129,6 +129,11 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
             }
         }
 
+        // Go: switch on value/type and channel select each add one path.
+        "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
+            *complexity += 1;
+        }
+
         _ => {}
     }
 
@@ -372,6 +377,19 @@ fn visit_node_cognitive(
             }
         }
 
+        // Go: switch on value/type and channel select — like switch_statement.
+        "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Go: func_literal (closure) increments nesting but has no base cost.
+        "func_literal" => {
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
         _ => {}
     }
 
@@ -450,7 +468,10 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         // JavaScript control structures
         | "for_in_statement" | "arrow_function"
         // Ada control structures
-        | "loop_statement" | "case_statement" | "exception_handler" => {
+        | "loop_statement" | "case_statement" | "exception_handler"
+        // Go control structures
+        | "expression_switch_statement" | "type_switch_statement" | "select_statement"
+        | "func_literal" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -686,6 +707,14 @@ fn visit_node_abc(
         // Ada tasking conditions
         "select_alternative" | "guard"
         | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select" => {
+            *conditions += 1
+        }
+
+        // Assignments (Go): short variable declaration `:=`
+        "short_var_declaration" => *assignments += 1,
+
+        // Conditions (Go)
+        "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
             *conditions += 1
         }
 
@@ -1312,7 +1341,8 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             count_c_params_in_subtree(node, source_code)
         }
         "function_declaration" => {
-            // JavaScript/TypeScript: has a direct 'parameters' field (formal_parameters)
+            // JavaScript/TypeScript/Go: has a direct 'parameters' field.
+            // JS/TS use identifier/required_parameter etc.; Go uses parameter_declaration.
             if let Some(params) = node.child_by_field_name("parameters") {
                 let mut cursor = params.walk();
                 return params
@@ -1325,12 +1355,31 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                                 | "optional_parameter"
                                 | "rest_pattern"
                                 | "assignment_pattern"
+                                | "parameter_declaration"
+                                | "variadic_parameter_declaration"
                         )
                     })
                     .count() as u32;
             }
             // C/C++: no 'parameters' field, drill into declarator chain
             count_c_params_in_subtree(node, source_code)
+        }
+        // Go: method_declaration (receiver is separate; count only the regular parameters).
+        // Go: func_literal (anonymous function/closure).
+        "method_declaration" | "func_literal" => {
+            if let Some(params) = node.child_by_field_name("parameters") {
+                let mut cursor = params.walk();
+                return params
+                    .children(&mut cursor)
+                    .filter(|c| {
+                        matches!(
+                            c.kind(),
+                            "parameter_declaration" | "variadic_parameter_declaration"
+                        )
+                    })
+                    .count() as u32;
+            }
+            0
         }
         // JavaScript/TypeScript: method_definition, function_expression, etc.
         "method_definition"
