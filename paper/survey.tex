@@ -180,6 +180,26 @@ expressions) are counted as additional expression complexity contributors.
 This statement/expression decomposition is absent from all general-purpose
 tools surveyed and has no counterpart in the original McCabe definition.
 
+For Rust, Mozilla's \texttt{rust-code-analysis} (rca) counts the
+\texttt{?} (try) operator as a branch, because it represents a genuine
+early-exit path: execution either propagates the error or continues.
+General-purpose tools such as lizard do not count \texttt{?}.  knots
+follows the lizard convention and excludes \texttt{?} from its cyclomatic
+count, on the grounds that \texttt{?}-based error propagation is mechanical
+rather than decision logic and does not reflect a meaningful choice about
+program behaviour.  rca also rolls up the cyclomatic complexity of
+anonymous closures into the enclosing function's total, whereas knots
+scores each callable independently.
+
+The combined effect is systematically lower McCabe scores for idiomatic
+Rust in knots than in rca.  In a benchmark on \texttt{todo-sqlite-cli}, a
+73-SLOC function with 8 classical decision points scored McCabe~9 in knots
+versus cyclomatic~24 in rca; the 15-point gap decomposes as 9~\texttt{?}
+usages and 6~single-line closures whose cyclomatic contribution rca rolls
+into the parent.  The calibration consequence is that McCabe thresholds
+calibrated against C or Python code should not be applied to Rust without
+accounting for the absence of \texttt{?} counting.
+
 \textbf{Limitation for AI cost:} McCabe counts branches but not nesting
 depth.  A deeply nested function with 10 branches scores identically to a
 flat function with 10 independent checks.  LLMs penalize nesting more
