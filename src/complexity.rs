@@ -1363,6 +1363,35 @@ pub fn calculate_aird(
     raw.round().clamp(0.0, 100.0) as u32
 }
 
+/// Same formula as `calculate_aird` but without the per-input `.min(1.0)` caps.
+/// Returns a raw f64 that can exceed 100 when inputs are above the normalization
+/// denominators. Used for progress tracking: the capped AIRD stays pinned at 100
+/// for very large functions, but the raw score decreases as you refactor — giving
+/// a meaningful signal while the CI-gate score is still at its ceiling.
+pub fn calculate_aird_raw(
+    cognitive: u32,
+    sloc: u32,
+    nesting: u32,
+    test_score: i32,
+    doc_score: i32,
+    state_coupling: u32,
+) -> f64 {
+    let cognitive_norm = cognitive as f64 / 75.0;
+    let sloc_norm = sloc as f64 / 200.0;
+    let nesting_norm = (nesting as f64 / 8.0).min(1.0); // nesting rarely exceeds cap; keep clamped
+    let test_norm = (test_score.max(0) as f64 / 20.0).min(1.0);
+    let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
+    let coupling_norm = (state_coupling as f64 / 12.0).min(1.0);
+
+    ((cognitive_norm * 55.0)
+        + (sloc_norm * 15.0)
+        + (nesting_norm * 15.0)
+        + (test_norm * 15.0)
+        - (doc_norm * 15.0)
+        + (coupling_norm * 10.0))
+        .max(0.0)
+}
+
 /// Calculates AI Context Pressure (AICP): a normalized 0-100 estimate of how much
 /// context an AI model must load to understand a function, independent of reasoning depth.
 ///
@@ -1750,6 +1779,43 @@ mod aird_tests {
     fn test_aird_clamps_to_0() {
         let aird = calculate_aird(0, 0, 0, 0, 10, 0);
         assert_eq!(aird, 0);
+    }
+
+    #[test]
+    fn test_aird_raw_exceeds_capped_for_large_inputs() {
+        // cognitive=150 (2× cap), sloc=400 (2× cap); nesting/test/doc/coupling at neutral zero.
+        // Capped: (1.0*55) + (1.0*15) = 70. Raw: (2.0*55) + (2.0*15) = 140.
+        let capped = calculate_aird(150, 400, 0, 0, 0, 0);
+        let raw = calculate_aird_raw(150, 400, 0, 0, 0, 0);
+        assert_eq!(capped, 70, "capped AIRD should be 70 for these inputs");
+        assert!(raw > capped as f64, "raw AIRD ({}) must exceed capped ({}) when inputs are above caps", raw, capped);
+    }
+
+    #[test]
+    fn test_aird_raw_tracks_progress_above_cap() {
+        // Simulates two snapshots of the same function mid-refactor.
+        // Both are still above the normalization caps so capped AIRD is identical,
+        // but raw AIRD must decrease to prove progress is measurable.
+        // cognitive 300→150 (both above 75), sloc 400→250 (both above 200).
+        let raw_before  = calculate_aird_raw(300, 400, 0, 0, 0, 0);
+        let raw_after   = calculate_aird_raw(150, 250, 0, 0, 0, 0);
+        let gate_before = calculate_aird(300, 400, 0, 0, 0, 0);
+        let gate_after  = calculate_aird(150, 250, 0, 0, 0, 0);
+        assert_eq!(gate_before, gate_after, "capped AIRD should be identical when both inputs remain above caps");
+        assert!(raw_after < raw_before, "raw AIRD must decrease as inputs are reduced: {} -> {}", raw_before, raw_after);
+    }
+
+    #[test]
+    fn test_aird_raw_equals_capped_below_normalization_caps() {
+        // When inputs are within the normalization denominators the raw and capped scores
+        // must agree (within rounding) — raw only diverges above the caps.
+        let capped = calculate_aird(30, 80, 2, 8, 3, 0) as f64;
+        let raw    = calculate_aird_raw(30, 80, 2, 8, 3, 0);
+        assert!(
+            (capped - raw).abs() < 1.0,
+            "raw and capped AIRD should agree below normalization caps: {} vs {}",
+            capped, raw
+        );
     }
 }
 

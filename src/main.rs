@@ -11,8 +11,8 @@ use walkdir::WalkDir;
 
 mod complexity;
 use complexity::{
-    calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_cognitive_complexity,
-    calculate_state_coupling,
+    calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_aird_raw,
+    calculate_cognitive_complexity, calculate_state_coupling,
     calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
     calculate_sloc_ada, calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
 };
@@ -517,7 +517,25 @@ fn format_aird_breakdown(func: &FunctionMetrics) -> String {
     let doc  = format!("doc: -{:.1}/15", doc_contrib);
     let coup = format!("coupling: +{:.1}/10", coupling_contrib);
 
-    format!("    {}, {}, {}, {}, {}, {}", cog, sloc, nest, test, doc, coup)
+    let base = format!("    {}, {}, {}, {}, {}, {}", cog, sloc, nest, test, doc, coup);
+
+    // When cognitive or sloc is capped, the CI-gate score is pinned — show the uncapped
+    // raw AIRD so users can track progress while still above the normalization threshold.
+    let cognitive_capped = func.cognitive >= 75;
+    let sloc_capped = func.sloc >= 200;
+    if cognitive_capped || sloc_capped {
+        let raw = calculate_aird_raw(
+            func.cognitive,
+            func.sloc,
+            func.nesting,
+            func.test_scoring.total_score,
+            func.test_scoring.documentation_score,
+            func.state_coupling,
+        );
+        format!("{}\n    raw AIRD (uncapped): {:.0}", base, raw)
+    } else {
+        base
+    }
 }
 
 /// One function's snapshotted scores in a baseline file. Keyed on
@@ -632,12 +650,21 @@ fn aird_tips(func: &FunctionMetrics) -> Vec<String> {
     let sloc_capped = func.sloc >= 200;
 
     if cognitive_capped && sloc_capped {
-        tips.push(
-            "    Tip: cognitive and sloc are both capped — incremental extractions won't move the \
-             needle until you break through at least one cap. Push for a larger extraction that \
-             drops cognitive below 75 or sloc below 200."
-                .to_string(),
+        let raw = calculate_aird_raw(
+            func.cognitive,
+            func.sloc,
+            func.nesting,
+            func.test_scoring.total_score,
+            func.test_scoring.documentation_score,
+            func.state_coupling,
         );
+        tips.push(format!(
+            "    Tip: cognitive and sloc are both capped — incremental extractions won't move the \
+             needle until you break through at least one cap (raw AIRD: {:.0} — tracks your \
+             true progress while the gate score is pinned). Push for a larger extraction that \
+             drops cognitive below 75 or sloc below 200.",
+            raw
+        ));
     } else if cognitive_capped {
         tips.push(
             "    Tip: cognitive is capped at 75 (contributing full 55 pts). \
