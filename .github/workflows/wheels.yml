@@ -52,6 +52,16 @@ jobs:
           args: --release --out dist -m ${{ matrix.package.manifest }}
           manylinux: ${{ matrix.platform.manylinux }}
           sccache: 'true'
+          # tree-sitter 0.25's runtime includes src/portable/endian.h, which on
+          # Linux pulls glibc <endian.h> and uses le16toh/be16toh. Those macros
+          # are gated behind __USE_MISC. tree-sitter's build.rs enables it via
+          # _DEFAULT_SOURCE, but manylinux2014 ships glibc 2.17 — predating
+          # _DEFAULT_SOURCE (added in 2.19) — so the define is ignored and the
+          # symbols vanish (undefined-symbol link error). _BSD_SOURCE is the
+          # equivalent macro that 2.17 understands; harmless on newer glibc and
+          # musl. Only the containerized (linux) builds use docker-options;
+          # macOS/Windows ignore it.
+          docker-options: --env CFLAGS=-D_BSD_SOURCE
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
