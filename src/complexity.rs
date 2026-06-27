@@ -100,6 +100,21 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
             }
         }
 
+        // Ada tasking: selective_accept else clause (unnamed keyword, like if_statement else).
+        "selective_accept" => {
+            let mut cursor = node.walk();
+            let has_else = node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "else");
+            if has_else {
+                *complexity += 1;
+            }
+        }
+        // Ada tasking: each select alternative is a separate path (like case_statement_alternative).
+        "select_alternative" => *complexity += 1,
+        // Ada tasking: guard (when Cond =>) makes an accept alternative conditional.
+        "guard" => *complexity += 1,
+        // Ada tasking: two-branch selects each add one extra path.
+        "timed_entry_call" | "conditional_entry_call" | "asynchronous_select" => *complexity += 1,
+
         // Ada: exit when Condition — conditional loop exit is a branch point.
         // Bare `exit` (no condition) is not a branch; only `exit when` adds a path.
         "exit_statement" => {
@@ -311,6 +326,18 @@ fn visit_node_cognitive(
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
+        }
+
+        // Ada tasking: select statements are structured branching — treated like switch.
+        "selective_accept" | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Ada tasking: guard (when Cond =>) is a flat condition, like elsif.
+        "guard" => {
+            *complexity += 1;
         }
 
         // Ada: logical operators (and then / or else / xor / and / or).
@@ -650,6 +677,11 @@ fn visit_node_abc(
 
         // Conditions (Ada)
         "elsif_statement_item" | "loop_statement" | "case_statement" | "exception_handler" => {
+            *conditions += 1
+        }
+        // Ada tasking conditions
+        "select_alternative" | "guard"
+        | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select" => {
             *conditions += 1
         }
 
@@ -2903,6 +2935,33 @@ mod tests {
         let code = "procedure P is begin raise Constraint_Error; end P;";
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_ada_selective_accept_mccabe() {
+        // 2 select_alternatives → +2; else → +1; base = 1 → total 4
+        let code = "task body T is begin select accept A; or accept B; else null; end select; end T;";
+        let tree = parse_ada(code);
+        let node = tree.root_node();
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 4);
+    }
+
+    #[test]
+    fn test_ada_guard_mccabe() {
+        // guard (when condition) → +1; 1 select_alternative → +1; base = 1 → total 3
+        let code = "task body T is begin select when Ready => accept A; end select; end T;";
+        let tree = parse_ada(code);
+        let node = tree.root_node();
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_selective_accept_cognitive() {
+        // selective_accept → +1+0; total = 1
+        let code = "task body T is begin select accept A; or accept B; end select; end T;";
+        let tree = parse_ada(code);
+        let node = tree.root_node();
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
     }
 }
