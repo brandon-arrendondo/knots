@@ -228,6 +228,14 @@ length-induced context cost within the function body, as opposed to the
 external-dependency cost captured by AICP.  The p99 ceiling of 200
 lines was derived from the corpus.
 
+SLOC is computed exclusive of lines belonging to nested function
+definitions.  In C++, methods of locally-defined structs and in Python,
+nested \texttt{def} statements appear inside the outer function's byte
+span but represent independent logical units.  Without exclusion, those
+lines would be counted in both the outer function and in the nested
+function when it is analyzed separately.  Each line is attributed to
+exactly one function: the innermost function whose span contains it.
+
 \textbf{Nesting depth (weight 15).}  Nesting depth is partially
 correlated with cognitive complexity but captures a distinct signal: the
 maximum stack depth the model must maintain to reason about any single
@@ -647,7 +655,7 @@ pass the lint check on an extracted helper, the coupling was real and
 has been hidden rather than removed.  We recommend treating this
 annotation as a stop signal.
 
-\subsection{Normalization Cap Signal Loss}
+\subsection{Normalization Cap Signal Loss and Raw AIRD}
 \label{sec:signal-loss}
 
 The normalization caps flatten the signal for functions far above the
@@ -657,12 +665,33 @@ For CI gating (``does this function need refactoring?'') this is correct
 and desirable: both need refactoring.  For progress tracking (``how much
 refactoring work remains?'') the cap obscures the relative effort.
 
-The per-term breakdown with \texttt{[capped]} labels in knots' violation
-output partially addresses this: a developer can see that the cognitive
-term is capped and estimate that substantial extraction is required.
-A future enhancement is a separate ``refactoring progress score'' that
-lifts the caps and provides a directional measure independent of the CI
-gate.
+\textbf{Raw AIRD.}  We address this with a two-pass approach: the CI
+gate continues to use the capped formula (\cref{eq:aird}), while a
+separate \emph{raw AIRD} lifts the \(\min(\cdot, 1)\) constraints on the
+cognitive and SLOC terms:
+
+\begin{align}
+\text{AIRD}_{\text{raw}} = &\;\left(\frac{C_c}{75} \times 55\right)
+                           + \left(\frac{S}{200} \times 15\right)
+                           + \ldots
+\label{eq:aird-raw}
+\end{align}
+
+where nesting, test score, documentation, and coupling terms retain their
+caps (they rarely exceed their normalization denominators in practice).
+$\text{AIRD}_{\text{raw}}$ can exceed 100 and decreases monotonically as
+cognitive complexity and SLOC are reduced --- even while both remain above
+their normalization ceilings, where the capped gate score is pinned.
+
+For example, a function with cognitive complexity 750 and SLOC 254 has a
+capped AIRD of 87 (at the gate ceiling) and a raw AIRD of 586.  After an
+extraction that brings cognitive to 400 and SLOC to 150, the capped AIRD
+is unchanged (still 87 --- both inputs are above their caps), but the raw
+AIRD falls to approximately 320, providing a concrete measure of progress.
+
+Knots emits $\text{AIRD}_{\text{raw}}$ in the violation output whenever
+cognitive or SLOC is capped (\cref{sec:implementation}).  It is
+informational only and is not compared against thresholds.
 
 %% ============================================================
 \section{Implementation}
@@ -686,18 +715,24 @@ src/lexer.rs:45:next_token - AIRD 94 > 85
     cognitive: 55.0/55 [capped], sloc: 15.0/15
     [capped], nesting: 7.5/15, test: 5.0/15,
     doc: -0.0/15, coupling: +8.3/10
+    raw AIRD (uncapped): 147
     Tip: cognitive and sloc are both capped --
     incremental extractions won't move the needle
-    until you break through at least one cap. Push
-    for a larger extraction that drops cognitive
-    below 75 or sloc below 200.
+    until you break through at least one cap (raw
+    AIRD: 147 -- tracks your true progress while
+    the gate score is pinned). Push for a larger
+    extraction that drops cognitive below 75 or
+    sloc below 200.
 \end{lstlisting}
 
 The per-term breakdown with \texttt{[capped]} labels was motivated by
-the dual-cap stagnation phenomenon (\cref{sec:plateau}).  The contextual
-tip is selected based on the function's current state:
+the dual-cap stagnation phenomenon (\cref{sec:plateau}).  The raw AIRD
+line (\cref{sec:signal-loss}) appears whenever cognitive or SLOC is
+capped, giving developers a directional progress signal while the gate
+score is pinned.  The contextual tip is selected based on the function's
+current state:
 \begin{itemize}
-    \item Both caps active: dual-cap stagnation tip.
+    \item Both caps active: dual-cap stagnation tip (includes raw AIRD value).
     \item Only cognitive capped: single-cap tip.
     \item State coupling nonzero: extraction paradox tip.
 \end{itemize}
