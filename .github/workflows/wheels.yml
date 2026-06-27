@@ -103,3 +103,7 @@ jobs:
           packages-dir: dist
           # Files route to their PyPI project by name: knots-* vs
           # knots_test_complexity-*. Both projects must trust this workflow.
+          # skip-existing makes re-runs idempotent: already-published files
+          # (e.g. a version where one package uploaded and the other failed)
+          # are skipped instead of erroring on "file already exists".
+          skip-existing: true
