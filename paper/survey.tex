@@ -350,7 +350,7 @@ SonarQube~\cite{sonarqube}          & 30+ langs        & CC, Cognitive, SLOC, du
 understand~\cite{understand}        & 20+ langs (Ada)  & CC (CC1/2/3), Halstead, many more         & --         & --         & --         & Moderate \\
 GNATmetric~\cite{gnatmetric}        & Ada only         & McCabe CC (stmt/expr), Essential CC, Loop Nesting, Exit Pts & \checkmark & -- & -- & Fast \\
 AdaControl~\cite{adacontrol}        & Ada only         & Expression complexity (structural)        & \checkmark & --         & --         & Fast \\
-knots~\cite{knots}                  & C/C++, Rust, Py, JS, TS & CC, Cognitive, Nesting, SLOC, ABC, AIRD, AICP, + 4 more & \checkmark & \checkmark & \checkmark & Fast \\
+knots~\cite{knots}                  & C/C++, Rust, Py, JS/TS, Ada & CC, Cognitive, Nesting, SLOC, ABC, AIRD, AICP, + 4 more & \checkmark & \checkmark & \checkmark & Fast \\
 \bottomrule
 \end{tabular}
 \caption{Complexity tools surveyed.  GNATmetric and AdaControl are Ada-specific;
@@ -489,9 +489,13 @@ AIRD, AICP, and state coupling.
 Knots was validated against reference implementations: 100\% McCabe match
 against pmccabe across 32,205 functions; 1.004$\times$ mean Cognitive
 match against rust-code-analysis across 11,365 Rust functions.  It
-supports C, C++, Rust, Python, JavaScript, TypeScript, and TSX via
+supports C, C++, Rust, Python, JavaScript, TypeScript, and Ada via
 tree-sitter, exits non-zero on configurable threshold violations, produces
 JSON/NDJSON/SARIF/CSV output, and ships a pre-commit framework hook.
+
+Ada support (added in v1.11.0) is described in detail in
+\cref{sec:ada-findings}.  Knots is the first open-source tool to compute
+Cognitive Complexity and AI-cost metrics for Ada code.
 
 The metrics not found in any other surveyed tool are AIRD, AICP, and state
 coupling, which are covered in the companion paper~\cite{knots-aird}.
@@ -565,6 +569,11 @@ and that DO-178C does not mandate cyclomatic complexity thresholds directly.
 The gap between the safety community's need for rigorous, modern metrics and
 the available tooling is wider for Ada than for any other mainstream language.
 
+Knots v1.11.0 addresses this gap with first-class Ada support.
+\Cref{sec:ada-findings} documents the Ada-specific implementation
+challenges and empirical calibration findings from three open-source Ada
+corpora.
+
 \subsection{Threshold Calibration}
 
 Threshold recommendations in the literature vary widely and are rarely
@@ -631,6 +640,129 @@ no surveyed tool computes Cognitive Complexity for Ada, and no tool
 applies AI-cost metrics to Ada code---both represent open contributions.
 
 %% ============================================================
+\section{Ada Complexity: Implementation Findings}
+\label{sec:ada-findings}
+
+Adding Cognitive Complexity and AI-cost metrics to Ada required resolving
+a series of language-specific design questions that do not arise in C, Rust,
+or Python.  We document these findings as a reference for future tool
+authors and to characterize the degree to which Ada's semantics diverge
+from the general-purpose metric specifications.
+
+\subsection{Language Constructs Requiring Explicit Treatment}
+
+The following Ada constructs required explicit handling in knots that
+was absent from the Cognitive Complexity specification and from all
+general-purpose tools surveyed:
+
+\textbf{Short-circuit forms.}  Ada distinguishes \texttt{and}/\texttt{or}
+(non-short-circuit, may evaluate both operands) from \texttt{and~then}/\texttt{or~else}
+(short-circuit).  Only the short-circuit forms introduce a branch in the
+control-flow sense; \texttt{and then} and \texttt{or else} are therefore
+counted as McCabe and Cognitive branches, while bare \texttt{and}/\texttt{or}
+in Boolean expressions are not.  \texttt{xor} is also counted as a branch
+because it always evaluates both operands but is semantically a conditional
+composition.
+
+\textbf{Multi-name parameter specifications.}  Ada allows a single
+\texttt{parameter\_specification} to bind multiple identifiers:
+\texttt{A, B, C : Integer}.  Counting the specification as one parameter
+would undercount arity by $N-1$ for $N$ names.  Knots counts each
+identifier in the specification separately.
+
+\textbf{Return statements.}  Ada has both \texttt{simple\_return\_statement}
+(the common form) and \texttt{extended\_return\_statement} (Ada 2005,
+declares a local object and returns it).  Both must be counted as branches;
+the extended form was absent from the initial implementation.
+
+\textbf{Expression functions.}  Ada 2012 introduced expression function
+declarations: \texttt{function F (X : T) return T is (expr)}.  These are
+single-expression bodies and must be discovered as functions separate from
+\texttt{subprogram\_body}.  Knots discovers them via the tree-sitter node
+kind \texttt{expression\_function\_declaration}.
+
+\textbf{Exit-when statements.}  \texttt{exit when condition} is Ada's
+labeled loop-exit guard.  The condition is a branch point and is counted
+as $+1$ to McCabe and Cognitive complexity.
+
+\textbf{Raise statements and expressions.}  \texttt{raise Exc} and
+\texttt{raise Exc with Message} (Ada 2005) are each counted as $+1$ to
+McCabe, Cognitive, and ABC, reflecting that they introduce an exceptional
+control-flow path.  Ada 2012 raise expressions (\texttt{raise Exc})
+embedded in larger expressions are treated identically.
+
+\textbf{Tasking constructs.}  Ada's tasking model (tasks, protected objects,
+rendezvous) has no direct counterpart in the Cognitive Complexity
+specification.  Knots counts each \texttt{select\_alternative} as $+1$
+to McCabe (one path per alternative), and \texttt{guard} conditions
+(\texttt{when condition => accept ...}) as $+1$ to both McCabe and
+Cognitive.  Task bodies (\texttt{task\_body}) are discovered as
+independently analyzable functions, enabling per-task complexity reporting.
+
+\textbf{Else branch in Cognitive Complexity.}  The Cognitive Complexity
+specification charges an \texttt{else} branch a structural increment when
+it introduces a nested control structure.  This was absent from the initial
+Ada implementation and required a separate fixup.
+
+\subsection{Calibration Findings: Benchmark Corpora}
+
+We validated knots Ada support against three open-source Ada corpora:
+HAC (Ada compiler in Ada, v0.35), GNATCOLL-Core (AdaCore's Ada utility
+library), and Ada-Util (a broad Ada utility collection).
+\Cref{tab:ada-benchmarks} summarizes the results.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Corpus} & \textbf{Funcs} & \textbf{Avg CC} & \textbf{Max CC} & \textbf{Avg Cog} & \textbf{Max Cog} \\
+\midrule
+HAC          & 2{,}566 & 9.44  & 1{,}682 & 11.41 & 1{,}642 \\
+GNATCOLL     & 2{,}672 & 3.92  &   114   &  4.38 &   147   \\
+Ada-Util     & 2{,}475 & 3.17  &   119   &  2.59 &   133   \\
+\bottomrule
+\end{tabular}
+\caption{Ada benchmark corpora.  CC = McCabe cyclomatic complexity;
+Cog = Cognitive Complexity.  HAC includes AoC puzzle examples with
+extreme dispatch-table functions that inflate the max and average CC.}
+\label{tab:ada-benchmarks}
+\end{table}
+
+\subsection{The Case/Dispatch Inflation Problem}
+
+The most significant Ada-specific calibration finding is systematic
+McCabe inflation from \texttt{case} statements used as dispatch tables.
+Per McCabe's definition, each \texttt{when} alternative contributes $+1$
+to cyclomatic complexity.  A dispatch table with 120 arms --- common in
+Ada protocol decoders, AES S-box substitutions, and symbol recognizers
+--- contributes 120 to McCabe regardless of whether the arms are trivial
+single-expression mappings or complex nested blocks.
+
+In the HAC corpus, two functions (\texttt{Compute} and \texttt{Eval} in
+an AoC 2022 puzzle) each have McCabe~$= 1{,}682$ from a case statement
+with approximately 1{,}680 \texttt{when} arms, one per named monkey in the
+puzzle input.  Their Cognitive Complexity scores are 5---correctly
+reflecting that the functions are structurally trivial dispatch tables,
+not genuinely complex code.  In Ada-Util, AES \texttt{Encrypt} functions
+reach McCabe~119 from 119-arm SubBytes substitution case statements while
+scoring Cognitive~82.
+
+This behavior is consistent with GNATmetric's Essential Complexity
+adaptation, which explicitly discounts pure structural control statements
+as an acknowledgment that raw McCabe over-counts Ada dispatch patterns.
+
+\textbf{Threshold recommendation.}  For Ada codebases, Cognitive
+Complexity is a more reliable primary gate than McCabe.  If McCabe
+thresholds are used, values calibrated against C/C++ (10--15) will produce
+excessive false positives on routine dispatch tables.  A threshold of 20--25
+is a practical starting point for Ada code that uses large case statements;
+the specific value should be derived from the project's own distribution.
+Functions where McCabe significantly exceeds Cognitive Complexity (ratio
+$> 5$) are strong candidates for dispatch-table false positives and warrant
+human review before refactoring action is taken.
+
+%% ============================================================
 \section{Conclusion}
 \label{sec:conclusion}
 
@@ -641,10 +773,20 @@ state access patterns; no tool other than knots ships both multi-language
 per-function analysis and pre-commit CI integration; and no tool documents
 empirically calibrated thresholds derived from a production codebase corpus.
 
+The Ada tooling gap identified in \cref{sec:tools} and \cref{sec:gap} is addressed by
+knots v1.11.0, which is the first open-source tool to compute Cognitive
+Complexity, AIRD, and AICP for Ada code.  The implementation required
+explicit treatment of eight Ada constructs absent from the general-purpose
+Cognitive Complexity specification, and validation against three open-source
+Ada corpora totaling 7,713 functions.  The primary calibration finding is
+that McCabe thresholds calibrated for C/C++ substantially overcount Ada
+dispatch tables; Cognitive Complexity is the appropriate primary gate for
+Ada, with McCabe serving as a secondary signal.
+
 The AIRD and AICP metrics described in the companion paper address the
-first gap directly.  We release knots as an open-source tool to address
-the deployment gap, with a pre-commit hook, SARIF output, and documented
-threshold recommendations derived from a 32,205-function corpus.
+AI-cost gap directly.  We release knots as an open-source tool to address
+the deployment gap, with a pre-commit hook, SARIF output, Ada support, and
+documented threshold recommendations derived from a 32,205-function corpus.
 
 \bibliographystyle{plainnat}
 

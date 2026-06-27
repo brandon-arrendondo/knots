@@ -1326,7 +1326,8 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "generator_function_declaration"
         | "generator_function"
         | "subprogram_body"
-        | "expression_function_declaration" => {
+        | "expression_function_declaration"
+        | "task_body" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -2281,6 +2282,7 @@ where
             | "generator_function"
             | "subprogram_body"
             | "expression_function_declaration"
+            | "task_body"
     ) {
         callback(node, source_code);
     }
@@ -2332,6 +2334,20 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
                 .ok()
                 .map(|s| s.to_string());
         }
+    }
+
+    // Ada task_body: name is the first identifier child.
+    if node.kind() == "task_body" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "identifier" {
+                return child
+                    .utf8_text(source_code.as_bytes())
+                    .ok()
+                    .map(|s| s.to_string());
+            }
+        }
+        return None;
     }
 
     // Ada subprogram_body: name lives inside the function_specification or
@@ -2813,6 +2829,13 @@ mod tests {
         let code = "function Square (X : Integer) return Integer is (X * X);";
         let names = discover_ada_functions(code);
         assert_eq!(names, vec!["Square"]);
+    }
+
+    #[test]
+    fn test_ada_discover_task_body() {
+        let code = "task body Server is\nbegin\n   select\n      accept Start;\n   or\n      accept Stop;\n   end select;\nend Server;";
+        let names = discover_ada_functions(code);
+        assert_eq!(names, vec!["Server"]);
     }
 
     #[test]
