@@ -1476,6 +1476,70 @@ fn collect_external_calls_recursive(
     }
 }
 
+/// Returns `true` if `kind` is a function-like node visited by `visit_functions`.
+fn is_function_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "function_definition"
+            | "function_item"
+            | "function_declaration"
+            | "function_expression"
+            | "method_definition"
+            | "generator_function_declaration"
+            | "generator_function"
+            | "subprogram_body"
+            | "expression_function_declaration"
+            | "task_body"
+            | "method_declaration"
+            | "func_literal"
+            | "constructor_declaration"
+            | "local_function_statement"
+            | "init_declaration"
+    )
+}
+
+/// Sums the raw SLOC of every function node that is directly nested inside `outer`.
+/// Stops recursing as soon as a nested function boundary is crossed, so each level
+/// only subtracts one layer of nesting (the recursive call in `collect_function_metrics`
+/// handles the rest).
+fn nested_fn_sloc(outer: Node, source_code: &str, is_python: bool, is_ada: bool) -> u32 {
+    let mut total = 0u32;
+    let mut cursor = outer.walk();
+    if cursor.goto_first_child() {
+        loop {
+            accumulate_nested_sloc(cursor.node(), source_code, is_python, is_ada, &mut total);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+        cursor.goto_parent();
+    }
+    total
+}
+
+fn accumulate_nested_sloc(
+    node: Node,
+    source_code: &str,
+    is_python: bool,
+    is_ada: bool,
+    total: &mut u32,
+) {
+    if is_function_kind(node.kind()) {
+        *total += if is_python {
+            calculate_sloc_python(node, source_code.as_bytes())
+        } else if is_ada {
+            calculate_sloc_ada(node, source_code.as_bytes())
+        } else {
+            calculate_sloc(node, source_code.as_bytes())
+        };
+        return; // don't recurse into the nested function — it's handled when we process it
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        accumulate_nested_sloc(child, source_code, is_python, is_ada, total);
+    }
+}
+
 fn collect_function_metrics(
     tree: &Tree,
     source_code: &str,
@@ -1495,12 +1559,15 @@ fn collect_function_metrics(
             let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
             let cognitive = calculate_cognitive_complexity(node, src.as_bytes());
             let nesting = calculate_nesting_depth(node);
-            let sloc = if is_python {
-                calculate_sloc_python(node, src.as_bytes())
-            } else if is_ada {
-                calculate_sloc_ada(node, src.as_bytes())
-            } else {
-                calculate_sloc(node, src.as_bytes())
+            let sloc = {
+                let raw = if is_python {
+                    calculate_sloc_python(node, src.as_bytes())
+                } else if is_ada {
+                    calculate_sloc_ada(node, src.as_bytes())
+                } else {
+                    calculate_sloc(node, src.as_bytes())
+                };
+                raw.saturating_sub(nested_fn_sloc(node, src, is_python, is_ada))
             };
             let abc = calculate_abc_complexity(node, src.as_bytes());
             let abc_magnitude = abc.magnitude();
@@ -2614,6 +2681,81 @@ mod tests {
     fn test_cpp_discover_destructor() {
         let names = discover_cpp_functions(r#"class Foo { ~Foo() { int x = 0; } };"#);
         assert_eq!(names, vec!["~Foo"]);
+    }
+
+    // ---- Nested-function SLOC exclusion tests ----
+
+    fn cpp_sloc_map(code: &str) -> Vec<(String, u32)> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_cpp::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut result = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                let raw = calculate_sloc(node, src.as_bytes());
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, false, false));
+                result.push((name, sloc));
+            }
+        });
+        result
+    }
+
+    fn python_sloc_map(code: &str) -> Vec<(String, u32)> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_python::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut result = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                let raw = calculate_sloc_python(node, src.as_bytes());
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, true, false));
+                result.push((name, sloc));
+            }
+        });
+        result
+    }
+
+    #[test]
+    fn test_cpp_nested_local_struct_sloc_not_double_counted() {
+        let code = r#"void outer() {
+    int a = 1;
+    struct Helper {
+        void inner() {
+            int b = 2;
+            int c = 3;
+        }
+    };
+    int d = 4;
+}"#;
+        let map = cpp_sloc_map(code);
+        let outer = map.iter().find(|(n, _)| n == "outer").map(|(_, s)| *s);
+        let inner = map.iter().find(|(n, _)| n == "inner").map(|(_, s)| *s);
+        assert_eq!(outer, Some(6), "outer SLOC should exclude inner's lines");
+        assert_eq!(inner, Some(4), "inner SLOC should be unchanged");
+        let total: u32 = map.iter().map(|(_, s)| s).sum();
+        assert_eq!(total, 10, "sum of function SLOCs should equal file line count");
+    }
+
+    #[test]
+    fn test_python_nested_def_sloc_not_double_counted() {
+        let code = "def outer():\n    x = 1\n    def inner():\n        y = 2\n        z = 3\n    return x\n";
+        let map = python_sloc_map(code);
+        let outer = map.iter().find(|(n, _)| n == "outer").map(|(_, s)| *s);
+        let inner = map.iter().find(|(n, _)| n == "inner").map(|(_, s)| *s);
+        assert!(outer.is_some(), "outer not found");
+        assert!(inner.is_some(), "inner not found");
+        assert!(
+            outer.unwrap() < 6,
+            "outer SLOC ({}) should not include inner's lines",
+            outer.unwrap()
+        );
+        assert_eq!(inner, Some(3), "inner SLOC should be 3");
     }
 
     // ---- Rust function discovery tests ----
