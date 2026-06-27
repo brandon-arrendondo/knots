@@ -61,7 +61,7 @@ Recursive mode:
 - Scans all supported source files (see :doc:`installation` for the full extension list; headers skipped by default)
 - Shows top 5 worst functions by complexity
 - Displays totals and averages across all files
-- Writes per-function detail to ``report.txt``
+- Writes per-function detail to a file when ``--report <FILE>`` is given (opt-in)
 - Reports file processing statistics
 
 Example output::
@@ -76,8 +76,6 @@ Example output::
       Total Functions: 3404
       Average McCabe Complexity: 2.02
       Average Cognitive Complexity: 1.65
-
-    Detailed per-function output written to report.txt
 
     === FILES PROCESSED ===
 
@@ -178,7 +176,7 @@ Quick health check::
 
 Generate a comprehensive report::
 
-    knots -r -v ~/myproject/
+    knots -r -v ~/myproject/ --report report.txt
     less report.txt
 
 Find high-complexity, hard-to-test functions::
