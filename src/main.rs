@@ -7,7 +7,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tree_sitter::{Node, Tree, TreeCursor};
-use walkdir::WalkDir;
+use ignore::WalkBuilder;
 
 mod complexity;
 use complexity::{
@@ -1282,11 +1282,10 @@ fn collect_files(
             );
         }
 
-        // Recursive directory mode - scan source files (not headers)
-        // Headers often contain inline/vendor code
-        for entry in WalkDir::new(path)
+        // Recursive directory mode - scan source files, respecting .gitignore
+        for entry in WalkBuilder::new(path)
             .follow_links(true)
-            .into_iter()
+            .build()
             .filter_map(|e| e.ok())
         {
             let file_path = entry.path();
