@@ -160,4 +160,5 @@ crates are the `tree_sitter_*` re-exports at the top of `src/lib.rs`.
 | Go | `.go` | — |
 | Java | `.java` | — |
 | C# | `.cs` | — |
+| Kotlin | `.kt` `.kts` | — |
 <!-- END:supported-languages -->

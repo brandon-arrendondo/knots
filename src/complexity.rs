@@ -140,6 +140,9 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // C#: foreach loop.
         "foreach_statement" => *complexity += 1,
 
+        // Kotlin: do-while loop, when expression (like switch), catch block.
+        "do_while_statement" | "when_expression" | "catch_block" => *complexity += 1,
+
         _ => {}
     }
 
@@ -242,8 +245,10 @@ fn visit_node_cognitive(
         // "arrow_function" covers JavaScript arrow functions (() => ...).
         // "anonymous_method_expression" covers C# delegate expressions (delegate { ... }).
         // "local_function_statement" covers C# named local functions nested inside a method.
+        // "lambda_literal"/"anonymous_function"/"annotated_lambda" cover Kotlin lambdas/closures.
         "lambda_expression" | "closure_expression" | "lambda" | "arrow_function"
-        | "anonymous_method_expression" | "local_function_statement" => {
+        | "anonymous_method_expression" | "local_function_statement"
+        | "lambda_literal" | "anonymous_function" | "annotated_lambda" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -418,6 +423,23 @@ fn visit_node_cognitive(
             return;
         }
 
+        // Kotlin: do-while loop, when expression (like switch), catch block.
+        "do_while_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+        "when_expression" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+        "catch_block" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
         _ => {}
     }
 
@@ -503,7 +525,10 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         // Java control structures
         | "enhanced_for_statement" | "switch_expression"
         // C# control structures
-        | "foreach_statement" | "anonymous_method_expression" | "local_function_statement" => {
+        | "foreach_statement" | "anonymous_method_expression" | "local_function_statement"
+        // Kotlin control structures
+        | "do_while_statement" | "when_expression" | "catch_block"
+        | "lambda_literal" | "anonymous_function" | "annotated_lambda" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -758,6 +783,9 @@ fn visit_node_abc(
 
         // Conditions (C#)
         "foreach_statement" => *conditions += 1,
+
+        // Conditions (Kotlin)
+        "do_while_statement" | "when_expression" => *conditions += 1,
 
         // Logical operators (C/C++/Rust: &&/||; JavaScript also: ??)
         "binary_expression" => {
@@ -1402,6 +1430,17 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                     })
                     .count() as u32;
             }
+            // Kotlin: parameters are in a 'function_value_parameters' child node (no field).
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "function_value_parameters" {
+                    let mut inner = child.walk();
+                    return child
+                        .children(&mut inner)
+                        .filter(|c| c.kind() == "parameter")
+                        .count() as u32;
+                }
+            }
             // C/C++: no 'parameters' field, drill into declarator chain
             count_c_params_in_subtree(node, source_code)
         }
@@ -1557,6 +1596,16 @@ fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut Ha
                     if let Ok(name) = field.utf8_text(source_code) {
                         fields.insert(name.to_string());
                     }
+                }
+            }
+        }
+    }
+    // Kotlin: navigation_expression where first named child is this_expression (this.field)
+    if node.kind() == "navigation_expression" {
+        if let (Some(first), Some(second)) = (node.named_child(0), node.named_child(1)) {
+            if first.kind() == "this_expression" {
+                if let Ok(name) = second.utf8_text(source_code) {
+                    fields.insert(name.to_string());
                 }
             }
         }

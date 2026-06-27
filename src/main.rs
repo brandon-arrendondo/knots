@@ -1438,6 +1438,26 @@ fn collect_external_calls_recursive(
             }
         }
     }
+    // Kotlin: call_expression has no 'function' field; the callee is the first named child
+    // that isn't value_arguments / type_arguments / annotated_lambda.
+    if node.kind() == "call_expression" && node.child_by_field_name("function").is_none() {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if !child.is_named() {
+                continue;
+            }
+            if matches!(child.kind(), "value_arguments" | "type_arguments" | "annotated_lambda") {
+                continue;
+            }
+            let text = child.utf8_text(source_code.as_bytes()).unwrap_or("").to_string();
+            if child.kind() == "navigation_expression" {
+                external.insert(text);
+            } else if !local_names.contains(&text) {
+                external.insert(text);
+            }
+            break;
+        }
+    }
     // Java: object_creation_expression (new Foo(...)) always pulls in an external type.
     if node.kind() == "object_creation_expression" {
         if let Some(type_node) = node.child_by_field_name("type") {
@@ -3349,5 +3369,52 @@ mod tests {
         let code = "class Foo { void Outer() { var f = (int x) => x * 2; } }";
         let names = discover_cs_functions(code);
         assert_eq!(names, vec!["Outer"]);
+    }
+
+    // ---- Kotlin function discovery tests ----
+
+    fn discover_kotlin_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_kotlin_ng::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_kotlin_discover_top_level_function() {
+        let code = "fun add(a: Int, b: Int): Int { return a + b }";
+        let names = discover_kotlin_functions(code);
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_kotlin_discover_member_function() {
+        let code = "class Foo { fun bar(): String { return \"hi\" } }";
+        let names = discover_kotlin_functions(code);
+        assert_eq!(names, vec!["bar"]);
+    }
+
+    #[test]
+    fn test_kotlin_discover_multiple_functions() {
+        let code = "fun foo() {} fun bar() {}";
+        let mut names = discover_kotlin_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_kotlin_lambda_skipped() {
+        let code = "fun outer() { val f = { x: Int -> x * 2 } }";
+        let names = discover_kotlin_functions(code);
+        assert_eq!(names, vec!["outer"]);
     }
 }

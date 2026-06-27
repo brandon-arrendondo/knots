@@ -15,6 +15,7 @@ pub use tree_sitter_c;
 pub use tree_sitter_cpp;
 pub use tree_sitter_c_sharp;
 pub use tree_sitter_go;
+pub use tree_sitter_kotlin_ng;
 pub use tree_sitter_java;
 pub use tree_sitter_javascript;
 pub use tree_sitter_python;
@@ -47,6 +48,7 @@ pub const LANGUAGES: &[LanguageInfo] = &[
     LanguageInfo { name: "Go",         extensions: &["go"],                           explicit_only: &[] },
     LanguageInfo { name: "Java",       extensions: &["java"],                         explicit_only: &[] },
     LanguageInfo { name: "C#",         extensions: &["cs"],                           explicit_only: &[] },
+    LanguageInfo { name: "Kotlin",     extensions: &["kt", "kts"],                    explicit_only: &[] },
 ];
 
 /// All source file extensions recognized during recursive discovery, grouped
@@ -74,6 +76,8 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "java",
     // C#
     "cs",
+    // Kotlin
+    "kt", "kts",
 ];
 
 /// Renders the human-readable `knots --supported-languages` report.
@@ -118,6 +122,7 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         Some("go") => tree_sitter_go::LANGUAGE.into(),
         Some("java") => tree_sitter_java::LANGUAGE.into(),
         Some("cs") => tree_sitter_c_sharp::LANGUAGE.into(),
+        Some("kt") | Some("kts") => tree_sitter_kotlin_ng::LANGUAGE.into(),
         _ => tree_sitter_c::LANGUAGE.into(),
     }
 }
