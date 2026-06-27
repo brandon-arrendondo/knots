@@ -1329,7 +1329,8 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "expression_function_declaration"
         | "task_body"
         | "method_declaration"
-        | "func_literal" => {
+        | "func_literal"
+        | "constructor_declaration" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -1418,6 +1419,25 @@ fn collect_external_calls_recursive(
                 if !local_names.contains(name) {
                     external.insert(name.to_string());
                 }
+            }
+        }
+    }
+    // Java: method_invocation uses 'name' field; qualified calls (with 'object') are always external.
+    if node.kind() == "method_invocation" {
+        let has_object = node.child_by_field_name("object").is_some();
+        if let Some(name_node) = node.child_by_field_name("name") {
+            if let Ok(name) = name_node.utf8_text(source_code.as_bytes()) {
+                if has_object || !local_names.contains(name) {
+                    external.insert(name.to_string());
+                }
+            }
+        }
+    }
+    // Java: object_creation_expression (new Foo(...)) always pulls in an external type.
+    if node.kind() == "object_creation_expression" {
+        if let Some(type_node) = node.child_by_field_name("type") {
+            if let Ok(name) = type_node.utf8_text(source_code.as_bytes()) {
+                external.insert(name.to_string());
             }
         }
     }
@@ -2287,6 +2307,7 @@ where
             | "task_body"
             | "method_declaration"
             | "func_literal"
+            | "constructor_declaration"
     ) {
         callback(node, source_code);
     }
@@ -2341,7 +2362,16 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
     }
 
     // Go method_declaration: name is in the 'name' field (field_identifier).
+    // Java method_declaration: name is also in the 'name' field (identifier).
     if node.kind() == "method_declaration" {
+        return node
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string());
+    }
+
+    // Java constructor_declaration: name is in the 'name' field (the class name).
+    if node.kind() == "constructor_declaration" {
         return node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
@@ -3194,5 +3224,53 @@ mod tests {
         let code = "package p\nfunc outer() { f := func() { } ; _ = f }";
         let names = discover_go_functions(code);
         assert_eq!(names, vec!["outer"]);
+    }
+
+    // ---- Java function discovery tests ----
+
+    fn discover_java_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_java::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_java_discover_method() {
+        let code = "class Foo { int add(int a, int b) { return a + b; } }";
+        let names = discover_java_functions(code);
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_java_discover_constructor() {
+        let code = "class Foo { Foo(int x) { this.x = x; } }";
+        let names = discover_java_functions(code);
+        assert_eq!(names, vec!["Foo"]);
+    }
+
+    #[test]
+    fn test_java_discover_multiple_methods() {
+        let code = "class Foo { void foo() {} void bar() {} }";
+        let mut names = discover_java_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_java_discover_constructor_and_method() {
+        let code = "class Foo { Foo() {} void greet() {} }";
+        let mut names = discover_java_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["Foo", "greet"]);
     }
 }

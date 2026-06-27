@@ -14,6 +14,7 @@ pub use tree_sitter_ada;
 pub use tree_sitter_c;
 pub use tree_sitter_cpp;
 pub use tree_sitter_go;
+pub use tree_sitter_java;
 pub use tree_sitter_javascript;
 pub use tree_sitter_python;
 pub use tree_sitter_rust;
@@ -43,6 +44,7 @@ pub const LANGUAGES: &[LanguageInfo] = &[
     LanguageInfo { name: "TypeScript", extensions: &["ts", "tsx"],                    explicit_only: &[] },
     LanguageInfo { name: "Ada",        extensions: &["adb", "ada"],                   explicit_only: &["ads"] },
     LanguageInfo { name: "Go",         extensions: &["go"],                           explicit_only: &[] },
+    LanguageInfo { name: "Java",       extensions: &["java"],                         explicit_only: &[] },
 ];
 
 /// All source file extensions recognized during recursive discovery, grouped
@@ -66,6 +68,8 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "adb", "ada",
     // Go
     "go",
+    // Java
+    "java",
 ];
 
 /// Renders the human-readable `knots --supported-languages` report.
@@ -108,6 +112,7 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         Some("ts") => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         Some("tsx") => tree_sitter_typescript::LANGUAGE_TSX.into(),
         Some("go") => tree_sitter_go::LANGUAGE.into(),
+        Some("java") => tree_sitter_java::LANGUAGE.into(),
         _ => tree_sitter_c::LANGUAGE.into(),
     }
 }

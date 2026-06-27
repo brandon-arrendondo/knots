@@ -134,6 +134,9 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
             *complexity += 1;
         }
 
+        // Java: enhanced for-each loop and switch expressions each add one path.
+        "enhanced_for_statement" | "switch_expression" => *complexity += 1,
+
         _ => {}
     }
 
@@ -390,6 +393,18 @@ fn visit_node_cognitive(
             return;
         }
 
+        // Java: enhanced for-each and switch expressions — like their C equivalents.
+        "enhanced_for_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+        "switch_expression" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
         _ => {}
     }
 
@@ -471,7 +486,9 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         | "loop_statement" | "case_statement" | "exception_handler"
         // Go control structures
         | "expression_switch_statement" | "type_switch_statement" | "select_statement"
-        | "func_literal" => {
+        | "func_literal"
+        // Java control structures
+        | "enhanced_for_statement" | "switch_expression" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -717,6 +734,12 @@ fn visit_node_abc(
         "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
             *conditions += 1
         }
+
+        // Branches (Java): method invocations and object creation
+        "method_invocation" | "object_creation_expression" => *branches += 1,
+
+        // Conditions (Java)
+        "enhanced_for_statement" | "switch_expression" => *conditions += 1,
 
         // Logical operators (C/C++/Rust: &&/||; JavaScript also: ??)
         "binary_expression" => {
@@ -1366,7 +1389,8 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
         }
         // Go: method_declaration (receiver is separate; count only the regular parameters).
         // Go: func_literal (anonymous function/closure).
-        "method_declaration" | "func_literal" => {
+        // Java: method_declaration and constructor_declaration both use formal_parameter.
+        "method_declaration" | "func_literal" | "constructor_declaration" => {
             if let Some(params) = node.child_by_field_name("parameters") {
                 let mut cursor = params.walk();
                 return params
@@ -1374,7 +1398,10 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                     .filter(|c| {
                         matches!(
                             c.kind(),
+                            // Go parameter kinds
                             "parameter_declaration" | "variadic_parameter_declaration"
+                            // Java parameter kinds
+                            | "formal_parameter" | "spread_parameter"
                         )
                     })
                     .count() as u32;
@@ -1494,6 +1521,18 @@ fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut Ha
             if obj.utf8_text(source_code).unwrap_or("") == "this" {
                 if let Some(prop) = node.child_by_field_name("property") {
                     if let Ok(name) = prop.utf8_text(source_code) {
+                        fields.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    // Java: field_access where 'object' is 'this'
+    if node.kind() == "field_access" {
+        if let Some(obj) = node.child_by_field_name("object") {
+            if obj.utf8_text(source_code).unwrap_or("") == "this" {
+                if let Some(field) = node.child_by_field_name("field") {
+                    if let Ok(name) = field.utf8_text(source_code) {
                         fields.insert(name.to_string());
                     }
                 }
