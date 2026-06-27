@@ -43,7 +43,7 @@ pub const LANGUAGES: &[LanguageInfo] = &[
     LanguageInfo { name: "C++",        extensions: &["cpp", "cc", "cxx", "hpp", "hxx"], explicit_only: &[] },
     LanguageInfo { name: "Rust",       extensions: &["rs"],                           explicit_only: &[] },
     LanguageInfo { name: "Python",     extensions: &["py"],                           explicit_only: &[] },
-    LanguageInfo { name: "JavaScript", extensions: &["js", "mjs", "cjs"],             explicit_only: &[] },
+    LanguageInfo { name: "JavaScript", extensions: &["js", "mjs", "cjs", "jsx"],      explicit_only: &[] },
     LanguageInfo { name: "TypeScript", extensions: &["ts", "tsx"],                    explicit_only: &[] },
     LanguageInfo { name: "Ada",        extensions: &["adb", "ada"],                   explicit_only: &["ads"] },
     LanguageInfo { name: "Go",         extensions: &["go"],                           explicit_only: &[] },
@@ -67,7 +67,7 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     // Python
     "py",
     // JavaScript
-    "js", "mjs", "cjs",
+    "js", "mjs", "cjs", "jsx",
     // TypeScript
     "ts", "tsx",
     // Ada
@@ -120,7 +120,7 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         }
         Some("rs") => tree_sitter_rust::LANGUAGE.into(),
         Some("py") => tree_sitter_python::LANGUAGE.into(),
-        Some("js") | Some("mjs") | Some("cjs") => tree_sitter_javascript::LANGUAGE.into(),
+        Some("js") | Some("mjs") | Some("cjs") | Some("jsx") => tree_sitter_javascript::LANGUAGE.into(),
         Some("ts") => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         Some("tsx") => tree_sitter_typescript::LANGUAGE_TSX.into(),
         Some("go") => tree_sitter_go::LANGUAGE.into(),
