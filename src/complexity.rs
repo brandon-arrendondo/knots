@@ -88,6 +88,18 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Ada: each exception handler (when clause) is an additional path
         "exception_handler" => *complexity += 1,
 
+        // Ada: logical operators (and then / or else / xor / and / or).
+        // The `expression` node is flat: relations separated by unnamed keyword tokens.
+        // Count each `and`, `or`, or `xor` child — each one is a branch point.
+        "expression" => {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                    *complexity += 1;
+                }
+            }
+        }
+
         _ => {}
     }
 
@@ -117,6 +129,16 @@ fn visit_node_cognitive(
         // Control flow structures that increase complexity (C/C++ and Rust share some names)
         "if_statement" | "if_expression" => {
             *complexity += 1 + nesting_level;
+            // Ada: else is an unnamed keyword child of if_statement (no named else_clause node).
+            // C/C++ uses a named else_clause, so this check is safe for all grammars.
+            let has_bare_else = {
+                let mut cur = node.walk();
+                let found = node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "else");
+                found
+            };
+            if has_bare_else {
+                *complexity += 1;
+            }
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -279,6 +301,22 @@ fn visit_node_cognitive(
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
+        }
+
+        // Ada: logical operators (and then / or else / xor / and / or).
+        // Count each new operator sequence (+1 per distinct contiguous sequence).
+        "expression" => {
+            let mut last_op: Option<&str> = None;
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                    let op = child.kind();
+                    if last_op != Some(op) {
+                        *complexity += 1;
+                        last_op = Some(op);
+                    }
+                }
+            }
         }
 
         _ => {}
@@ -610,6 +648,17 @@ fn visit_node_abc(
                     if op_text == "and" || op_text == "or" {
                         *conditions += 1;
                     }
+                }
+            }
+        }
+
+        // Logical operators (Ada: and then / or else / xor / and / or).
+        // Count each and/or/xor child as a condition branch point.
+        "expression" => {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                    *conditions += 1;
                 }
             }
         }
@@ -1240,18 +1289,32 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
         }
         "subprogram_body" | "expression_function_declaration" => {
             // Ada: traverse to function_specification or procedure_specification,
-            // then find formal_part and count parameter_specification children.
+            // then find formal_part and count actual parameter names.
+            // Each parameter_specification may declare multiple names: `X, Y : T` → 2 params.
+            // Count identifier children before the `:` separator in each spec.
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 if matches!(child.kind(), "function_specification" | "procedure_specification") {
                     let mut spec_cursor = child.walk();
                     for spec_child in child.children(&mut spec_cursor) {
                         if spec_child.kind() == "formal_part" {
+                            let mut total = 0u32;
                             let mut formal_cursor = spec_child.walk();
-                            return spec_child
-                                .children(&mut formal_cursor)
-                                .filter(|c| c.kind() == "parameter_specification")
-                                .count() as u32;
+                            for param_spec in spec_child.children(&mut formal_cursor) {
+                                if param_spec.kind() == "parameter_specification" {
+                                    // Identifiers before `:` are parameter names; after `:` is the type.
+                                    let mut ps_cursor = param_spec.walk();
+                                    for ps_child in param_spec.children(&mut ps_cursor) {
+                                        if !ps_child.is_named() && ps_child.kind() == ":" {
+                                            break;
+                                        }
+                                        if ps_child.is_named() && ps_child.kind() == "identifier" {
+                                            total += 1;
+                                        }
+                                    }
+                                }
+                            }
+                            return total;
                         }
                     }
                     return 0;
@@ -2648,5 +2711,130 @@ mod tests {
         let node = js_func_node(&tree);
         let abc = calculate_abc_complexity(node, code.as_bytes());
         assert!(abc.conditions >= 1);
+    }
+
+    // ---- Ada complexity tests ----
+
+    fn parse_ada(code: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_ada::LANGUAGE.into()).unwrap();
+        parser.parse(code, None).unwrap()
+    }
+
+    fn ada_subprogram_node(tree: &tree_sitter::Tree) -> tree_sitter::Node<'_> {
+        fn find(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
+            if matches!(node.kind(), "subprogram_body" | "expression_function_declaration") {
+                return Some(node);
+            }
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(found) = find(child) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        find(tree.root_node()).expect("no subprogram node found")
+    }
+
+    #[test]
+    fn test_ada_and_then_mccabe() {
+        // `if A and then B` → base 1 (if) + 1 (and then) = 2
+        let code = "procedure P is begin if A > 0 and then B > 0 then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3); // base 1 + if 1 + and 1
+    }
+
+    #[test]
+    fn test_ada_or_else_mccabe() {
+        // `if X or else Y` → base 1 + if 1 + or 1 = 3
+        let code = "procedure P is begin if X = 1 or else Y = 2 then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_and_then_chain_mccabe() {
+        // `A and then B and then C` → 2 `and` tokens → +2 logical, +1 if = 4 total
+        let code = "procedure P is begin if A and then B and then C then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 4);
+    }
+
+    #[test]
+    fn test_ada_and_then_cognitive() {
+        // `and then` chain of 2 → one sequence → +1; if → +1; base is not counted
+        let code = "procedure P is begin if A > 0 and then B > 0 then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        // if (nesting 0) = +1; and then (same-type chain) = +1 total for sequence
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_ada_and_then_or_else_cognitive() {
+        // Two distinct operator sequences: `and` then `or` → +2 logical; if → +1
+        // `(A and then B) or else C` — needs parens in Ada to mix operators
+        let code = "procedure P is begin if (A and then B) or else C then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_param_count_single_name() {
+        // `Z : Float` → 1 parameter; no self-field accesses → state_coupling = 1
+        let code = "procedure P (Z : Float) is begin null; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_state_coupling(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_ada_param_count_multi_name() {
+        // `X, Y : Integer` → 2 params in one spec; `Z : Float` → 1; total 3
+        let code = "procedure P (X, Y : Integer; Z : Float) is begin null; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_state_coupling(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_param_count_three_names() {
+        // `A, B, C : Boolean` → 3 params in one spec
+        let code = "function F (A, B, C : Boolean) return Boolean is begin return A; end F;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_state_coupling(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_else_cognitive() {
+        // if → +1+0; else → +1 flat; total = 2
+        let code = "procedure P is begin if X then null; else null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_ada_if_no_else_cognitive() {
+        // if with no else → +1+0 only
+        let code = "procedure P is begin if X then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_ada_if_elsif_else_cognitive() {
+        // if → +1; elsif → +1 flat; else → +1 flat; total = 3
+        let code = "procedure P is begin if A then null; elsif B then null; else null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
     }
 }
