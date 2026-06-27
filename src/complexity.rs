@@ -1279,18 +1279,32 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
         }
         "subprogram_body" | "expression_function_declaration" => {
             // Ada: traverse to function_specification or procedure_specification,
-            // then find formal_part and count parameter_specification children.
+            // then find formal_part and count actual parameter names.
+            // Each parameter_specification may declare multiple names: `X, Y : T` → 2 params.
+            // Count identifier children before the `:` separator in each spec.
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 if matches!(child.kind(), "function_specification" | "procedure_specification") {
                     let mut spec_cursor = child.walk();
                     for spec_child in child.children(&mut spec_cursor) {
                         if spec_child.kind() == "formal_part" {
+                            let mut total = 0u32;
                             let mut formal_cursor = spec_child.walk();
-                            return spec_child
-                                .children(&mut formal_cursor)
-                                .filter(|c| c.kind() == "parameter_specification")
-                                .count() as u32;
+                            for param_spec in spec_child.children(&mut formal_cursor) {
+                                if param_spec.kind() == "parameter_specification" {
+                                    // Identifiers before `:` are parameter names; after `:` is the type.
+                                    let mut ps_cursor = param_spec.walk();
+                                    for ps_child in param_spec.children(&mut ps_cursor) {
+                                        if !ps_child.is_named() && ps_child.kind() == ":" {
+                                            break;
+                                        }
+                                        if ps_child.is_named() && ps_child.kind() == "identifier" {
+                                            total += 1;
+                                        }
+                                    }
+                                }
+                            }
+                            return total;
                         }
                     }
                     return 0;
@@ -2759,4 +2773,32 @@ mod tests {
         let node = ada_subprogram_node(&tree);
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
     }
+
+    #[test]
+    fn test_ada_param_count_single_name() {
+        // `Z : Float` → 1 parameter; no self-field accesses → state_coupling = 1
+        let code = "procedure P (Z : Float) is begin null; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_state_coupling(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_ada_param_count_multi_name() {
+        // `X, Y : Integer` → 2 params in one spec; `Z : Float` → 1; total 3
+        let code = "procedure P (X, Y : Integer; Z : Float) is begin null; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_state_coupling(node, code.as_bytes()), 3);
+    }
+
+    #[test]
+    fn test_ada_param_count_three_names() {
+        // `A, B, C : Boolean` → 3 params in one spec
+        let code = "function F (A, B, C : Boolean) return Boolean is begin return A; end F;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_state_coupling(node, code.as_bytes()), 3);
+    }
+
 }
