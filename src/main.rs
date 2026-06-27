@@ -1315,7 +1315,8 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "method_definition"
         | "generator_function_declaration"
         | "generator_function"
-        | "subprogram_body" => {
+        | "subprogram_body"
+        | "expression_function_declaration" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -2269,6 +2270,7 @@ where
             | "generator_function_declaration"
             | "generator_function"
             | "subprogram_body"
+            | "expression_function_declaration"
     ) {
         callback(node, source_code);
     }
@@ -2324,7 +2326,7 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
 
     // Ada subprogram_body: name lives inside the function_specification or
     // procedure_specification child, under its 'name' field.
-    if node.kind() == "subprogram_body" {
+    if matches!(node.kind(), "subprogram_body" | "expression_function_declaration") {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             if matches!(child.kind(), "function_specification" | "procedure_specification") {
@@ -2794,6 +2796,24 @@ mod tests {
         let code = "procedure Greet (Name : String) is\nbegin\n   null;\nend Greet;";
         let names = discover_ada_functions(code);
         assert_eq!(names, vec!["Greet"]);
+    }
+
+    #[test]
+    fn test_ada_discover_expression_function() {
+        let code = "function Square (X : Integer) return Integer is (X * X);";
+        let names = discover_ada_functions(code);
+        assert_eq!(names, vec!["Square"]);
+    }
+
+    #[test]
+    fn test_ada_discover_expression_function_mixed_with_body() {
+        let code = concat!(
+            "function Double (X : Integer) return Integer is (X * 2);\n\n",
+            "procedure Do_Nothing is\nbegin\n   null;\nend Do_Nothing;\n"
+        );
+        let mut names = discover_ada_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["Do_Nothing", "Double"]);
     }
 
     /// Build a FunctionMetrics fixture with the given AIRD-component raw values;

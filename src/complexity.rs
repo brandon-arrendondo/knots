@@ -1238,7 +1238,7 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             }
             0
         }
-        "subprogram_body" => {
+        "subprogram_body" | "expression_function_declaration" => {
             // Ada: traverse to function_specification or procedure_specification,
             // then find formal_part and count parameter_specification children.
             let mut cursor = node.walk();
