@@ -631,7 +631,12 @@ pub fn calculate_return_count(node: Node) -> u32 {
 }
 
 fn visit_node_returns(node: Node, count: &mut u32) {
-    if node.kind() == "return_statement" || node.kind() == "return_expression" {
+    if matches!(
+        node.kind(),
+        "return_statement" | "return_expression"
+        // Ada uses split names for simple and extended returns
+        | "simple_return_statement" | "extended_return_statement"
+    ) {
         *count += 1;
     }
 
