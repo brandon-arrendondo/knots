@@ -1349,6 +1349,7 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "function_item"
         | "function_declaration"
         | "function_expression"
+        | "arrow_function"
         | "method_definition"
         | "generator_function_declaration"
         | "generator_function"
@@ -1511,6 +1512,7 @@ fn is_function_kind(kind: &str) -> bool {
             | "function_item"
             | "function_declaration"
             | "function_expression"
+            | "arrow_function"
             | "method_definition"
             | "generator_function_declaration"
             | "generator_function"
@@ -2422,6 +2424,7 @@ where
             | "function_item"
             | "function_declaration"
             | "function_expression"
+            | "arrow_function"
             | "method_definition"
             | "generator_function_declaration"
             | "generator_function"
@@ -2445,6 +2448,31 @@ where
             }
         }
         cursor.goto_parent();
+    }
+}
+
+/// Extract the name of an arrow_function or anonymous function_expression from
+/// the surrounding assignment context. Returns None for truly anonymous usage
+/// (callbacks, IIFEs, return values, etc.).
+fn get_name_from_assignment_context(node: Node, source_code: &str) -> Option<String> {
+    let parent = node.parent()?;
+    match parent.kind() {
+        // const foo = () => {}  or  const foo = function() {}
+        "variable_declarator" => parent
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string()),
+        // { foo: () => {} }
+        "pair" => parent
+            .child_by_field_name("key")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string()),
+        // class { foo = () => {} }
+        "public_field_definition" => parent
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+            .map(|s| s.to_string()),
+        _ => None,
     }
 }
 
@@ -2488,7 +2516,17 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
                 }
             }
         }
-        return None; // anonymous function_expression / generator_function
+        // Anonymous function_expression: name comes from the surrounding assignment context.
+        if node.kind() == "function_expression" {
+            return get_name_from_assignment_context(node, source_code);
+        }
+        return None; // anonymous generator_function
+    }
+
+    // JS/TS arrow functions have no name field; the name lives in the parent node.
+    // e.g. `const foo = () => {}`, `{ foo: () => {} }`, `class { foo = () => {} }`.
+    if node.kind() == "arrow_function" {
+        return get_name_from_assignment_context(node, source_code);
     }
 
     // Swift: init_declaration — always named "init" (Swift initializer).
@@ -3049,6 +3087,64 @@ mod tests {
         let code = "function* gen(): Generator<number> { yield 1; }";
         let names = discover_ts_functions(code);
         assert_eq!(names, vec!["gen"]);
+    }
+
+    #[test]
+    fn test_ts_discover_arrow_const() {
+        let code = "const greet = (name: string): string => { return `Hello ${name}`; };";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["greet"]);
+    }
+
+    #[test]
+    fn test_ts_discover_arrow_shorthand() {
+        let code = "const double = (x: number) => x * 2;";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["double"]);
+    }
+
+    #[test]
+    fn test_ts_discover_object_method_shorthand() {
+        let code = "const obj = { foo() { return 1; } };";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["foo"]);
+    }
+
+    #[test]
+    fn test_ts_discover_object_arrow_property() {
+        let code = "const obj = { baz: (x: number) => x + 1 };";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["baz"]);
+    }
+
+    #[test]
+    fn test_ts_discover_object_function_expression_property() {
+        let code = "const obj = { bar: function() { return 2; } };";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["bar"]);
+    }
+
+    #[test]
+    fn test_ts_discover_class_arrow_field() {
+        let code = "class C { arrowMethod = () => { return 99; }; }";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["arrowMethod"]);
+    }
+
+    #[test]
+    fn test_ts_discover_static_arrow_field() {
+        let code = "class ZodString { static create = (params?: any): ZodString => { return new ZodString(); }; }";
+        let names = discover_ts_functions(code);
+        assert_eq!(names, vec!["create"]);
+    }
+
+    #[test]
+    fn test_ts_anonymous_callback_skipped() {
+        // Anonymous arrow callbacks (e.g. array.map(...)) have no extractable name
+        // and are intentionally excluded from the function list.
+        let code = "const result = items.map((x) => x * 2);";
+        let names = discover_ts_functions(code);
+        assert!(names.is_empty());
     }
 
     // ---- Ada function discovery tests ----

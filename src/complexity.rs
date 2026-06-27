@@ -1540,11 +1540,18 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             }
             0
         }
-        // JavaScript/TypeScript: method_definition, function_expression, etc.
+        // JavaScript/TypeScript: method_definition, function_expression, arrow_function, etc.
         "method_definition"
         | "function_expression"
+        | "arrow_function"
         | "generator_function_declaration"
         | "generator_function" => {
+            // arrow_function with a single unparenthesised parameter uses the 'parameter' field.
+            if node.kind() == "arrow_function" {
+                if node.child_by_field_name("parameter").is_some() {
+                    return 1;
+                }
+            }
             if let Some(params) = node.child_by_field_name("parameters") {
                 let mut cursor = params.walk();
                 return params
