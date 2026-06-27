@@ -129,6 +129,16 @@ fn visit_node_cognitive(
         // Control flow structures that increase complexity (C/C++ and Rust share some names)
         "if_statement" | "if_expression" => {
             *complexity += 1 + nesting_level;
+            // Ada: else is an unnamed keyword child of if_statement (no named else_clause node).
+            // C/C++ uses a named else_clause, so this check is safe for all grammars.
+            let has_bare_else = {
+                let mut cur = node.walk();
+                let found = node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "else");
+                found
+            };
+            if has_bare_else {
+                *complexity += 1;
+            }
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
@@ -2801,4 +2811,30 @@ mod tests {
         assert_eq!(calculate_state_coupling(node, code.as_bytes()), 3);
     }
 
+    #[test]
+    fn test_ada_else_cognitive() {
+        // if → +1+0; else → +1 flat; total = 2
+        let code = "procedure P is begin if X then null; else null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_ada_if_no_else_cognitive() {
+        // if with no else → +1+0 only
+        let code = "procedure P is begin if X then null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    #[test]
+    fn test_ada_if_elsif_else_cognitive() {
+        // if → +1; elsif → +1 flat; else → +1 flat; total = 3
+        let code = "procedure P is begin if A then null; elsif B then null; else null; end if; end P;";
+        let tree = parse_ada(code);
+        let node = ada_subprogram_node(&tree);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
+    }
 }
