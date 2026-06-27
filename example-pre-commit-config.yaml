@@ -16,11 +16,14 @@ repos:
       - id: check-added-large-files
       - id: check-yaml
 
-  # Code complexity checking with knots
-  # pre-commit will automatically build and install knots from source.
-  # If your team already has knots on PATH (released binary / package manager),
-  # use id: knots-system instead to skip the Rust toolchain requirement.
-  - repo: https://github.com/brandon-arrendondo/knots
+  # ===========================================================================
+  # Code complexity checking with knots — RECOMMENDED (prebuilt PyPI wheel)
+  # ---------------------------------------------------------------------------
+  # These hooks are language: python and install the prebuilt `knots` wheel from
+  # PyPI, so the first `pre-commit run` is seconds — no Rust toolchain, no
+  # from-source compile.
+  # ===========================================================================
+  - repo: https://github.com/brandon-arrendondo/knots-pre-commit
     rev: v1.11.0
     hooks:
       # -----------------------------------------------------------------------
@@ -44,6 +47,12 @@ repos:
       # -----------------------------------------------------------------------
       # - id: knots
       #   args: [--aird-threshold=85]
+
+      # -----------------------------------------------------------------------
+      # Gate only the functions you touched (no new debt in this change)
+      # -----------------------------------------------------------------------
+      # - id: knots
+      #   args: [--aird-threshold=85, --changed]
 
       # -----------------------------------------------------------------------
       # C / C++ projects — restrict to those file types only
@@ -84,26 +93,35 @@ repos:
       # -----------------------------------------------------------------------
       # - id: knots-strict
 
-      # -----------------------------------------------------------------------
-      # system variants — use when knots is already on PATH.
-      # No Rust toolchain install required; ideal for C-only shops or teams
-      # that distribute knots via a released binary.
-      # -----------------------------------------------------------------------
-      # - id: knots-system
-      # - id: knots-system-strict
-
-      # -----------------------------------------------------------------------
-      # Test quality validation (C/C++ Ceedling projects)
-      # Parses TEST_SOURCE_FILE("path/to/source.c") from test files
-      # Customize --test-dir for your test directory (Test/test/Tests/etc)
-      # -----------------------------------------------------------------------
-      # - id: test-complexity
-      #   args:
-      #     - --threshold=0.70
-      #     - --boundary-threshold=0.80
-      #     - --level=error
-      #     - --framework=ceedling
-      #     - --test-dir=Test
+  # ===========================================================================
+  # Alternative: hooks from the main knots repo
+  # ---------------------------------------------------------------------------
+  # Use these instead of the mirror above if you want to build knots from
+  # source (language: rust — compiles on first use), run a knots already on
+  # PATH (language: system — e.g. after `pipx install knots`), or use the
+  # test-complexity hook (which lives only in the main repo).
+  # ===========================================================================
+  # - repo: https://github.com/brandon-arrendondo/knots
+  #   rev: v1.11.0
+  #   hooks:
+  #     # Build from source (no PyPI dependency; slow first run)
+  #     - id: knots
+  #
+  #     # Use a knots already on PATH (no Rust toolchain). Install with:
+  #     #   pipx install knots     (or: uv tool install knots)
+  #     # - id: knots-system
+  #     # - id: knots-system-strict
+  #
+  #     # Test quality validation (C/C++ Ceedling projects)
+  #     # Parses TEST_SOURCE_FILE("path/to/source.c") from test files
+  #     # Customize --test-dir for your test directory (Test/test/Tests/etc)
+  #     # - id: test-complexity
+  #     #   args:
+  #     #     - --threshold=0.70
+  #     #     - --boundary-threshold=0.80
+  #     #     - --level=error
+  #     #     - --framework=ceedling
+  #     #     - --test-dir=Test
 
 # Configuration for pre-commit.ci (if using)
 ci:
