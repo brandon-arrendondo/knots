@@ -258,8 +258,8 @@ jobs:
           Maintainer: Brandon Arrendondo <brandon@arrendondo.dev>
           Homepage: https://github.com/brandon-arrendondo/knots
           Description: Multi-language code complexity analyzer
-           A fast, powerful code complexity analyzer for C, C++, Rust, Python, and
-           JavaScript with visual indicators, built on tree-sitter. Knots computes
+           A fast, powerful code complexity analyzer for C, C++, Rust, Python, JavaScript, TypeScript, and Ada
+           with visual indicators, built on tree-sitter. Knots computes
            McCabe cyclomatic complexity, cognitive complexity, nesting depth, SLOC,
            ABC complexity, and test scoring metrics. Includes knots-test-complexity
            for validating unit test quality against source complexity.
@@ -326,8 +326,8 @@ jobs:
           Source0:        %{name}-%{version}.tar.gz
 
           %description
-          A fast, powerful code complexity analyzer for C, C++, Rust, Python, and
-          JavaScript with visual indicators, built on tree-sitter. Knots computes
+          A fast, powerful code complexity analyzer for C, C++, Rust, Python, JavaScript, TypeScript, and Ada
+          with visual indicators, built on tree-sitter. Knots computes
           McCabe cyclomatic complexity, cognitive complexity, nesting depth, SLOC,
           ABC complexity, and test scoring metrics. Includes knots-test-complexity
           for validating unit test quality against source complexity.
@@ -455,6 +455,22 @@ jobs:
           echo "=== AppImage ==="
           ls -lh "artifacts/knots-${VERSION}-x86_64.AppImage"
 
+      - name: Stage SBOM release assets
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          # Surface the per-platform CycloneDX SBOMs as standalone release
+          # assets (they are also embedded inside each package). Dependency
+          # trees can differ by target, so publish one SBOM per platform.
+          for platform in linux-x64 windows-x64; do
+            SRC="artifacts/knots-${platform}-${VERSION}"
+            cp "${SRC}/knots.cdx.json" \
+               "artifacts/knots-${VERSION}-${platform}.cdx.json"
+            cp "${SRC}/knots-test-complexity.cdx.json" \
+               "artifacts/knots-test-complexity-${VERSION}-${platform}.cdx.json"
+          done
+          echo "=== SBOM release assets ==="
+          ls -lh artifacts/*.cdx.json
+
       - name: Upload Release Archives
         uses: actions/upload-artifact@v4
         with:
@@ -465,6 +481,7 @@ jobs:
             artifacts/*.deb
             artifacts/*.rpm
             artifacts/*.AppImage
+            artifacts/*.cdx.json
           retention-days: 90
 
       - name: Create GitHub Release
@@ -478,6 +495,7 @@ jobs:
             artifacts/*.deb
             artifacts/*.rpm
             artifacts/*.AppImage
+            artifacts/*.cdx.json
 
   docs:
     name: Docs
