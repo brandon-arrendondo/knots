@@ -14,7 +14,7 @@ use complexity::{
     calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_cognitive_complexity,
     calculate_state_coupling,
     calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
-    calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
+    calculate_sloc_ada, calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
 };
 use knots::{is_source_extension, language_for_file};
 
@@ -1314,7 +1314,8 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "function_expression"
         | "method_definition"
         | "generator_function_declaration"
-        | "generator_function" => {
+        | "generator_function"
+        | "subprogram_body" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -1396,6 +1397,16 @@ fn collect_external_calls_recursive(
     if node.kind() == "call_expression" || node.kind() == "call" {
         handle_call_node(node, source_code, local_names, external);
     }
+    // Ada: procedure_call_statement and function_call use 'name' field, not 'function'
+    if node.kind() == "procedure_call_statement" || node.kind() == "function_call" {
+        if let Some(name_node) = node.child_by_field_name("name") {
+            if let Ok(name) = name_node.utf8_text(source_code.as_bytes()) {
+                if !local_names.contains(name) {
+                    external.insert(name.to_string());
+                }
+            }
+        }
+    }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         collect_external_calls_recursive(child, source_code, local_names, external);
@@ -1415,6 +1426,7 @@ fn collect_function_metrics(
     let mut metrics = Vec::new();
 
     let is_python = file_path.ends_with(".py");
+    let is_ada = file_path.ends_with(".adb") || file_path.ends_with(".ada");
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         if let Some(name) = get_function_name(node, src) {
             let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
@@ -1422,6 +1434,8 @@ fn collect_function_metrics(
             let nesting = calculate_nesting_depth(node);
             let sloc = if is_python {
                 calculate_sloc_python(node, src.as_bytes())
+            } else if is_ada {
+                calculate_sloc_ada(node, src.as_bytes())
             } else {
                 calculate_sloc(node, src.as_bytes())
             };
@@ -2254,6 +2268,7 @@ where
             | "method_definition"
             | "generator_function_declaration"
             | "generator_function"
+            | "subprogram_body"
     ) {
         callback(node, source_code);
     }
@@ -2305,6 +2320,23 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
                 .ok()
                 .map(|s| s.to_string());
         }
+    }
+
+    // Ada subprogram_body: name lives inside the function_specification or
+    // procedure_specification child, under its 'name' field.
+    if node.kind() == "subprogram_body" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if matches!(child.kind(), "function_specification" | "procedure_specification") {
+                if let Some(name_node) = child.child_by_field_name("name") {
+                    return name_node
+                        .utf8_text(source_code.as_bytes())
+                        .ok()
+                        .map(|s| s.to_string());
+                }
+            }
+        }
+        return None;
     }
 
     // C/C++ function_definition uses a declarator chain
@@ -2394,7 +2426,7 @@ mod tests {
     /// Parse C++ code and collect discovered function names via visit_functions + get_function_name.
     fn discover_cpp_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_cpp::language()).unwrap();
+        parser.set_language(&tree_sitter_cpp::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -2452,7 +2484,7 @@ mod tests {
 
     fn discover_rust_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::language()).unwrap();
+        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -2491,7 +2523,7 @@ mod tests {
 
     fn rust_external_calls(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::language()).unwrap();
+        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let root = tree.root_node();
         let local_names = collect_local_names(root, code);
@@ -2562,7 +2594,7 @@ mod tests {
     fn discover_python_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_python::language())
+            .set_language(&tree_sitter_python::LANGUAGE.into())
             .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
@@ -2613,7 +2645,7 @@ mod tests {
     fn discover_js_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&knots::tree_sitter_javascript::language())
+            .set_language(&knots::tree_sitter_javascript::LANGUAGE.into())
             .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
@@ -2666,7 +2698,7 @@ mod tests {
     fn discover_ts_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&knots::tree_sitter_typescript::language_typescript())
+            .set_language(&knots::tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
             .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
@@ -2712,6 +2744,56 @@ mod tests {
         let code = "function* gen(): Generator<number> { yield 1; }";
         let names = discover_ts_functions(code);
         assert_eq!(names, vec!["gen"]);
+    }
+
+    // ---- Ada function discovery tests ----
+
+    fn discover_ada_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_ada::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_ada_discover_procedure() {
+        let code = "procedure Hello is\nbegin\n   null;\nend Hello;";
+        let names = discover_ada_functions(code);
+        assert_eq!(names, vec!["Hello"]);
+    }
+
+    #[test]
+    fn test_ada_discover_function() {
+        let code = "function Add (X, Y : Integer) return Integer is\nbegin\n   return X + Y;\nend Add;";
+        let names = discover_ada_functions(code);
+        assert_eq!(names, vec!["Add"]);
+    }
+
+    #[test]
+    fn test_ada_discover_multiple_subprograms() {
+        let code = concat!(
+            "procedure Foo is\nbegin\n   null;\nend Foo;\n\n",
+            "procedure Bar is\nbegin\n   null;\nend Bar;\n"
+        );
+        let mut names = discover_ada_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["Bar", "Foo"]);
+    }
+
+    #[test]
+    fn test_ada_discover_procedure_with_params() {
+        let code = "procedure Greet (Name : String) is\nbegin\n   null;\nend Greet;";
+        let names = discover_ada_functions(code);
+        assert_eq!(names, vec!["Greet"]);
     }
 
     /// Build a FunctionMetrics fixture with the given AIRD-component raw values;

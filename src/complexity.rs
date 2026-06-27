@@ -79,6 +79,15 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // goto/continue/break can create additional paths
         "goto_statement" => *complexity += 1,
 
+        // Ada: loop_statement covers plain loop, while loop, and for loop
+        "loop_statement" => *complexity += 1,
+        // Ada: each elsif branch is an additional path
+        "elsif_statement_item" => *complexity += 1,
+        // Ada: each case alternative (when branch) is an additional path
+        "case_statement_alternative" => *complexity += 1,
+        // Ada: each exception handler (when clause) is an additional path
+        "exception_handler" => *complexity += 1,
+
         _ => {}
     }
 
@@ -244,8 +253,34 @@ fn visit_node_cognitive(
             }
         }
 
-        // Recursive calls (identified by looking for function calls)
-        // This is a simplified heuristic - in practice, you'd need to track function names
+        // Ada: loop_statement covers plain loop, while loop, and for loop
+        "loop_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Ada: elsif is flat +1, like Python elif
+        "elsif_statement_item" => {
+            *complexity += 1;
+            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
+            return;
+        }
+
+        // Ada: case_statement is like switch
+        "case_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Ada: each exception handler is like a catch clause
+        "exception_handler" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
         _ => {}
     }
 
@@ -322,7 +357,9 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         // Python control structures
         | "except_clause" | "match_statement" | "lambda"
         // JavaScript control structures
-        | "for_in_statement" | "arrow_function" => {
+        | "for_in_statement" | "arrow_function"
+        // Ada control structures
+        | "loop_statement" | "case_statement" | "exception_handler" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -346,6 +383,29 @@ pub fn calculate_sloc(node: Node, source_code: &[u8]) -> u32 {
 /// Calculates SLOC for Python source — additionally skips lines beginning with `#`.
 pub fn calculate_sloc_python(node: Node, source_code: &[u8]) -> u32 {
     calculate_sloc_inner(node, source_code, true)
+}
+
+/// Calculates SLOC for Ada source — skips lines beginning with `--` (Ada's only comment style).
+pub fn calculate_sloc_ada(node: Node, source_code: &[u8]) -> u32 {
+    let start_byte = node.start_byte();
+    let end_byte = node.end_byte();
+
+    if start_byte >= end_byte || end_byte > source_code.len() {
+        return 0;
+    }
+
+    let function_text = &source_code[start_byte..end_byte];
+    let mut sloc = 0;
+
+    for line in function_text.split(|&b| b == b'\n') {
+        let trimmed = trim_bytes(line);
+        if trimmed.is_empty() || trimmed.starts_with(b"--") {
+            continue;
+        }
+        sloc += 1;
+    }
+
+    sloc
 }
 
 fn calculate_sloc_inner(node: Node, source_code: &[u8], skip_hash_comments: bool) -> u32 {
@@ -497,8 +557,13 @@ fn visit_node_abc(
         // Assignments — JavaScript (augmented_assignment_expression: +=, -=, etc.)
         "augmented_assignment_expression" => *assignments += 1,
 
+        // Assignments — Ada (:= operator)
+        "assignment_statement" => *assignments += 1,
+
         // Branches — function calls (C/C++/Rust use call_expression, Python uses call)
         "call_expression" | "call" => *branches += 1,
+        // Ada: procedure and function invocations
+        "procedure_call_statement" | "function_call" => *branches += 1,
 
         // Branches: throw, new, delete create control flow paths (C/C++)
         "throw_statement" | "new_expression" | "delete_expression" => *branches += 1,
@@ -521,6 +586,11 @@ fn visit_node_abc(
 
         // Conditions (Python)
         "elif_clause" | "match_statement" => *conditions += 1,
+
+        // Conditions (Ada)
+        "elsif_statement_item" | "loop_statement" | "case_statement" | "exception_handler" => {
+            *conditions += 1
+        }
 
         // Logical operators (C/C++/Rust: &&/||; JavaScript also: ??)
         "binary_expression" => {
@@ -1163,6 +1233,27 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             }
             0
         }
+        "subprogram_body" => {
+            // Ada: traverse to function_specification or procedure_specification,
+            // then find formal_part and count parameter_specification children.
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if matches!(child.kind(), "function_specification" | "procedure_specification") {
+                    let mut spec_cursor = child.walk();
+                    for spec_child in child.children(&mut spec_cursor) {
+                        if spec_child.kind() == "formal_part" {
+                            let mut formal_cursor = spec_child.walk();
+                            return spec_child
+                                .children(&mut formal_cursor)
+                                .filter(|c| c.kind() == "parameter_specification")
+                                .count() as u32;
+                        }
+                    }
+                    return 0;
+                }
+            }
+            0
+        }
         _ => 0,
     }
 }
@@ -1352,7 +1443,7 @@ mod state_coupling_tests {
     fn parse_rust(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_rust::language())
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -1451,13 +1542,13 @@ mod tests {
 
     fn parse_c_function(code: &str) -> Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_c::language()).unwrap();
+        parser.set_language(&tree_sitter_c::LANGUAGE.into()).unwrap();
         parser.parse(code, None).unwrap()
     }
 
     fn parse_cpp_function(code: &str) -> Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_cpp::language()).unwrap();
+        parser.set_language(&tree_sitter_cpp::LANGUAGE.into()).unwrap();
         parser.parse(code, None).unwrap()
     }
 
@@ -1868,7 +1959,7 @@ mod tests {
 
     fn parse_rust(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::language()).unwrap();
+        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
         parser.parse(code, None).unwrap()
     }
 
@@ -2096,7 +2187,7 @@ mod tests {
     fn parse_python(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_python::language())
+            .set_language(&tree_sitter_python::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -2384,7 +2475,7 @@ mod tests {
     fn parse_js_function(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_javascript::language())
+            .set_language(&tree_sitter_javascript::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }

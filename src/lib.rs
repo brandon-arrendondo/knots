@@ -5,11 +5,12 @@ pub mod complexity;
 // Re-export complexity functions for use by workspace members
 pub use complexity::{
     calculate_aicp, calculate_aird, calculate_cognitive_complexity, calculate_mccabe_complexity,
-    calculate_state_coupling,
+    calculate_sloc_ada, calculate_state_coupling,
 };
 
 // Re-export tree-sitter for convenience
 pub use tree_sitter;
+pub use tree_sitter_ada;
 pub use tree_sitter_c;
 pub use tree_sitter_cpp;
 pub use tree_sitter_javascript;
@@ -22,6 +23,8 @@ pub use tree_sitter_typescript;
 /// `.h` is intentionally excluded (treated as C by language_for_file but not
 /// scanned during recursive discovery, since headers often contain vendor/inline code).
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    // Ada (.ads specs excluded like .h — bodies live in .adb)
+    "adb", "ada",
     // C
     "c",
     // C++
@@ -40,15 +43,16 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
 /// `.h` defaults to C; C++ headers should use `.hpp`/`.hxx`.
 pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
     match path.extension().and_then(|e| e.to_str()) {
+        Some("adb") | Some("ada") | Some("ads") => tree_sitter_ada::LANGUAGE.into(),
         Some("cpp") | Some("cc") | Some("cxx") | Some("hpp") | Some("hxx") => {
-            tree_sitter_cpp::language()
+            tree_sitter_cpp::LANGUAGE.into()
         }
-        Some("rs") => tree_sitter_rust::language(),
-        Some("py") => tree_sitter_python::language(),
-        Some("js") | Some("mjs") | Some("cjs") => tree_sitter_javascript::language(),
-        Some("ts") => tree_sitter_typescript::language_typescript(),
-        Some("tsx") => tree_sitter_typescript::language_tsx(),
-        _ => tree_sitter_c::language(),
+        Some("rs") => tree_sitter_rust::LANGUAGE.into(),
+        Some("py") => tree_sitter_python::LANGUAGE.into(),
+        Some("js") | Some("mjs") | Some("cjs") => tree_sitter_javascript::LANGUAGE.into(),
+        Some("ts") => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        Some("tsx") => tree_sitter_typescript::LANGUAGE_TSX.into(),
+        _ => tree_sitter_c::LANGUAGE.into(),
     }
 }
 
