@@ -18,6 +18,14 @@ are genuinely expensive to modify with AI assistance.
 
 ## Installation
 
+Prebuilt binary from PyPI (no Rust toolchain, installs in seconds):
+
+```bash
+pipx install knots          # or: uv tool install knots
+```
+
+From crates.io:
+
 ```bash
 cargo install knots
 ```
@@ -30,7 +38,7 @@ cd knots
 cargo build --release
 ```
 
-Requires Rust 1.70+. No C compiler or build system required.
+No C compiler or build system required.
 
 ## Quick Start
 
@@ -47,6 +55,9 @@ knots -r src/ --aird-threshold 85
 # Adopt the gate on a legacy codebase: snapshot today, then fail only on regressions
 knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json --write-baseline
 knots -r src/ --aird-threshold 85 --baseline .knots-baseline.json
+
+# Gate only the functions you actually touched (no new debt in this change)
+knots -r src/ --aird-threshold 85 --changed
 
 # SARIF for GitHub Code Scanning
 knots -r --format sarif src/ > knots.sarif
@@ -90,12 +101,15 @@ Options:
   --sloc-threshold <N>              Exit 1 if any function exceeds this SLOC count
   --abc-threshold <F>               Exit 1 if any function exceeds this ABC magnitude
   --return-threshold <N>            Exit 1 if any function exceeds this return count
-  --aird-threshold <N>              Exit 1 if any function exceeds this AIRD score (recommended: 85)
-  --aicp-threshold <N>              Exit 1 if any function exceeds this AICP score
+  --aird-threshold <N>              Exit 1 if any function exceeds this AIRD (AI Reasoning Difficulty) score (recommended: 85)
+  --aicp-threshold <N>              Exit 1 if any function exceeds this AICP (AI Context Pressure) score
   --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
   --report <FILE>                   Write a detailed per-function report to this file (opt-in)
   --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see docs/baseline.rst)
   --write-baseline                  Snapshot current scores to --baseline and exit without gating
+  --since <REF>                     Gate only functions overlapping lines changed since this git ref
+  --changed                         Gate only functions changed in the working tree (sugar for --since HEAD)
+  --explain <METRIC>                Explain a metric (e.g. aird, aicp) and how to lower it, then exit
   -h, --help                        Print help
   -V, --version                     Print version
 ```

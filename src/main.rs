@@ -27,6 +27,17 @@ fn get_complexity_emoji(complexity: u32) -> &'static str {
     }
 }
 
+/// `file:line:name` locator for a function, so an editor can jump from any line
+/// of human output, not just threshold violations. Matches the format the
+/// violation block uses; falls back to `name:line` when the file path is unknown.
+fn func_location(func: &FunctionMetrics) -> String {
+    if func.file_path.is_empty() {
+        format!("{}:{}", func.name, func.start_line)
+    } else {
+        format!("{}:{}:{}", func.file_path, func.start_line, func.name)
+    }
+}
+
 /// Compilation database entry from compile_commands.json
 #[derive(Debug, Clone, Deserialize)]
 struct CompileCommand {
@@ -162,7 +173,11 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 #[command(args_override_self = true)]
 struct Args {
     /// Path(s) to source files or directories to analyze
-    #[arg(value_name = "FILE", required_unless_present = "compile_commands", num_args = 1..)]
+    #[arg(
+        value_name = "FILE",
+        required_unless_present_any = ["compile_commands", "explain"],
+        num_args = 1..
+    )]
     files: Vec<PathBuf>,
 
     /// Recursively process all supported source files in directories
@@ -221,11 +236,13 @@ struct Args {
     #[arg(long, value_name = "N")]
     return_threshold: Option<u32>,
 
-    /// Exit 1 if any function exceeds this AIRD score (default: off, recommended: 85)
+    /// Exit 1 if any function exceeds this AIRD (AI Reasoning Difficulty) score
+    /// (default: off, recommended: 85). Run `knots --explain aird`.
     #[arg(long, value_name = "N")]
     aird_threshold: Option<u32>,
 
-    /// Exit 1 if any function exceeds this AICP score (default: off)
+    /// Exit 1 if any function exceeds this AICP (AI Context Pressure) score
+    /// (default: off). Run `knots --explain aicp`.
     #[arg(long, value_name = "N")]
     aicp_threshold: Option<u32>,
 
@@ -247,6 +264,139 @@ struct Args {
     /// without gating. Use to adopt the gate on a legacy codebase.
     #[arg(long, requires = "baseline")]
     write_baseline: bool,
+
+    /// Scope threshold gating to functions that overlap lines changed since
+    /// this git ref (e.g. HEAD, main, a commit SHA). Untouched pre-existing
+    /// offenders are ignored. Compares the working tree against <REF>.
+    #[arg(long, value_name = "REF", conflicts_with = "changed")]
+    since: Option<String>,
+
+    /// Scope threshold gating to functions you have changed in the working
+    /// tree (uncommitted edits, plus untracked files). Sugar for `--since HEAD`.
+    #[arg(long)]
+    changed: bool,
+
+    /// Explain what a metric measures and how to lower it, then exit. No files
+    /// needed. E.g. `knots --explain aird`.
+    #[arg(long, value_name = "METRIC", value_enum)]
+    explain: Option<ExplainMetric>,
+}
+
+/// Metrics that `--explain` can describe at the command line.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+enum ExplainMetric {
+    Mccabe,
+    Cognitive,
+    Nesting,
+    Sloc,
+    Abc,
+    Returns,
+    Aird,
+    Aicp,
+    ExternalCalls,
+}
+
+/// A terminal-friendly explanation of a metric: what it measures and how to
+/// lower it. Distilled from docs/metrics-reference.rst so a user who meets
+/// "AIRD 98 > 85" mid-commit doesn't have to leave the terminal.
+fn explain_metric(metric: ExplainMetric) -> &'static str {
+    match metric {
+        ExplainMetric::Aird => "\
+AIRD — AI Reasoning Difficulty (0–100)
+
+Predicts how much reasoning effort an AI model needs to safely modify a
+function. Higher = harder. Cognitive complexity dominates the score.
+
+  AIRD = cognitive/75 ×55 + sloc/200 ×15 + nesting/8 ×15
+       + test_score/20 ×15 − doc_score/10 ×15        (clamped 0–100)
+
+Recommended CI threshold: 85 (validated against Sonnet 4.6 and Opus 4.8).
+
+Lower it by: reducing cognitive complexity first — it carries 55 of the 100
+points. Extract deeply nested branches into well-named helpers, then trim
+SLOC and nesting. Adding doc comments reduces the score.",
+
+        ExplainMetric::Aicp => "\
+AICP — AI Context Pressure (0–100)
+
+Predicts how much surrounding context an AI must load before it can act.
+Complements AIRD: a function can be cheap to load but hard to reason about,
+or expensive to load but trivial once context is assembled.
+
+  AICP = external_calls/20 ×60 + sloc/200 ×40 − doc_score/10 ×15
+
+External-call breadth is the primary driver (p99 ceiling = 20 calls).
+
+Lower it by: reducing the number of distinct out-of-file functions/macros the
+function calls — consolidate dependencies and narrow its collaborators — then
+trimming SLOC.",
+
+        ExplainMetric::Mccabe => "\
+McCabe — Cyclomatic Complexity
+
+Counts linearly independent paths through a function: decision points + 1
+(if / while / for / case / ternary / && / || / except). 100% match with
+pmccabe across the validation corpus.
+
+Thresholds: ≤10 good, 11–20 moderate, 21+ consider refactoring.
+Lower it by collapsing conditionals, using early returns, and table-driving
+repetitive switches.",
+
+        ExplainMetric::Cognitive => "\
+Cognitive Complexity (Campbell / SonarSource)
+
+How hard code is to *understand*. Like McCabe, but nesting is penalized more,
+else-if chains cost less than independent ifs, and a switch is a single
+increment regardless of arm count.
+
+This is the #1 driver of AIRD. Lower it by flattening nesting (guard clauses,
+early returns) and extracting deeply nested blocks into named helpers.",
+
+        ExplainMetric::Nesting => "\
+Nesting Depth
+
+Maximum depth of nested control structures (if / for / while / switch /
+closures) within a function. Deeper than 4 levels strongly correlates with
+hard-to-maintain code.
+
+Lower it with guard clauses, early returns, and by extracting inner blocks
+into helpers.",
+
+        ExplainMetric::Sloc => "\
+SLOC — Source Lines of Code
+
+Non-blank, non-comment lines within the function body. Functions over ~50
+SLOC often benefit from decomposition.
+
+Lower it by extracting cohesive sub-steps into named helpers.",
+
+        ExplainMetric::Abc => "\
+ABC Complexity
+
+Magnitude of the (Assignments, Branches/calls, Conditions) vector:
+√(A² + B² + C²) — a broad measure of how much a function does.
+
+Lower it by splitting multi-purpose functions and reducing assignment, call,
+and branch density.",
+
+        ExplainMetric::Returns => "\
+Return Count
+
+Number of return statements in a function. A high count can signal tangled
+control flow, though guard-clause early returns are often fine.
+
+Lower it by consolidating exit points where it improves clarity.",
+
+        ExplainMetric::ExternalCalls => "\
+External Calls
+
+Count of distinct call targets not defined in the same file (out-of-file
+functions and function-like macros) — a measure of dependency breadth and the
+primary driver of AICP. p99 across the validation corpus = 20.
+
+Lower it by consolidating dependencies and narrowing the function's
+collaborators.",
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -504,10 +654,136 @@ fn aird_tips(func: &FunctionMetrics) -> Vec<String> {
     tips
 }
 
+/// The set of line ranges that changed in the current working tree relative to
+/// a git ref, used by `--changed` / `--since` to scope gating to touched code.
+/// Keyed by canonicalized absolute path; ranges are in the *current* (post-image)
+/// file so they line up with the line numbers knots reports.
+struct ChangedLines {
+    map: HashMap<PathBuf, Vec<(u32, u32)>>,
+}
+
+impl ChangedLines {
+    /// True if `[start, end]` intersects any changed range in `file_path`.
+    /// A file with no recorded changes never overlaps (its functions are skipped).
+    fn overlaps(&self, file_path: &str, start: u32, end: u32) -> bool {
+        let key = canonicalize_path(Path::new(file_path));
+        match self.map.get(&key) {
+            Some(ranges) => ranges.iter().any(|&(s, e)| start <= e && s <= end),
+            None => false,
+        }
+    }
+}
+
+/// Canonicalize for stable map keys; fall back to the path as-given if it can't
+/// be resolved (e.g. it no longer exists on disk).
+fn canonicalize_path(p: &Path) -> PathBuf {
+    fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+}
+
+/// Run `git` with the given args, returning stdout. Errors carry git's stderr so
+/// a bad ref or "not a git repository" surfaces clearly.
+fn git_output(args: &[&str]) -> Result<String> {
+    let out = std::process::Command::new("git")
+        .args(args)
+        .output()
+        .context("failed to run git (is it installed and on PATH?)")?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        anyhow::bail!("git {} failed: {}", args.join(" "), stderr.trim());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Parse the new-file range from a unified-diff hunk header
+/// (`@@ -a,b +c,d @@`), returning `(start, len)` for the `+c,d` side. `len`
+/// defaults to 1 when omitted. Returns `None` if the header is malformed.
+fn parse_hunk_new_range(line: &str) -> Option<(u32, u32)> {
+    let plus = line.split_whitespace().find(|t| t.starts_with('+'))?;
+    let mut parts = plus[1..].splitn(2, ',');
+    let start: u32 = parts.next()?.parse().ok()?;
+    let len: u32 = match parts.next() {
+        Some(l) => l.parse().ok()?,
+        None => 1,
+    };
+    Some((start, len))
+}
+
+/// Collect the changed line ranges of the working tree vs. `reference`. Modified
+/// and added regions come from `git diff --unified=0`; brand-new untracked files
+/// are treated as entirely changed so all of their functions are in scope.
+fn collect_changed_lines(reference: &str) -> Result<ChangedLines> {
+    let root = git_output(&["rev-parse", "--show-toplevel"])?;
+    let root = PathBuf::from(root.trim());
+
+    let diff = git_output(&["diff", "--unified=0", "--no-color", reference])?;
+    let mut map: HashMap<PathBuf, Vec<(u32, u32)>> = HashMap::new();
+    let mut current: Option<PathBuf> = None;
+
+    for line in diff.lines() {
+        if let Some(rest) = line.strip_prefix("+++ ") {
+            // `+++ b/<path>` for the post-image; `+++ /dev/null` for a deletion
+            // (nothing in the current tree to attribute, so drop scope).
+            let rest = rest.split('\t').next().unwrap_or(rest);
+            current = if rest == "/dev/null" {
+                None
+            } else {
+                let rel = rest.strip_prefix("b/").unwrap_or(rest);
+                Some(canonicalize_path(&root.join(rel)))
+            };
+        } else if line.starts_with("@@") {
+            if let Some(path) = &current {
+                if let Some((start, len)) = parse_hunk_new_range(line) {
+                    if len > 0 {
+                        map.entry(path.clone())
+                            .or_default()
+                            .push((start, start + len - 1));
+                    }
+                }
+            }
+        }
+    }
+
+    // Untracked files are newly added in full; cover the whole file so every
+    // function counts as touched.
+    let untracked = git_output(&["ls-files", "--others", "--exclude-standard"])?;
+    for rel in untracked.lines() {
+        if rel.is_empty() {
+            continue;
+        }
+        map.entry(canonicalize_path(&root.join(rel)))
+            .or_default()
+            .push((1, u32::MAX));
+    }
+
+    Ok(ChangedLines { map })
+}
+
+/// A one-line pointer printed under AI-metric violations, expanding the acronyms
+/// and pointing at `--explain`. Returns None when no AI metric was violated.
+fn ai_metric_pointer(any_aird: bool, any_aicp: bool) -> Option<String> {
+    match (any_aird, any_aicp) {
+        (true, true) => Some(
+            "  AIRD = AI Reasoning Difficulty, AICP = AI Context Pressure — run \
+             `knots --explain aird` / `knots --explain aicp` for how to lower them."
+                .to_string(),
+        ),
+        (true, false) => Some(
+            "  AIRD = AI Reasoning Difficulty — run `knots --explain aird` for how to lower it."
+                .to_string(),
+        ),
+        (false, true) => Some(
+            "  AICP = AI Context Pressure — run `knots --explain aicp` for how to lower it."
+                .to_string(),
+        ),
+        (false, false) => None,
+    }
+}
+
 fn check_thresholds(
     metrics: &[FunctionMetrics],
     t: &Thresholds,
     baseline: Option<&Baseline>,
+    changed: Option<&ChangedLines>,
 ) -> Result<()> {
     if !t.active() {
         return Ok(());
@@ -520,8 +796,20 @@ fn check_thresholds(
 
     let mut output_lines: Vec<String> = Vec::new();
     let mut violation_count: usize = 0;
+    // Track whether any AI metric was violated so we can append a one-line
+    // pointer expanding the acronym (users meet AIRD/AICP first at the CLI).
+    let mut any_aird = false;
+    let mut any_aicp = false;
 
     for func in metrics {
+        // In --changed / --since mode, only gate functions that overlap a
+        // changed line range — untouched pre-existing offenders are skipped.
+        if let Some(changed) = changed {
+            if !changed.overlaps(&func.file_path, func.start_line, func.end_line) {
+                continue;
+            }
+        }
+
         let base: Option<&BaselineEntry> = index
             .as_ref()
             .and_then(|idx| idx.get(&(func.file_path.as_str(), func.name.as_str())).copied());
@@ -539,12 +827,10 @@ fn check_thresholds(
 
         if !fv.is_empty() {
             violation_count += 1;
-            let loc = if func.file_path.is_empty() {
-                format!("{}:{}", func.name, func.start_line)
-            } else {
-                format!("{}:{}:{}", func.file_path, func.start_line, func.name)
-            };
+            let loc = func_location(func);
             let aird_violated = fv.iter().any(|s| s.starts_with("AIRD"));
+            any_aird |= aird_violated;
+            any_aicp |= fv.iter().any(|s| s.starts_with("AICP"));
             let drivers_suffix = if aird_violated {
                 let drivers = aird_drivers(func, 2);
                 if drivers.is_empty() {
@@ -575,6 +861,9 @@ fn check_thresholds(
         for line in &output_lines {
             eprintln!("{}", line);
         }
+        if let Some(pointer) = ai_metric_pointer(any_aird, any_aicp) {
+            eprintln!("{}", pointer);
+        }
         if baseline.is_some() {
             anyhow::bail!(
                 "{} function(s) regressed beyond the baseline. Run with --write-baseline to accept the current state.",
@@ -592,6 +881,12 @@ fn check_thresholds(
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    // --explain prints a metric's meaning and exits; no files required.
+    if let Some(metric) = args.explain {
+        println!("{}", explain_metric(metric));
+        return Ok(());
+    }
 
     // Load filter rules
     let include_rules = if let Some(path) = &args.include {
@@ -677,6 +972,18 @@ fn main() -> Result<()> {
         None => None,
     };
 
+    // Resolve --changed / --since to a git ref, then collect the changed line
+    // ranges used to scope gating. `--changed` is sugar for `--since HEAD`.
+    let changed_ref: Option<&str> = if args.changed {
+        Some("HEAD")
+    } else {
+        args.since.as_deref()
+    };
+    let changed = match changed_ref {
+        Some(reference) => Some(collect_changed_lines(reference)?),
+        None => None,
+    };
+
     // Structured output modes: collect all metrics then emit and exit.
     // These bypass text/matrix output so only the structured data goes to stdout.
     match args.format {
@@ -754,7 +1061,7 @@ fn main() -> Result<()> {
         }
 
         display_testability_matrix(&all_metrics, files.len(), skipped_files);
-        check_thresholds(&all_metrics, &thresholds, baseline.as_ref())?;
+        check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
         return Ok(());
     }
 
@@ -769,6 +1076,7 @@ fn main() -> Result<()> {
         analyze_code(
             &tree,
             &source_code,
+            file.to_str().unwrap_or(""),
             args.verbose,
             &include_rules,
             &exclude_rules,
@@ -780,7 +1088,7 @@ fn main() -> Result<()> {
             &include_rules,
             &exclude_rules,
         );
-        check_thresholds(&metrics, &thresholds, baseline.as_ref())?;
+        check_thresholds(&metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
         return Ok(());
     }
 
@@ -831,7 +1139,7 @@ fn main() -> Result<()> {
     // Display summary with top 5 worst functions and totals/averages
     display_recursive_summary(&all_metrics, files.len(), skipped_files, args.report.as_deref());
 
-    check_thresholds(&all_metrics, &thresholds, baseline.as_ref())?;
+    check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
     Ok(())
 }
 
@@ -1218,11 +1526,13 @@ fn should_process_function(
 fn analyze_code(
     tree: &Tree,
     source_code: &str,
+    file_path: &str,
     verbose: bool,
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
 ) -> Result<()> {
-    let metrics = collect_function_metrics(tree, source_code, "", include_rules, exclude_rules);
+    let metrics =
+        collect_function_metrics(tree, source_code, file_path, include_rules, exclude_rules);
 
     let mut total_mccabe = 0;
     let mut total_cognitive = 0;
@@ -1248,7 +1558,7 @@ fn analyze_code(
         let emoji = get_complexity_emoji(func.max_complexity());
 
         if verbose {
-            println!("Function: {} {}", func.name, emoji);
+            println!("Function: {} {}", func_location(func), emoji);
             println!("  McCabe Complexity: {}", func.mccabe);
             println!("  Cognitive Complexity: {}", func.cognitive);
             println!("  Nesting Depth: {}", func.nesting);
@@ -1280,7 +1590,7 @@ fn analyze_code(
         } else {
             println!(
                 "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
-                emoji, func.name, func.mccabe, func.cognitive, func.nesting, func.sloc,
+                emoji, func_location(func), func.mccabe, func.cognitive, func.nesting, func.sloc,
                 func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aird,
                 func.aicp, func.external_calls
             );
@@ -1610,11 +1920,7 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool, path: &
         let emoji = get_complexity_emoji(func.max_complexity());
 
         if verbose {
-            writeln!(
-                file,
-                "Function: {} {} [{}]",
-                func.name, emoji, func.file_path
-            )?;
+            writeln!(file, "Function: {} {}", func_location(func), emoji)?;
             writeln!(file, "  McCabe Complexity: {}", func.mccabe)?;
             writeln!(file, "  Cognitive Complexity: {}", func.cognitive)?;
             writeln!(file, "  Nesting Depth: {}", func.nesting)?;
@@ -1660,8 +1966,8 @@ fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool, path: &
         } else {
             writeln!(
                 file,
-                "{} {} [{}] (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
-                emoji, func.name, func.file_path, func.mccabe, func.cognitive, func.nesting,
+                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
+                emoji, func_location(func), func.mccabe, func.cognitive, func.nesting,
                 func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score,
                 func.aird, func.aicp, func.external_calls
             )?;
@@ -1684,7 +1990,7 @@ fn display_recursive_summary(
     println!("\n=== TOP 5 WORST FUNCTIONS ===\n");
     for (i, func) in sorted.iter().take(5).enumerate() {
         let emoji = get_complexity_emoji(func.max_complexity());
-        println!("{}. {} {} [{}]", i + 1, emoji, func.name, func.file_path);
+        println!("{}. {} {}", i + 1, emoji, func_location(func));
         println!("   McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {}",
             func.mccabe, func.cognitive, func.nesting, func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score, func.aird, func.aicp, func.external_calls
         );
@@ -2384,6 +2690,19 @@ mod tests {
         }
     }
 
+    /// file:line:name locator (FEEDBACK #6) so editors can jump from any line.
+    #[test]
+    fn test_func_location() {
+        let mut f = fixture(0, 0, 0, 0, 0);
+        f.file_path = "src/input.rs".into();
+        f.name = "dispatch".into();
+        f.start_line = 656;
+        assert_eq!(func_location(&f), "src/input.rs:656:dispatch");
+        // Fallback when the path is unknown (matches the violation-block format).
+        f.file_path = String::new();
+        assert_eq!(func_location(&f), "dispatch:656");
+    }
+
     /// The motivating case from FEEDBACK.md #1: a function dominated by cognitive
     /// then sloc should report those two as drivers, by *raw* value.
     #[test]
@@ -2451,7 +2770,7 @@ mod tests {
     #[test]
     fn test_no_baseline_flags_violation() {
         let metrics = vec![func_aird("a.rs", "f", 98)];
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), None).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), None, None).is_err());
     }
 
     /// A pre-existing offender at exactly its baselined score is tolerated.
@@ -2459,7 +2778,7 @@ mod tests {
     fn test_baseline_tolerates_preexisting_equal() {
         let metrics = vec![func_aird("a.rs", "f", 98)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_ok());
     }
 
     /// Still over threshold but better than baseline (98 -> 90) is tolerated.
@@ -2467,7 +2786,7 @@ mod tests {
     fn test_baseline_tolerates_improvement() {
         let metrics = vec![func_aird("a.rs", "f", 90)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_ok());
     }
 
     /// A baselined function that got worse (98 -> 99) is a regression and fails.
@@ -2475,7 +2794,7 @@ mod tests {
     fn test_baseline_flags_regression() {
         let metrics = vec![func_aird("a.rs", "f", 99)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_err());
     }
 
     /// An over-threshold function absent from the baseline is new debt and fails.
@@ -2483,7 +2802,7 @@ mod tests {
     fn test_baseline_flags_new_function() {
         let metrics = vec![func_aird("a.rs", "g", 98)];
         let b = baseline_with_aird("a.rs", "f", 98); // different name -> miss
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_err());
     }
 
     /// The key is (file, function): same name in a different file is not matched.
@@ -2491,7 +2810,7 @@ mod tests {
     fn test_baseline_key_is_file_and_function() {
         let metrics = vec![func_aird("b.rs", "f", 98)];
         let b = baseline_with_aird("a.rs", "f", 98); // different file -> miss
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_err());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_err());
     }
 
     /// A function under threshold never fails, even if baselined higher.
@@ -2499,7 +2818,7 @@ mod tests {
     fn test_baseline_under_threshold_ok() {
         let metrics = vec![func_aird("a.rs", "f", 10)];
         let b = baseline_with_aird("a.rs", "f", 98);
-        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b)).is_ok());
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), None).is_ok());
     }
 
     /// Baseline survives a serialize/parse round-trip and indexes by (file, fn).
@@ -2510,5 +2829,118 @@ mod tests {
         let parsed: Baseline = serde_json::from_str(&json).unwrap();
         let idx = parsed.index();
         assert_eq!(idx.get(&("a.rs", "f")).unwrap().aird, 98);
+    }
+
+    // ---- --changed / --since scoping ----
+
+    /// `@@ -a,b +c,d @@` yields the new-file range `(c, d)`.
+    #[test]
+    fn test_parse_hunk_new_range_full() {
+        assert_eq!(parse_hunk_new_range("@@ -10,3 +12,5 @@ fn foo()"), Some((12, 5)));
+    }
+
+    /// A single-line hunk omits the count on the `+` side; it defaults to 1.
+    #[test]
+    fn test_parse_hunk_new_range_default_len() {
+        assert_eq!(parse_hunk_new_range("@@ -10 +14 @@"), Some((14, 1)));
+    }
+
+    /// A header with no `+` token (or garbage) parses to None.
+    #[test]
+    fn test_parse_hunk_new_range_malformed() {
+        assert_eq!(parse_hunk_new_range("@@ no plus here @@"), None);
+        assert_eq!(parse_hunk_new_range("not a hunk"), None);
+    }
+
+    /// Build a ChangedLines keyed by a path that does not exist on disk so
+    /// `canonicalize_path` falls back to the literal path on both insert and
+    /// lookup — lets us unit-test overlap logic without touching the filesystem.
+    fn changed_with(file: &str, ranges: &[(u32, u32)]) -> ChangedLines {
+        let mut map = HashMap::new();
+        map.insert(canonicalize_path(Path::new(file)), ranges.to_vec());
+        ChangedLines { map }
+    }
+
+    #[test]
+    fn test_overlaps_intersecting() {
+        let c = changed_with("nope_a.rs", &[(10, 20)]);
+        assert!(c.overlaps("nope_a.rs", 15, 25)); // straddles the start
+        assert!(c.overlaps("nope_a.rs", 5, 12)); // straddles the end
+        assert!(c.overlaps("nope_a.rs", 1, 100)); // contains it
+        assert!(c.overlaps("nope_a.rs", 20, 20)); // touches the boundary
+    }
+
+    #[test]
+    fn test_overlaps_disjoint_and_missing_file() {
+        let c = changed_with("nope_b.rs", &[(10, 20)]);
+        assert!(!c.overlaps("nope_b.rs", 1, 9)); // entirely before
+        assert!(!c.overlaps("nope_b.rs", 21, 30)); // entirely after
+        assert!(!c.overlaps("other.rs", 10, 20)); // file not in the diff
+    }
+
+    /// An over-threshold function that overlaps a changed range fails the gate.
+    #[test]
+    fn test_changed_gates_touched_function() {
+        let mut f = func_aird("nope_c.rs", "f", 98);
+        f.start_line = 10;
+        f.end_line = 30;
+        let metrics = vec![f];
+        let c = changed_with("nope_c.rs", &[(15, 16)]);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), None, Some(&c)).is_err());
+    }
+
+    /// An over-threshold function with no overlapping change is skipped (passes).
+    #[test]
+    fn test_changed_skips_untouched_function() {
+        let mut f = func_aird("nope_d.rs", "f", 98);
+        f.start_line = 10;
+        f.end_line = 30;
+        let metrics = vec![f];
+        let c = changed_with("nope_d.rs", &[(100, 110)]);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), None, Some(&c)).is_ok());
+    }
+
+    // ---- --explain / AI-metric pointer ----
+
+    /// Every ExplainMetric variant yields a non-empty explanation that leads
+    /// with the metric's name (so `--explain <m>` is always useful).
+    #[test]
+    fn test_explain_metric_nonempty() {
+        use ExplainMetric::*;
+        for m in [
+            Mccabe, Cognitive, Nesting, Sloc, Abc, Returns, Aird, Aicp, ExternalCalls,
+        ] {
+            let text = explain_metric(m);
+            assert!(!text.is_empty());
+            assert!(text.lines().next().unwrap().len() > 3);
+        }
+        assert!(explain_metric(Aird).contains("AI Reasoning Difficulty"));
+        assert!(explain_metric(Aicp).contains("AI Context Pressure"));
+    }
+
+    /// The pointer expands only the acronyms that were actually violated, and is
+    /// absent when no AI metric is involved.
+    #[test]
+    fn test_ai_metric_pointer() {
+        assert!(ai_metric_pointer(false, false).is_none());
+        let aird = ai_metric_pointer(true, false).unwrap();
+        assert!(aird.contains("AI Reasoning Difficulty") && !aird.contains("Context Pressure"));
+        let aicp = ai_metric_pointer(false, true).unwrap();
+        assert!(aicp.contains("AI Context Pressure") && !aicp.contains("Reasoning Difficulty"));
+        let both = ai_metric_pointer(true, true).unwrap();
+        assert!(both.contains("AI Reasoning Difficulty") && both.contains("AI Context Pressure"));
+    }
+
+    /// --changed composes with --baseline: a touched function that regressed
+    /// beyond its baseline still fails; the changed-scope only narrows the set.
+    #[test]
+    fn test_changed_composes_with_baseline() {
+        let mut f = func_aird("nope_e.rs", "f", 99);
+        f.start_line = 10;
+        f.end_line = 30;
+        let metrics = vec![f];
+        let b = baseline_with_aird("nope_e.rs", "f", 98); // worsened 98 -> 99
+        let c = changed_with("nope_e.rs", &[(12, 12)]);
+        assert!(check_thresholds(&metrics, &aird_thresholds(85), Some(&b), Some(&c)).is_err());
     }
 }
