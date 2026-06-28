@@ -534,10 +534,10 @@ ordering is preserved (curl hardest, lua easiest).
 | hostapd_config_read_eap_user | 93 | 95 | 299 | 299 | ✓ stable |
 | mosquitto_validate_utf8 | 57 | 59 | 66 | 66 | ✓ stable |
 | sqlite3VdbeExec | 90 | 91 | 4,977 | 4,927 | ✓ stable (corpus update) |
-| luaV_execute | 87 | 76 | 751 | 34 | ⚠ SLOC regression (see below) |
+| luaV_execute | 87 | 89 | 751 | 751 | ✓ stable (SLOC regression fixed in #29) |
 | parse_sae_password | 95 | n/a | — | — | removed from hostap corpus |
 
-### SLOC Deflation Regression (vmcase macro pattern)
+### SLOC Deflation Regression (vmcase macro pattern) — Fixed in #29
 
 `luaV_execute` in lvm.c (Lua 5.5.1-dev) shows SLOC=34 vs the expected ~750. Root cause:
 the `nested_fn_sloc` subtraction (added to handle genuine nested function definitions in
@@ -575,9 +575,9 @@ whose declarator is a `call_expression` (macro pattern) rather than a plain `ide
 
 | # | Language | Finding | Todo |
 |---|----------|---------|------|
-| 19 | JavaScript | `.jsx` extension not in `SUPPORTED_EXTENSIONS`; all JSX files skipped by `--recursive` | #19 |
+| 19 | JavaScript | `.jsx` extension not in `SUPPORTED_EXTENSIONS`; all JSX files skipped by `--recursive` — **fixed**: `.jsx` added to `SUPPORTED_EXTENSIONS` and `language_for_file` | closed |
 | 20 | Kotlin | knots finds 19% more functions than lizard (381 vs 319) — **resolved**: 55 single-expression funs lizard misses + 7 abstract declarations; knots correct | closed |
-| 21 | Rust | knots McCabe ~41% lower than rca due to `?` not counted as branch | #21 |
+| 21 | Rust | knots McCabe ~41% lower than rca due to `?` not counted as branch — **fixed**: `?` and `?`-family short-circuit operators now count as +1 McCabe | closed |
 | 22 | TypeScript | knots finds 81% fewer functions than lizard on zod — **resolved**: ~4,900 anonymous arrow callbacks; named counts similar | closed |
 | 23 | Go | knots finds 26% fewer functions than lizard on cobra — **resolved**: 210 anonymous `func_literal`; named counts equal (595 vs 595) | closed |
 | 24 | Lua | `--count-anonymous-closures` did not include Lua anonymous `function_definition` nodes. Fixed in v1.13: assignment-context naming + Lua `function_definition` added to anonymous allowlist. knots (with flag): 1,065; lizard: 1,054 (~equal). | closed |
@@ -585,7 +585,7 @@ whose declarator is a `call_expression` (macro pattern) rather than a plain `ide
 | 26 | Scala | No cross-tool validation corpus established — **resolved**: scala/src/library benchmarked; +151% explained by expression-body `def`s lizard skips. | closed |
 | 27 | Fortran | No cross-tool validation corpus established — **partially resolved**: `.f90` comparable (+15%); `.f` fixed-form significantly undercounts (−45%) due to LAPACK Doxygen comment pattern confusing tree-sitter-fortran. | open |
 | 28 | Fortran | Explicit-only extensions (`.f`, `.h`, `.ads`) silently rejected when passed directly — **fixed in v1.13**: `is_parseable_extension` added to `src/lib.rs`. | closed |
-| 29 | C | `vmcase(args) { block }` macros parsed as `function_definition` by tree-sitter-c; `nested_fn_sloc` subtracts them from outer SLOC — affects `luaV_execute` (SLOC 751→34). Fix: filter macro-call declarators in `accumulate_nested_sloc`. | open |
+| 29 | C | `vmcase(args) { block }` macros parsed as `function_definition` by tree-sitter-c; `nested_fn_sloc` subtracts them from outer SLOC — affects `luaV_execute` (SLOC 751→34). **Fixed**: `is_macro_function_definition` filters `function_definition` nodes whose declarator is `parenthesized_declarator` in `accumulate_nested_sloc`. `luaV_execute` SLOC restored to 751, AIRD 89. | closed |
 
 ---
 
@@ -621,5 +621,4 @@ whose declarator is a `call_expression` (macro pattern) rather than a plain `ide
   actual token usage and tool-call counts, not self-rating
 - AICP threshold recommendation: determine what AICP score correlates with meaningfully
   elevated context-gathering cost in practice
-- Fix vmcase/vmdispatch SLOC deflation (#29): filter macro-call declarators in
-  `accumulate_nested_sloc`
+- ~~Fix vmcase/vmdispatch SLOC deflation (#29)~~ — closed; `parenthesized_declarator` filter in `accumulate_nested_sloc`

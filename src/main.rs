@@ -1543,6 +1543,14 @@ fn nested_fn_sloc(outer: Node, source_code: &str, is_python: bool, is_ada: bool,
     total
 }
 
+fn is_macro_function_definition(node: Node) -> bool {
+    node.kind() == "function_definition"
+        && node
+            .child_by_field_name("declarator")
+            .map(|d| d.kind() == "parenthesized_declarator")
+            .unwrap_or(false)
+}
+
 fn accumulate_nested_sloc(
     node: Node,
     source_code: &str,
@@ -1552,7 +1560,7 @@ fn accumulate_nested_sloc(
     is_lua: bool,
     total: &mut u32,
 ) {
-    if is_function_kind(node.kind()) {
+    if is_function_kind(node.kind()) && !is_macro_function_definition(node) {
         *total += if is_python {
             calculate_sloc_python(node, source_code.as_bytes())
         } else if is_ada {
@@ -2828,6 +2836,42 @@ mod tests {
             }
         });
         result
+    }
+
+    fn c_sloc_map(code: &str) -> Vec<(String, u32)> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_c::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut result = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                let raw = calculate_sloc(node, src.as_bytes());
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, false, false, false, false));
+                result.push((name, sloc));
+            }
+        });
+        result
+    }
+
+    #[test]
+    fn test_c_vmcase_macro_sloc_not_subtracted() {
+        // vmcase(OP_MOVE) { ... } looks like a K&R function_definition to tree-sitter-c
+        // but must NOT be subtracted from the outer function's SLOC.
+        let code = "void outer(void) {\n\
+                    int a = 1;\n\
+                    vmcase(OP_MOVE) {\n\
+                    int b = 2;\n\
+                    int c = 3;\n\
+                    }\n\
+                    int d = 4;\n\
+                    }\n";
+        let map = c_sloc_map(code);
+        let outer = map.iter().find(|(n, _)| n == "outer").map(|(_, s)| *s);
+        // All 8 lines belong to outer; the vmcase block must not be subtracted.
+        assert_eq!(outer, Some(8), "vmcase block SLOC must not be subtracted from outer: {map:?}");
     }
 
     #[test]
