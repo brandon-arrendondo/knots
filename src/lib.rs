@@ -39,6 +39,21 @@ pub use tree_sitter_fortran;
 pub use tree_sitter_scala;
 pub use tree_sitter_lua;
 
+/// Which SLOC variant a language uses (drives comment-stripping strategy).
+#[derive(Clone, Copy, PartialEq)]
+pub enum SlocMode {
+    /// `//` and `/* */` — default for C, C++, Rust, JS, TS, Go, Java, …
+    Default,
+    /// Additionally strips `#`-prefixed comment lines.
+    Python,
+    /// Strips `--` comment lines.
+    Ada,
+    /// Strips `!` comment lines.
+    Fortran,
+    /// Strips `--` comment lines (same prefix as Ada, different grammar).
+    Lua,
+}
+
 /// A language knots can analyze, with its display name and file extensions.
 pub struct LanguageInfo {
     /// Human-facing name, e.g. "C++", "Ada".
@@ -48,6 +63,8 @@ pub struct LanguageInfo {
     /// Extensions parsed only when a file is passed explicitly, never during
     /// recursive discovery (e.g. headers, which often hold vendor/inline code).
     pub explicit_only: &'static [&'static str],
+    /// Comment style used when computing SLOC for this language.
+    pub sloc_mode: SlocMode,
 }
 
 /// The single source of truth for language support. Add a new language here;
@@ -55,22 +72,22 @@ pub struct LanguageInfo {
 /// sync-languages`) every doc that lists languages all derive from this.
 /// Keep one entry per line — `tasks.py` parses this table.
 pub const LANGUAGES: &[LanguageInfo] = &[
-    LanguageInfo { name: "C",          extensions: &["c"],                            explicit_only: &["h"] },
-    LanguageInfo { name: "C++",        extensions: &["cpp", "cc", "cxx", "hpp", "hxx"], explicit_only: &[] },
-    LanguageInfo { name: "Rust",       extensions: &["rs"],                           explicit_only: &[] },
-    LanguageInfo { name: "Python",     extensions: &["py"],                           explicit_only: &[] },
-    LanguageInfo { name: "JavaScript", extensions: &["js", "mjs", "cjs", "jsx"],      explicit_only: &[] },
-    LanguageInfo { name: "TypeScript", extensions: &["ts", "tsx"],                    explicit_only: &[] },
-    LanguageInfo { name: "Ada",        extensions: &["adb", "ada"],                   explicit_only: &["ads"] },
-    LanguageInfo { name: "Go",         extensions: &["go"],                           explicit_only: &[] },
-    LanguageInfo { name: "Java",       extensions: &["java"],                         explicit_only: &[] },
-    LanguageInfo { name: "C#",         extensions: &["cs"],                           explicit_only: &[] },
-    LanguageInfo { name: "Kotlin",     extensions: &["kt", "kts"],                    explicit_only: &[] },
-    LanguageInfo { name: "Swift",      extensions: &["swift"],                        explicit_only: &[] },
-    LanguageInfo { name: "PHP",        extensions: &["php"],                          explicit_only: &[] },
-    LanguageInfo { name: "Fortran",    extensions: &["f90", "f95", "f03", "f08"],     explicit_only: &["f", "for", "f77"] },
-    LanguageInfo { name: "Scala",      extensions: &["scala", "sc"],                  explicit_only: &[] },
-    LanguageInfo { name: "Lua",        extensions: &["lua"],                          explicit_only: &[] },
+    LanguageInfo { name: "C",          extensions: &["c"],                            explicit_only: &["h"],             sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "C++",        extensions: &["cpp", "cc", "cxx", "hpp", "hxx"], explicit_only: &[],             sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Rust",       extensions: &["rs"],                           explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Python",     extensions: &["py"],                           explicit_only: &[],                sloc_mode: SlocMode::Python },
+    LanguageInfo { name: "JavaScript", extensions: &["js", "mjs", "cjs", "jsx"],      explicit_only: &[],               sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "TypeScript", extensions: &["ts", "tsx"],                    explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Ada",        extensions: &["adb", "ada"],                   explicit_only: &["ads"],           sloc_mode: SlocMode::Ada },
+    LanguageInfo { name: "Go",         extensions: &["go"],                           explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Java",       extensions: &["java"],                         explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "C#",         extensions: &["cs"],                           explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Kotlin",     extensions: &["kt", "kts"],                    explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Swift",      extensions: &["swift"],                        explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "PHP",        extensions: &["php"],                          explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Fortran",    extensions: &["f90", "f95", "f03", "f08"],     explicit_only: &["f", "for", "f77"], sloc_mode: SlocMode::Fortran },
+    LanguageInfo { name: "Scala",      extensions: &["scala", "sc"],                  explicit_only: &[],                sloc_mode: SlocMode::Default },
+    LanguageInfo { name: "Lua",        extensions: &["lua"],                          explicit_only: &[],                sloc_mode: SlocMode::Lua },
 ];
 
 /// All source file extensions recognized during recursive discovery, grouped
@@ -179,6 +196,16 @@ pub fn is_parseable_extension(ext: &std::ffi::OsStr) -> bool {
     LANGUAGES
         .iter()
         .any(|lang| lang.extensions.contains(&e) || lang.explicit_only.contains(&e))
+}
+
+/// Returns the SLOC comment-stripping mode for the given file path,
+/// derived from the `LANGUAGES` table (the single source of truth).
+pub fn sloc_mode_for_file(path: &str) -> SlocMode {
+    let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
+    LANGUAGES
+        .iter()
+        .find(|l| l.extensions.contains(&ext) || l.explicit_only.contains(&ext))
+        .map_or(SlocMode::Default, |l| l.sloc_mode)
 }
 
 /// Filter rules for including/excluding files and functions
@@ -750,12 +777,12 @@ fn is_macro_function_definition(node: Node) -> bool {
 /// Stops recursing as soon as a nested function boundary is crossed, so each level
 /// only subtracts one layer of nesting (the recursive call in `collect_function_metrics`
 /// handles the rest).
-pub fn nested_fn_sloc(outer: Node, source_code: &str, is_python: bool, is_ada: bool, is_fortran: bool, is_lua: bool) -> u32 {
+pub fn nested_fn_sloc(outer: Node, source_code: &str, sloc_mode: SlocMode) -> u32 {
     let mut total = 0u32;
     let mut cursor = outer.walk();
     if cursor.goto_first_child() {
         loop {
-            accumulate_nested_sloc(cursor.node(), source_code, is_python, is_ada, is_fortran, is_lua, &mut total);
+            accumulate_nested_sloc(cursor.node(), source_code, sloc_mode, &mut total);
             if !cursor.goto_next_sibling() {
                 break;
             }
@@ -765,32 +792,20 @@ pub fn nested_fn_sloc(outer: Node, source_code: &str, is_python: bool, is_ada: b
     total
 }
 
-fn accumulate_nested_sloc(
-    node: Node,
-    source_code: &str,
-    is_python: bool,
-    is_ada: bool,
-    is_fortran: bool,
-    is_lua: bool,
-    total: &mut u32,
-) {
+fn accumulate_nested_sloc(node: Node, source_code: &str, sloc_mode: SlocMode, total: &mut u32) {
     if is_function_kind(node.kind()) && !is_macro_function_definition(node) {
-        *total += if is_python {
-            calculate_sloc_python(node, source_code.as_bytes())
-        } else if is_ada {
-            calculate_sloc_ada(node, source_code.as_bytes())
-        } else if is_fortran {
-            calculate_sloc_fortran(node, source_code.as_bytes())
-        } else if is_lua {
-            complexity::calculate_sloc_lua(node, source_code.as_bytes())
-        } else {
-            calculate_sloc(node, source_code.as_bytes())
+        *total += match sloc_mode {
+            SlocMode::Python  => calculate_sloc_python(node, source_code.as_bytes()),
+            SlocMode::Ada     => calculate_sloc_ada(node, source_code.as_bytes()),
+            SlocMode::Fortran => calculate_sloc_fortran(node, source_code.as_bytes()),
+            SlocMode::Lua     => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
+            SlocMode::Default => calculate_sloc(node, source_code.as_bytes()),
         };
         return;
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        accumulate_nested_sloc(child, source_code, is_python, is_ada, is_fortran, is_lua, total);
+        accumulate_nested_sloc(child, source_code, sloc_mode, total);
     }
 }
 
@@ -849,24 +864,13 @@ pub fn collect_function_metrics(
     let mut cursor = root_node.walk();
     let mut metrics = Vec::new();
 
-    let is_python = file_path.ends_with(".py");
-    let is_ada = file_path.ends_with(".adb") || file_path.ends_with(".ada");
-    let is_fortran = matches!(
-        std::path::Path::new(file_path)
-            .extension()
-            .and_then(|e| e.to_str()),
-        Some("f90" | "f95" | "f03" | "f08" | "f" | "for" | "f77")
-    );
-    let is_lua = std::path::Path::new(file_path)
-        .extension()
-        .and_then(|e| e.to_str())
-        == Some("lua");
+    let sloc_mode = sloc_mode_for_file(file_path);
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         let name_opt = get_function_name(node, src).or_else(|| {
             let is_anonymous_node = matches!(
                 node.kind(),
                 "func_literal" | "arrow_function" | "function_expression" | "generator_function"
-            ) || (is_lua && node.kind() == "function_definition");
+            ) || (sloc_mode == SlocMode::Lua && node.kind() == "function_definition");
             if count_anonymous_closures && is_anonymous_node {
                 let pos = node.start_position();
                 Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
@@ -879,18 +883,14 @@ pub fn collect_function_metrics(
             let cognitive = calculate_cognitive_complexity(node, src.as_bytes());
             let nesting = calculate_nesting_depth(node);
             let sloc = {
-                let raw = if is_python {
-                    calculate_sloc_python(node, src.as_bytes())
-                } else if is_ada {
-                    calculate_sloc_ada(node, src.as_bytes())
-                } else if is_fortran {
-                    calculate_sloc_fortran(node, src.as_bytes())
-                } else if is_lua {
-                    complexity::calculate_sloc_lua(node, src.as_bytes())
-                } else {
-                    calculate_sloc(node, src.as_bytes())
+                let raw = match sloc_mode {
+                    SlocMode::Python  => calculate_sloc_python(node, src.as_bytes()),
+                    SlocMode::Ada     => calculate_sloc_ada(node, src.as_bytes()),
+                    SlocMode::Fortran => calculate_sloc_fortran(node, src.as_bytes()),
+                    SlocMode::Lua     => complexity::calculate_sloc_lua(node, src.as_bytes()),
+                    SlocMode::Default => calculate_sloc(node, src.as_bytes()),
                 };
-                raw.saturating_sub(nested_fn_sloc(node, src, is_python, is_ada, is_fortran, is_lua))
+                raw.saturating_sub(nested_fn_sloc(node, src, sloc_mode))
             };
             let abc = calculate_abc_complexity(node, src.as_bytes());
             let abc_magnitude = abc.magnitude();

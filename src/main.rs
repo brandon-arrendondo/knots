@@ -1108,7 +1108,7 @@ mod tests {
     use super::*;
     use knots::{
         visit_functions, get_function_name, collect_local_names, nested_fn_sloc,
-        collect_external_call_names,
+        collect_external_call_names, SlocMode,
     };
     use knots::complexity::{calculate_sloc, calculate_sloc_python, TestScoringMetric};
 
@@ -1205,7 +1205,7 @@ mod tests {
         visit_functions(&mut cursor, code, &mut |node, src| {
             if let Some(name) = get_function_name(node, src) {
                 let raw = calculate_sloc(node, src.as_bytes());
-                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, false, false, false, false));
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, SlocMode::Default));
                 result.push((name, sloc));
             }
         });
@@ -1223,7 +1223,7 @@ mod tests {
         visit_functions(&mut cursor, code, &mut |node, src| {
             if let Some(name) = get_function_name(node, src) {
                 let raw = calculate_sloc_python(node, src.as_bytes());
-                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, true, false, false, false));
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, SlocMode::Python));
                 result.push((name, sloc));
             }
         });
@@ -1241,7 +1241,7 @@ mod tests {
         visit_functions(&mut cursor, code, &mut |node, src| {
             if let Some(name) = get_function_name(node, src) {
                 let raw = calculate_sloc(node, src.as_bytes());
-                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, false, false, false, false));
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, SlocMode::Default));
                 result.push((name, sloc));
             }
         });
@@ -2475,14 +2475,13 @@ mod tests {
         parser.set_language(&knots::tree_sitter_lua::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
-        let is_lua = true;
         let mut names = Vec::new();
         visit_functions(&mut cursor, code, &mut |node, src| {
             let name = get_function_name(node, src).or_else(|| {
                 let is_anon = matches!(
                     node.kind(),
                     "func_literal" | "arrow_function" | "function_expression" | "generator_function"
-                ) || (is_lua && node.kind() == "function_definition");
+                ) || node.kind() == "function_definition";
                 if is_anon {
                     let pos = node.start_position();
                     Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))

@@ -99,8 +99,10 @@ There are five SLOC variants, selected by comment style:
 Ada and Lua share a private ``calculate_sloc_line_comment(node, src, prefix)``
 helper parameterised by the comment-prefix byte sequence.
 
-Selection happens in ``main.rs`` via ``is_python`` / ``is_ada`` /
-``is_fortran`` / ``is_lua`` boolean flags derived from file extension.
+Selection is driven by ``SlocMode``, a field on ``LanguageInfo`` in the
+``LANGUAGES`` table.  ``sloc_mode_for_file(path)`` performs a single
+table lookup; ``collect_function_metrics`` dispatches on the result via
+``match``.  No per-language boolean flags are needed.
 
 TestScoring note
 ~~~~~~~~~~~~~~~~
@@ -194,15 +196,7 @@ that will become friction as the language count grows.
    ``get_function_name``, ``collect_local_names_recursive``) into
    ``src/discovery.rs`` would further reduce coupling.
 
-2. **Language-specific booleans scattered across main.rs**
-   ``is_python``, ``is_ada``, ``is_fortran``, ``is_lua`` booleans are
-   derived from file extension strings at least twice in ``main.rs``
-   (``collect_function_metrics`` and ``accumulate_nested_sloc``).  Each new
-   language with a non-default SLOC mode requires another string match in
-   multiple places.  The right fix is to derive the SLOC mode from the
-   grammar/language type, not from extension strings.
-
-3. **No parallel file processing**
+2. **No parallel file processing**
    File analysis is sequential.  For large recursive analyses (hundreds of
    files) this is a visible bottleneck.  ``rayon`` or ``std::thread`` would
    be straightforward to add since each file is independent.
@@ -234,6 +228,13 @@ addressed.
   child-search heuristic with a call to the language-neutral
   ``count_explicit_params``, making the signature component of TestScoring
   correct for all 16 supported languages (task 49).
+- **Language-specific booleans scattered across main.rs** — ``is_python``,
+  ``is_ada``, ``is_fortran``, ``is_lua`` replaced by a ``SlocMode`` enum
+  carried on ``LanguageInfo``.  ``sloc_mode_for_file()`` derives the mode in
+  one place from the ``LANGUAGES`` table; ``nested_fn_sloc`` and
+  ``accumulate_nested_sloc`` now take ``SlocMode`` instead of four booleans.
+  Adding a language with a non-default comment style requires only a new enum
+  variant and a one-field change to its ``LANGUAGES`` entry.
 
 ---------------------------------------------------------------------------
 
