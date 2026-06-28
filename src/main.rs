@@ -289,6 +289,12 @@ struct Args {
     /// 1 when violations are found. Useful for edit→check loops and CI logs.
     #[arg(long, short = 'q')]
     quiet: bool,
+
+    /// Emit anonymous function literals (Go closures, JS/TS arrow callbacks, etc.)
+    /// as independent output entries with synthesized labels like <anonymous>@line:col.
+    /// Default: off (only named functions appear in output).
+    #[arg(long)]
+    count_anonymous_closures: bool,
 }
 
 /// Metrics that `--explain` can describe at the command line.
@@ -994,7 +1000,7 @@ fn main() -> Result<()> {
     // identically regardless of --format. clap's `requires` guarantees a path.
     if args.write_baseline {
         let (all_metrics, _skipped) =
-            collect_all_metrics(&files, &include_rules, &exclude_rules);
+            collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
         let path = args
             .baseline
             .as_ref()
@@ -1031,25 +1037,25 @@ fn main() -> Result<()> {
     match args.format {
         OutputFormat::Sarif => {
             let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules);
+                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
             emit_sarif(&all_metrics)?;
             return Ok(());
         }
         OutputFormat::Json => {
             let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules);
+                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
             emit_json(&all_metrics)?;
             return Ok(());
         }
         OutputFormat::Ndjson => {
             let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules);
+                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
             emit_ndjson(&all_metrics)?;
             return Ok(());
         }
         OutputFormat::Csv => {
             let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules);
+                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
             emit_csv(&all_metrics)?;
             return Ok(());
         }
@@ -1091,6 +1097,7 @@ fn main() -> Result<()> {
                 file.to_str().unwrap_or(""),
                 &include_rules,
                 &exclude_rules,
+                args.count_anonymous_closures,
             );
             all_metrics.extend(metrics);
         }
@@ -1125,6 +1132,7 @@ fn main() -> Result<()> {
                 args.verbose,
                 &include_rules,
                 &exclude_rules,
+                args.count_anonymous_closures,
             )?;
         }
         let metrics = collect_function_metrics(
@@ -1133,6 +1141,7 @@ fn main() -> Result<()> {
             file.to_str().unwrap_or(""),
             &include_rules,
             &exclude_rules,
+            args.count_anonymous_closures,
         );
         check_thresholds(&metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
         return Ok(());
@@ -1167,6 +1176,7 @@ fn main() -> Result<()> {
             file.to_str().unwrap_or(""),
             &include_rules,
             &exclude_rules,
+            args.count_anonymous_closures,
         );
         all_metrics.extend(metrics);
     }
@@ -1598,6 +1608,7 @@ fn collect_function_metrics(
     file_path: &str,
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
+    count_anonymous_closures: bool,
 ) -> Vec<FunctionMetrics> {
     let root_node = tree.root_node();
     let local_names = collect_local_names(root_node, source_code);
@@ -1617,7 +1628,20 @@ fn collect_function_metrics(
         .and_then(|e| e.to_str())
         == Some("lua");
     visit_functions(&mut cursor, source_code, &mut |node, src| {
-        if let Some(name) = get_function_name(node, src) {
+        let name_opt = get_function_name(node, src).or_else(|| {
+            if count_anonymous_closures
+                && matches!(
+                    node.kind(),
+                    "func_literal" | "arrow_function" | "function_expression" | "generator_function"
+                )
+            {
+                let pos = node.start_position();
+                Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
+            } else {
+                None
+            }
+        });
+        if let Some(name) = name_opt {
             let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
             let cognitive = calculate_cognitive_complexity(node, src.as_bytes());
             let nesting = calculate_nesting_depth(node);
@@ -1740,9 +1764,16 @@ fn analyze_code(
     verbose: bool,
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
+    count_anonymous_closures: bool,
 ) -> Result<()> {
-    let metrics =
-        collect_function_metrics(tree, source_code, file_path, include_rules, exclude_rules);
+    let metrics = collect_function_metrics(
+        tree,
+        source_code,
+        file_path,
+        include_rules,
+        exclude_rules,
+        count_anonymous_closures,
+    );
 
     let mut total_mccabe = 0;
     let mut total_cognitive = 0;
@@ -1871,6 +1902,7 @@ fn collect_all_metrics(
     files: &[PathBuf],
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
+    count_anonymous_closures: bool,
 ) -> (Vec<FunctionMetrics>, usize) {
     let mut all_metrics = Vec::new();
     let mut skipped = 0;
@@ -1898,6 +1930,7 @@ fn collect_all_metrics(
             file.to_str().unwrap_or(""),
             include_rules,
             exclude_rules,
+            count_anonymous_closures,
         );
         all_metrics.extend(metrics);
     }
