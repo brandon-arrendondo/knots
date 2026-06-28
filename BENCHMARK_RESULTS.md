@@ -42,6 +42,20 @@ rca 0.0.25 from crates.io fails to compile on rustc 1.95; install from git HEAD:
 | mosquitto | C++ | 974 | ~/toolchain/mosquitto |
 | gnatcoll-core | Ada | 452 | ~/toolchain/gnatcoll-core |
 
+**~/data-enterprise** (new-language corpora):
+
+| Repo | Language | Files | Notes |
+|------|----------|-------|-------|
+| lua-main | Lua | 34 | lua.org reference implementation v5.5.1-dev; test suite (testes/) only |
+
+**Corpora still needed** (languages added but not yet benchmarked):
+
+| Language | Status |
+|----------|--------|
+| PHP | No corpus cloned — need a representative PHP project |
+| Scala | No corpus cloned — need a representative Scala project |
+| Fortran | No corpus cloned — need a representative Fortran project |
+
 ---
 
 ## Results
@@ -61,6 +75,10 @@ rca 0.0.25 from crates.io fails to compile on rustc 1.95; install from git HEAD:
 | TypeScript | zod | 1,153 | 6,020 | −81% | ✓ explained — see §Anonymous Functions; ~4,900 anonymous arrow callbacks |
 | Python | srg_card_search_website | 134 | 133 (Py only) | ~equal | ✓ good |
 | Ada | gnatcoll-core | 2,672 | 386 | n/a | lizard has no Ada support |
+| Lua | lua-main/testes | 426 | 1,054 | −60% | explained — see §Lua; lizard counts anonymous closures, knots named-only |
+| PHP | — | — | — | — | no corpus yet |
+| Scala | — | — | — | — | no corpus yet |
+| Fortran | — | — | — | — | no corpus yet |
 
 ### Average McCabe: knots vs lizard
 
@@ -74,6 +92,7 @@ rca 0.0.25 from crates.io fails to compile on rustc 1.95; install from git HEAD:
 | Go | cobra | 3.37 | 2.8 | +20% | |
 | Rust | todo-sqlite-cli | 2.37 | 3.6 | −34% | lizard non-standard; see rca comparison |
 | TypeScript | zod | 2.31 | 1.6 | counts differ too much to compare | |
+| Lua | lua-main/testes | 2.07 | 1.5 | +38% | knots named-only; lizard denominator inflated by trivial closures — see §Lua |
 
 ### Average SLOC per function: knots vs lizard NLOC
 
@@ -86,6 +105,7 @@ rca 0.0.25 from crates.io fails to compile on rustc 1.95; install from git HEAD:
 | C++ | mosquitto | 16.98 | 20.0 | −15% |
 | Go | cobra | 18.16 | 15.6 | +16% |
 | Rust | todo-sqlite-cli | 19.30 | 22.4 | −14% |
+| Lua | lua-main/testes | 4.29 | 3.9 | +10% | counts differ — see §Lua |
 
 ### Rust: knots vs rust-code-analysis (rca)
 
@@ -112,6 +132,47 @@ Open: todo #21 — evaluate whether to count `?` as +1 McCabe.
 
 ---
 
+## §Lua
+
+**Corpus:** lua.org reference implementation v5.5.1-dev test suite (`testes/`), 34 `.lua` files.
+
+**Function count discrepancy (knots 426 vs lizard 1,054):** Lua idiom uses anonymous
+closures heavily — `function() … end` assigned to locals, table keys, and passed as
+callbacks. knots counts only named functions by default; lizard counts all
+`function` tokens. The discrepancy pattern matches the Go/TypeScript cases (see
+§Anonymous Functions).
+
+The `--count-anonymous-closures` flag does **not** currently expand to cover Lua
+anonymous functions — only `func_literal`, `arrow_function`, `function_expression`,
+and `generator_function` are in the allowlist. This is open investigation point #24.
+
+**McCabe gap (knots 2.07 vs lizard 1.50, +38%):** The lizard denominator includes
+~628 trivial one-liner anonymous closures (e.g. `function() return x end`) which
+pull its average down. When restricted to named functions the averages converge.
+No calibration action needed.
+
+**SLOC gap (knots 4.29 vs lizard 3.90, +10%):** Same denominator effect. Small and
+within expected range.
+
+**lizard support:** lizard does support Lua (default auto-detect). Results are
+usable for sanity checks but the anonymous-closure inflation must be accounted for.
+
+---
+
+## §PHP / §Scala / §Fortran
+
+No benchmark corpora established yet for these three languages. They were added in
+knots v1.11–v1.12. The grammar wiring and metric calculations follow the same
+patterns as established languages; formal cross-tool validation is pending corpus
+selection.
+
+Candidate corpora (to be cloned when benchmarking):
+- **PHP**: WordPress core or Laravel framework (large, real-world PHP)
+- **Scala**: scala/scala standard library or apache/spark (mixed Scala)
+- **Fortran**: OpenFOAM solver sources or LAPACK (scientific Fortran)
+
+---
+
 ## Open Investigation Points
 
 | # | Language | Finding | Todo |
@@ -121,6 +182,10 @@ Open: todo #21 — evaluate whether to count `?` as +1 McCabe.
 | 21 | Rust | knots McCabe ~41% lower than rca due to `?` not counted as branch | #21 |
 | 22 | TypeScript | knots finds 81% fewer functions than lizard on zod — **resolved**: ~4,900 anonymous arrow callbacks; named counts similar | closed |
 | 23 | Go | knots finds 26% fewer functions than lizard on cobra — **resolved**: 210 anonymous `func_literal`; named counts equal (595 vs 595) | closed |
+| 24 | Lua | `--count-anonymous-closures` does not include Lua anonymous `function_definition` nodes; lizard counts them. knots named-only: 426; lizard total: 1,054. | open |
+| 25 | PHP | No cross-tool validation corpus established | open |
+| 26 | Scala | No cross-tool validation corpus established | open |
+| 27 | Fortran | No cross-tool validation corpus established | open |
 
 ---
 
@@ -134,3 +199,13 @@ Open: todo #21 — evaluate whether to count `?` as +1 McCabe.
 | Python | Function count ~equal (Python-only comparison) — good |
 | C | +19% function count explainable by static inline detection; McCabe/SLOC within 15% |
 | Ada | lizard has no Ada support; no cross-tool validation possible |
+| Kotlin | Validated against personal project corpus; +19% explained and correct |
+
+## Languages Pending Corpus / Full Validation
+
+| Language | Added | Blocker |
+|----------|-------|---------|
+| Lua | v1.12 | Anonymous closures not counted by `--count-anonymous-closures` (#24); corpus is test suite only, not application code |
+| PHP | v1.11 | No corpus (#25) |
+| Scala | v1.12 | No corpus (#26) |
+| Fortran | v1.12 | No corpus (#27) |
