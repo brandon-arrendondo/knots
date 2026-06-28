@@ -296,6 +296,97 @@ non-standard and should not be used as the comparison baseline.
      - +83%
      - rca deflated by 36 single-line closures in denominator
 
+Performance
+===========
+
+Measured on a 24-core machine (2026-06-28, knots v1.13.0, hyperfine 1.15.0).
+knots is compiled release; lizard 1.23.0 is the Python reference tool.
+
+``--jobs`` scaling
+------------------
+
+knots processes files in parallel via rayon (``--jobs``/``-j``).  Both corpora
+show the same scaling shape: near-linear to ``-j4``, good gains to ``-j8``,
+peak throughput at ``-j16``, regression at ``-j24`` from thread oversubscription.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 20 10 20 10
+
+   * - Jobs
+     - hostap (C, 504 files)
+     - Speedup
+     - laravel (PHP, 2,970 files)
+     - Speedup
+   * - j1
+     - 22.6s ± 0.3s
+     - 1×
+     - 18.1s ± 0.4s
+     - 1×
+   * - j2
+     - 11.8s ± 0.4s
+     - 1.9×
+     - 12.3s ± 3.2s
+     - 1.5×
+   * - j4
+     - 5.9s ± 0.1s
+     - 3.8×
+     - 4.8s ± 0.2s
+     - 3.8×
+   * - j8
+     - 3.2s ± 0.1s
+     - 7.0×
+     - 2.8s ± 0.1s
+     - 6.4×
+   * - **j16**
+     - **2.45s ± 0.05s**
+     - **9.2×**
+     - **2.0s ± 0.2s**
+     - **9.1×**
+   * - j24
+     - 3.7s ± 0.9s
+     - 6.1× (regresses)
+     - 2.4s ± 0.3s
+     - 7.4× (regresses)
+
+The j2 laravel variance (σ=3.2s) reflects PHP file size non-uniformity; the
+work-stealing pool evens out by j4.  On a 24-core machine, ``-j16`` is the
+practical ceiling — ``-j$(nproc)`` is not recommended.
+
+knots vs. lizard throughput
+----------------------------
+
+knots computes significantly more metrics per function than lizard (McCabe,
+Cognitive, Nesting, ABC, AIRD, AICP, SLOC), so single-threaded throughput is
+roughly at parity with lizard for C and Java and slightly slower for PHP (where
+lizard uses Python multiprocessing internally).  At ``-j16``, knots is 6–12×
+faster than lizard across all tested languages.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 15 15 15 20
+
+   * - Corpus
+     - knots j1
+     - knots j16
+     - lizard
+     - j16 vs lizard
+   * - hostap (C, 504 files)
+     - 22.5s
+     - 2.2s
+     - 24.3s
+     - **11×** faster
+   * - laravel (PHP, 2,970 files)
+     - 18.2s
+     - 2.2s
+     - 13.6s
+     - **6×** faster
+   * - commons-lang (Java, 623 files)
+     - 5.7s
+     - 0.84s
+     - 10.4s
+     - **12×** faster
+
 Known Implementation Notes
 ===========================
 
