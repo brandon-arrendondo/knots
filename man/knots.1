@@ -149,6 +149,15 @@ Exit 1 if any function exceeds this AICP score.
 .BI \-\-external\-calls\-threshold " N"
 Exit 1 if any function exceeds this external call count.
 .TP
+.BI \-j " N" ", " \-\-jobs " N"
+Number of parallel analysis threads when processing multiple files.
+.B 0
+(the default) auto-detects available CPU cores;
+.B 1
+forces sequential processing; any other value pins the thread-pool to
+that count.
+Has no effect when analyzing a single file.
+.TP
 .BR \-h ", " \-\-help
 Print help message.
 .TP
@@ -227,6 +236,13 @@ Analyze a Rust project:
 .RS
 .nf
 knots \-r src/
+.fi
+.RE
+.PP
+Parallel analysis of a large codebase:
+.RS
+.nf
+knots \-r \-j 8 path/to/bigproject/
 .fi
 .RE
 .PP
