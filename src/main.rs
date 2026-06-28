@@ -14,7 +14,7 @@ use complexity::{
     calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_aird_raw,
     calculate_cognitive_complexity, calculate_state_coupling,
     calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
-    calculate_sloc_ada, calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
+    calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_lua, calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
 };
 use knots::{is_source_extension, language_for_file};
 
@@ -1369,7 +1369,11 @@ fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut Hash
         | "func_literal"
         | "constructor_declaration"
         | "local_function_statement"
-        | "init_declaration" => {
+        | "init_declaration"
+        | "function"
+        | "subroutine"
+        | "module_procedure"
+        | "program" => {
             if let Some(name) = get_function_name(node, source_code) {
                 names.insert(name);
             }
@@ -1533,6 +1537,10 @@ fn is_function_kind(kind: &str) -> bool {
             | "constructor_declaration"
             | "local_function_statement"
             | "init_declaration"
+            | "function"
+            | "subroutine"
+            | "module_procedure"
+            | "program"
     )
 }
 
@@ -1540,12 +1548,12 @@ fn is_function_kind(kind: &str) -> bool {
 /// Stops recursing as soon as a nested function boundary is crossed, so each level
 /// only subtracts one layer of nesting (the recursive call in `collect_function_metrics`
 /// handles the rest).
-fn nested_fn_sloc(outer: Node, source_code: &str, is_python: bool, is_ada: bool) -> u32 {
+fn nested_fn_sloc(outer: Node, source_code: &str, is_python: bool, is_ada: bool, is_fortran: bool, is_lua: bool) -> u32 {
     let mut total = 0u32;
     let mut cursor = outer.walk();
     if cursor.goto_first_child() {
         loop {
-            accumulate_nested_sloc(cursor.node(), source_code, is_python, is_ada, &mut total);
+            accumulate_nested_sloc(cursor.node(), source_code, is_python, is_ada, is_fortran, is_lua, &mut total);
             if !cursor.goto_next_sibling() {
                 break;
             }
@@ -1560,6 +1568,8 @@ fn accumulate_nested_sloc(
     source_code: &str,
     is_python: bool,
     is_ada: bool,
+    is_fortran: bool,
+    is_lua: bool,
     total: &mut u32,
 ) {
     if is_function_kind(node.kind()) {
@@ -1567,6 +1577,10 @@ fn accumulate_nested_sloc(
             calculate_sloc_python(node, source_code.as_bytes())
         } else if is_ada {
             calculate_sloc_ada(node, source_code.as_bytes())
+        } else if is_fortran {
+            calculate_sloc_fortran(node, source_code.as_bytes())
+        } else if is_lua {
+            calculate_sloc_lua(node, source_code.as_bytes())
         } else {
             calculate_sloc(node, source_code.as_bytes())
         };
@@ -1574,7 +1588,7 @@ fn accumulate_nested_sloc(
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        accumulate_nested_sloc(child, source_code, is_python, is_ada, total);
+        accumulate_nested_sloc(child, source_code, is_python, is_ada, is_fortran, is_lua, total);
     }
 }
 
@@ -1592,6 +1606,16 @@ fn collect_function_metrics(
 
     let is_python = file_path.ends_with(".py");
     let is_ada = file_path.ends_with(".adb") || file_path.ends_with(".ada");
+    let is_fortran = matches!(
+        std::path::Path::new(file_path)
+            .extension()
+            .and_then(|e| e.to_str()),
+        Some("f90" | "f95" | "f03" | "f08" | "f" | "for" | "f77")
+    );
+    let is_lua = std::path::Path::new(file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        == Some("lua");
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         if let Some(name) = get_function_name(node, src) {
             let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
@@ -1602,10 +1626,14 @@ fn collect_function_metrics(
                     calculate_sloc_python(node, src.as_bytes())
                 } else if is_ada {
                     calculate_sloc_ada(node, src.as_bytes())
+                } else if is_fortran {
+                    calculate_sloc_fortran(node, src.as_bytes())
+                } else if is_lua {
+                    calculate_sloc_lua(node, src.as_bytes())
                 } else {
                     calculate_sloc(node, src.as_bytes())
                 };
-                raw.saturating_sub(nested_fn_sloc(node, src, is_python, is_ada))
+                raw.saturating_sub(nested_fn_sloc(node, src, is_python, is_ada, is_fortran, is_lua))
             };
             let abc = calculate_abc_complexity(node, src.as_bytes());
             let abc_magnitude = abc.magnitude();
@@ -2445,6 +2473,11 @@ where
             | "constructor_declaration"
             | "local_function_statement"
             | "init_declaration"
+            // Fortran: function subprogram, subroutine subprogram, module procedure, main program
+            | "function"
+            | "subroutine"
+            | "module_procedure"
+            | "program"
     ) {
         callback(node, source_code);
     }
@@ -2616,6 +2649,63 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
         return None;
     }
 
+    // Fortran: function/subroutine/module_procedure extract the name from their header statement.
+    // program extracts from program_statement whose first named child is the name.
+    if node.kind() == "function" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "function_statement" {
+                return child
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+                    .map(|s| s.to_string());
+            }
+        }
+        return None;
+    }
+    if node.kind() == "subroutine" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "subroutine_statement" {
+                return child
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+                    .map(|s| s.to_string());
+            }
+        }
+        return None;
+    }
+    if node.kind() == "module_procedure" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "module_procedure_statement" {
+                return child
+                    .child_by_field_name("name")
+                    .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+                    .map(|s| s.to_string());
+            }
+        }
+        return None;
+    }
+    if node.kind() == "program" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "program_statement" {
+                // Fortran PROGRAM unit — extract its name (or use "program" if unnamed)
+                let mut inner = child.walk();
+                for name_node in child.named_children(&mut inner) {
+                    return name_node
+                        .utf8_text(source_code.as_bytes())
+                        .ok()
+                        .map(|s| s.to_string());
+                }
+                return Some("program".to_string());
+            }
+        }
+        // No program_statement → this is a JS/TS/Java/PHP root node, not a Fortran program
+        return None;
+    }
+
     // C/C++ function_definition uses a declarator chain
     let mut cursor = node.walk();
 
@@ -2770,7 +2860,7 @@ mod tests {
         visit_functions(&mut cursor, code, &mut |node, src| {
             if let Some(name) = get_function_name(node, src) {
                 let raw = calculate_sloc(node, src.as_bytes());
-                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, false, false));
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, false, false, false, false));
                 result.push((name, sloc));
             }
         });
@@ -2788,7 +2878,7 @@ mod tests {
         visit_functions(&mut cursor, code, &mut |node, src| {
             if let Some(name) = get_function_name(node, src) {
                 let raw = calculate_sloc_python(node, src.as_bytes());
-                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, true, false));
+                let sloc = raw.saturating_sub(nested_fn_sloc(node, src, true, false, false, false));
                 result.push((name, sloc));
             }
         });
@@ -3851,5 +3941,146 @@ mod tests {
         let mut names = discover_php_functions(code);
         names.sort();
         assert_eq!(names, vec!["__construct", "greet"]);
+    }
+
+    // ---- Fortran function discovery tests ----
+
+    fn discover_fortran_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_fortran::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_fortran_discover_simple_function() {
+        let code = "function add(a, b)\n  implicit none\n  integer :: add, a, b\n  add = a + b\nend function add";
+        let names = discover_fortran_functions(code);
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_fortran_discover_subroutine() {
+        let code = "subroutine greet(name)\n  character(*) :: name\n  print *, 'Hello ', name\nend subroutine greet";
+        let names = discover_fortran_functions(code);
+        assert_eq!(names, vec!["greet"]);
+    }
+
+    #[test]
+    fn test_fortran_discover_multiple() {
+        let code = "function foo(x)\n  integer :: foo, x\n  foo = x\nend function foo\n\nsubroutine bar()\nend subroutine bar";
+        let mut names = discover_fortran_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    // ---- Scala function discovery tests ----
+
+    fn discover_scala_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_scala::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_scala_discover_simple_def() {
+        let code = "def add(a: Int, b: Int): Int = a + b";
+        let names = discover_scala_functions(code);
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_scala_discover_method_in_class() {
+        let code = "class Foo { def bar(x: Int): Int = x * 2 }";
+        let names = discover_scala_functions(code);
+        assert_eq!(names, vec!["bar"]);
+    }
+
+    #[test]
+    fn test_scala_discover_multiple_defs() {
+        let code = "def foo(): Unit = ()\ndef bar(x: Int): Int = x";
+        let mut names = discover_scala_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_scala_discover_object_method() {
+        let code = "object MyObj { def greet(name: String): String = s\"Hello $name\" }";
+        let names = discover_scala_functions(code);
+        assert_eq!(names, vec!["greet"]);
+    }
+
+    #[test]
+    fn test_fortran_discover_program() {
+        let code = "program myprog\n  implicit none\n  print *, 'hello'\nend program myprog";
+        let names = discover_fortran_functions(code);
+        assert_eq!(names, vec!["myprog"]);
+    }
+
+    // ---- Lua function discovery tests ----
+
+    fn discover_lua_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_lua::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_lua_discover_simple_function() {
+        let code = "function greet(name)\n  print('Hello ' .. name)\nend";
+        let names = discover_lua_functions(code);
+        assert_eq!(names, vec!["greet"]);
+    }
+
+    #[test]
+    fn test_lua_discover_local_function() {
+        let code = "local function add(a, b)\n  return a + b\nend";
+        let names = discover_lua_functions(code);
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_lua_discover_multiple_functions() {
+        let code = "function foo()\nend\nfunction bar(x)\n  return x\nend";
+        let mut names = discover_lua_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_lua_discover_method_syntax() {
+        let code = "function MyClass:init(x)\n  self.x = x\nend";
+        let names = discover_lua_functions(code);
+        assert_eq!(names, vec!["MyClass:init"]);
     }
 }

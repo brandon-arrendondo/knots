@@ -5,7 +5,7 @@ pub mod complexity;
 // Re-export complexity functions for use by workspace members
 pub use complexity::{
     calculate_aicp, calculate_aird, calculate_cognitive_complexity, calculate_mccabe_complexity,
-    calculate_sloc_ada, calculate_state_coupling,
+    calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_lua, calculate_state_coupling,
 };
 
 // Re-export tree-sitter for convenience
@@ -23,6 +23,9 @@ pub use tree_sitter_python;
 pub use tree_sitter_rust;
 pub use tree_sitter_typescript;
 pub use tree_sitter_php;
+pub use tree_sitter_fortran;
+pub use tree_sitter_scala;
+pub use tree_sitter_lua;
 
 /// A language knots can analyze, with its display name and file extensions.
 pub struct LanguageInfo {
@@ -53,6 +56,9 @@ pub const LANGUAGES: &[LanguageInfo] = &[
     LanguageInfo { name: "Kotlin",     extensions: &["kt", "kts"],                    explicit_only: &[] },
     LanguageInfo { name: "Swift",      extensions: &["swift"],                        explicit_only: &[] },
     LanguageInfo { name: "PHP",        extensions: &["php"],                          explicit_only: &[] },
+    LanguageInfo { name: "Fortran",    extensions: &["f90", "f95", "f03", "f08"],     explicit_only: &["f", "for", "f77"] },
+    LanguageInfo { name: "Scala",      extensions: &["scala", "sc"],                  explicit_only: &[] },
+    LanguageInfo { name: "Lua",        extensions: &["lua"],                          explicit_only: &[] },
 ];
 
 /// All source file extensions recognized during recursive discovery, grouped
@@ -86,6 +92,12 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "swift",
     // PHP
     "php",
+    // Fortran (modern; fixed-form .f/.for/.f77 are explicit-only)
+    "f90", "f95", "f03", "f08",
+    // Scala
+    "scala", "sc",
+    // Lua
+    "lua",
 ];
 
 /// Renders the human-readable `knots --supported-languages` report.
@@ -133,6 +145,10 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         Some("kt") | Some("kts") => tree_sitter_kotlin_ng::LANGUAGE.into(),
         Some("swift") => tree_sitter_swift::LANGUAGE.into(),
         Some("php") => tree_sitter_php::LANGUAGE_PHP.into(),
+        Some("f90") | Some("f95") | Some("f03") | Some("f08")
+        | Some("f") | Some("for") | Some("f77") => tree_sitter_fortran::LANGUAGE.into(),
+        Some("scala") | Some("sc") => tree_sitter_scala::LANGUAGE.into(),
+        Some("lua") => tree_sitter_lua::LANGUAGE.into(),
         _ => tree_sitter_c::LANGUAGE.into(),
     }
 }

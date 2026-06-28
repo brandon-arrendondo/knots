@@ -39,9 +39,11 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Don't count individual case statements - handled by switch above
         // "case_statement" => *complexity += 1,
 
-        // Rust conditional / loop expressions
+        // Rust conditional / loop expressions; do_while_expression is Scala's do-while.
         "if_expression" => *complexity += 1,
-        "while_expression" | "for_expression" | "loop_expression" => *complexity += 1,
+        "while_expression" | "for_expression" | "loop_expression" | "do_while_expression" => {
+            *complexity += 1
+        }
         // Rust match: same treatment as C switch (+1 for the whole expression)
         "match_expression" => *complexity += 1,
         // Rust ? operator / Swift try? — both use node kind "try_expression".
@@ -52,7 +54,17 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
             let mut cur = node.walk();
             let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
             match try_op {
-                None => *complexity += 1, // Rust ? operator — always a CFG branch
+                None => {
+                    // Scala/Kotlin `try { } catch { }` also produces try_expression with no
+                    // try_operator — distinguish by checking for catch/finally children.
+                    // If present, the catch clauses add complexity individually; skip the try.
+                    let mut cur2 = node.walk();
+                    let is_try_block = node.named_children(&mut cur2)
+                        .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"));
+                    if !is_try_block {
+                        *complexity += 1; // Rust ? operator — always a CFG branch
+                    }
+                }
                 Some(op) => {
                     if op.utf8_text(source_code).ok() == Some("try?") {
                         *complexity += 1; // Swift try? — short-circuits to nil on error
@@ -182,6 +194,44 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // PHP: null-safe property access `$obj?->prop` short-circuits on null.
         "nullsafe_member_access_expression" => *complexity += 1,
 
+        // Lua: ELSEIF clause — flat +1 (like Python elif, PHP else_if_clause).
+        "elseif_statement" => *complexity += 1,
+        // Lua: REPEAT ... UNTIL loop — each is a loop branch.
+        "repeat_statement" => *complexity += 1,
+
+        // Scala: logical operators in infix position (&&, ||) — each adds a branch.
+        "infix_expression" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if matches!(op_text, "&&" | "||") {
+                        *complexity += 1;
+                    }
+                }
+            }
+        }
+
+        // Fortran: ELSE IF clause — flat +1 (like Python elif).
+        "elseif_clause" => *complexity += 1,
+        // Fortran: SELECT CASE / SELECT RANK / SELECT TYPE — counted like switch.
+        "select_case_statement" | "select_rank_statement" | "select_type_statement" => {
+            *complexity += 1
+        }
+        // Fortran: WHERE (conditional array assignment) and ARITHMETIC IF (3-way branch).
+        "where_statement" => *complexity += 1,
+        "elsewhere_clause" => *complexity += 1,
+        "arithmetic_if_statement" => *complexity += 1,
+        // Fortran: logical operators .AND. / .OR. — each adds a branch (like && / ||).
+        // .NOT. is unary (no branching); .EQV./.NEQV. are logical equivalence (no short-circuit).
+        "logical_expression" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if matches!(op_text, ".and." | ".or." | ".AND." | ".OR.") {
+                        *complexity += 1;
+                    }
+                }
+            }
+        }
+
         _ => {}
     }
 
@@ -265,7 +315,7 @@ fn visit_node_cognitive(
         }
 
         // Rust loops
-        "while_expression" | "for_expression" | "loop_expression" => {
+        "while_expression" | "for_expression" | "loop_expression" | "do_while_expression" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
@@ -500,6 +550,95 @@ fn visit_node_cognitive(
             *complexity += 1;
         }
 
+        // Lua: ELSEIF is flat +1 (like Python elif).
+        "elseif_statement" => {
+            *complexity += 1;
+            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
+            return;
+        }
+
+        // Lua: REPEAT ... UNTIL — looping structure with +1 + nesting.
+        "repeat_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Scala: logical operators && / || in infix_expression — chain-counted like binary_expression.
+        "infix_expression" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if matches!(op_text, "&&" | "||") {
+                        if parent_binary_op != Some(op_text) {
+                            *complexity += 1;
+                        }
+                        visit_children_cognitive_with_op(
+                            node,
+                            source_code,
+                            nesting_level,
+                            complexity,
+                            Some(op_text),
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Fortran: ELSE IF is flat +1 (like Python elif / PHP else_if_clause).
+        "elseif_clause" => {
+            *complexity += 1;
+            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
+            return;
+        }
+
+        // Fortran: SELECT CASE / SELECT RANK / SELECT TYPE — like switch_statement.
+        "select_case_statement" | "select_rank_statement" | "select_type_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Fortran: WHERE is a conditional structure — like if_statement.
+        "where_statement" => {
+            *complexity += 1 + nesting_level;
+            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
+            return;
+        }
+
+        // Fortran: ELSEWHERE (with or without mask) — flat +1, like else_if_clause.
+        "elsewhere_clause" => {
+            *complexity += 1;
+            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
+            return;
+        }
+
+        // Fortran: ARITHMETIC IF — flat +1 (archaic 3-way branch, treated like goto).
+        "arithmetic_if_statement" => {
+            *complexity += 1;
+        }
+
+        // Fortran: logical operators .AND. / .OR. — chain-counted like binary_expression.
+        "logical_expression" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if matches!(op_text, ".and." | ".or." | ".AND." | ".OR.") {
+                        if parent_binary_op != Some(op_text) {
+                            *complexity += 1;
+                        }
+                        visit_children_cognitive_with_op(
+                            node,
+                            source_code,
+                            nesting_level,
+                            complexity,
+                            Some(op_text),
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+
         _ => {}
     }
 
@@ -590,7 +729,14 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
         | "do_while_statement" | "when_expression" | "catch_block"
         | "lambda_literal" | "anonymous_function" | "annotated_lambda"
         // Swift control structures
-        | "guard_statement" | "repeat_while_statement" => {
+        | "guard_statement" | "repeat_while_statement"
+        // Lua control structures
+        | "repeat_statement"
+        // Fortran control structures
+        | "do_loop" | "select_case_statement" | "select_rank_statement"
+        | "select_type_statement" | "where_statement"
+        // Scala: do_while_expression (while_expression and for_expression are already covered above)
+        | "do_while_expression" => {
             let depth = current_depth + 1;
             if depth > *max_depth {
                 *max_depth = depth;
@@ -631,6 +777,54 @@ pub fn calculate_sloc_ada(node: Node, source_code: &[u8]) -> u32 {
     for line in function_text.split(|&b| b == b'\n') {
         let trimmed = trim_bytes(line);
         if trimmed.is_empty() || trimmed.starts_with(b"--") {
+            continue;
+        }
+        sloc += 1;
+    }
+
+    sloc
+}
+
+/// Calculates SLOC for Lua source — skips lines beginning with `--` (same style as Ada).
+/// Long-form block comments (`--[[ ... ]]`) have their opening line skipped; interior
+/// lines are counted (a known minor overcount, acceptable in practice).
+pub fn calculate_sloc_lua(node: Node, source_code: &[u8]) -> u32 {
+    let start_byte = node.start_byte();
+    let end_byte = node.end_byte();
+
+    if start_byte >= end_byte || end_byte > source_code.len() {
+        return 0;
+    }
+
+    let function_text = &source_code[start_byte..end_byte];
+    let mut sloc = 0;
+
+    for line in function_text.split(|&b| b == b'\n') {
+        let trimmed = trim_bytes(line);
+        if trimmed.is_empty() || trimmed.starts_with(b"--") {
+            continue;
+        }
+        sloc += 1;
+    }
+
+    sloc
+}
+
+/// Calculates SLOC for Fortran source — skips lines beginning with `!` (Fortran's only comment style).
+pub fn calculate_sloc_fortran(node: Node, source_code: &[u8]) -> u32 {
+    let start_byte = node.start_byte();
+    let end_byte = node.end_byte();
+
+    if start_byte >= end_byte || end_byte > source_code.len() {
+        return 0;
+    }
+
+    let function_text = &source_code[start_byte..end_byte];
+    let mut sloc = 0;
+
+    for line in function_text.split(|&b| b == b'\n') {
+        let trimmed = trim_bytes(line);
+        if trimmed.is_empty() || trimmed.starts_with(b"!") {
             continue;
         }
         sloc += 1;
@@ -793,8 +987,10 @@ fn visit_node_abc(
 
         // Branches — function calls (C/C++/Rust use call_expression, Python uses call, C# uses invocation_expression)
         "call_expression" | "call" | "invocation_expression" => *branches += 1,
-        // Ada: procedure and function invocations
+        // Ada: procedure and function invocations; Lua: function call
         "procedure_call_statement" | "function_call" => *branches += 1,
+        // Fortran: CALL statement
+        "subroutine_call" => *branches += 1,
 
         // Branches: throw, new, delete create control flow paths (C/C++)
         "throw_statement" | "new_expression" | "delete_expression"
@@ -812,15 +1008,23 @@ fn visit_node_abc(
         // Conditions (JavaScript)
         "for_in_statement" | "ternary_expression" => *conditions += 1,
 
-        // Conditions (Rust)
+        // Conditions (Rust + Scala do-while)
         "if_expression" | "while_expression" | "for_expression" | "loop_expression"
-        | "match_expression" => *conditions += 1,
-        // Rust ? / Swift try? — same grammar-level discrimination as visit_node_mccabe
+        | "match_expression" | "do_while_expression" => *conditions += 1,
+        // Rust ? / Swift try? — same grammar-level discrimination as visit_node_mccabe.
+        // Scala/Kotlin try-catch also uses try_expression; skip the try itself (catch adds conditions).
         "try_expression" => {
             let mut cur = node.walk();
             let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
             match try_op {
-                None => *conditions += 1,
+                None => {
+                    let mut cur2 = node.walk();
+                    let is_try_block = node.named_children(&mut cur2)
+                        .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"));
+                    if !is_try_block {
+                        *conditions += 1;
+                    }
+                }
                 Some(op) => {
                     if op.utf8_text(source_code).ok() == Some("try?") {
                         *conditions += 1;
@@ -870,6 +1074,19 @@ fn visit_node_abc(
         // Conditions (Kotlin)
         "do_while_statement" | "when_expression" => *conditions += 1,
 
+        // Scala: assignments (val/var declarations)
+        "val_definition" | "var_definition" => *assignments += 1,
+        // Scala: logical operators in infix_expression
+        "infix_expression" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if matches!(op_text, "&&" | "||") {
+                        *conditions += 1;
+                    }
+                }
+            }
+        }
+
         // Conditions (Swift)
         "guard_statement" | "repeat_while_statement" => *conditions += 1,
 
@@ -878,6 +1095,21 @@ fn visit_node_abc(
 
         // PHP: elseif clause and null-safe access
         "else_if_clause" | "nullsafe_member_access_expression" => *conditions += 1,
+
+        // Fortran conditions
+        "elseif_clause" | "select_case_statement" | "select_rank_statement"
+        | "select_type_statement" | "where_statement" | "elsewhere_clause"
+        | "arithmetic_if_statement" => *conditions += 1,
+        // Fortran: logical operators .AND. / .OR. are condition branches
+        "logical_expression" => {
+            if let Some(op) = node.child_by_field_name("operator") {
+                if let Ok(op_text) = op.utf8_text(source_code) {
+                    if matches!(op_text, ".and." | ".or." | ".AND." | ".OR.") {
+                        *conditions += 1;
+                    }
+                }
+            }
+        }
 
         // Logical operators (C/C++/Rust: &&/||; JS/TS/C#: ??; Kotlin Elvis: ?:; PHP: and/or)
         "binary_expression" => {
@@ -1526,6 +1758,8 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                         "simple_parameter"
                         | "variadic_parameter"
                         | "property_promotion_parameter" => count += 1,
+                        // Scala parameter kind
+                        "parameter" => count += 1,
                         _ => {}
                     }
                 }
@@ -1650,6 +1884,41 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                         )
                     })
                     .count() as u32;
+            }
+            0
+        }
+        // Fortran: function and subroutine contain a header statement with a 'parameters' field.
+        // Each parameter in Fortran is an identifier (dummy argument name).
+        // module_procedure and program have no dummy argument list.
+        "function" => {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "function_statement" {
+                    if let Some(params) = child.child_by_field_name("parameters") {
+                        let mut pcursor = params.walk();
+                        return params
+                            .children(&mut pcursor)
+                            .filter(|c| c.kind() == "identifier")
+                            .count() as u32;
+                    }
+                    return 0;
+                }
+            }
+            0
+        }
+        "subroutine" => {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "subroutine_statement" {
+                    if let Some(params) = child.child_by_field_name("parameters") {
+                        let mut pcursor = params.walk();
+                        return params
+                            .children(&mut pcursor)
+                            .filter(|c| c.kind() == "identifier")
+                            .count() as u32;
+                    }
+                    return 0;
+                }
             }
             0
         }

@@ -258,7 +258,7 @@ jobs:
           Maintainer: Brandon Arrendondo <brandon@arrendondo.dev>
           Homepage: https://github.com/brandon-arrendondo/knots
           Description: Multi-language code complexity analyzer
-           A fast, powerful code complexity analyzer for C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, and Swift
+           A fast, powerful code complexity analyzer for C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua
            with visual indicators, built on tree-sitter. Knots computes
            McCabe cyclomatic complexity, cognitive complexity, nesting depth, SLOC,
            ABC complexity, and test scoring metrics. Includes knots-test-complexity
@@ -326,7 +326,7 @@ jobs:
           Source0:        %{name}-%{version}.tar.gz
 
           %description
-          A fast, powerful code complexity analyzer for C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, and Swift
+          A fast, powerful code complexity analyzer for C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua
           with visual indicators, built on tree-sitter. Knots computes
           McCabe cyclomatic complexity, cognitive complexity, nesting depth, SLOC,
           ABC complexity, and test scoring metrics. Includes knots-test-complexity
