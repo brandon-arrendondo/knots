@@ -926,6 +926,166 @@ lizard-based gate to knots should expect a slightly higher reported function
 count for Kotlin codebases; per-function thresholds are unaffected.
 
 %% ============================================================
+\section{Lua Complexity: Implementation Findings}
+\label{sec:lua-findings}
+
+\subsection{Anonymous Function Naming}
+
+Lua's grammar distinguishes two function node kinds: \texttt{function\_declaration}
+for named top-level functions and \texttt{function\_definition} for anonymous
+function expressions.  Unlike Go (where \texttt{func\_literal} is always
+anonymous) and JavaScript (where assignment context is the common idiom),
+Lua idiom assigns anonymous functions to locals, table keys, and module
+exports with the same frequency:
+
+\begin{verbatim}
+local f = function() ... end    -- local
+t.key = function() ... end      -- table key
+M.export = function() ... end   -- module export
+\end{verbatim}
+
+knots extracts the name from the left-hand side of the assignment for all
+three forms.  Truly anonymous Lua closures (callbacks passed inline,
+table index assignments such as \texttt{a[i] = function() \ldots end})
+are counted only with \texttt{--count-anonymous-closures}.
+
+\subsection{Function Count Comparison: knots vs.\ lizard}
+
+On the lua.org reference implementation test suite (\texttt{testes/},
+34 \texttt{.lua} files), knots discovers 590 named functions and lizard
+discovers 1{,}054, a $-44\%$ gap.  With \texttt{--count-anonymous-closures},
+knots finds 590 named $+$ 475 anonymous $=$ 1{,}065 total (lizard: 1{,}054,
+$<$1\% gap).  The named-only shortfall reflects 475 truly anonymous closures
+that lizard counts unconditionally.
+
+\subsection{McCabe and SLOC Comparison}
+
+knots reports average McCabe 2.07 vs.\ lizard 1.50 ($+$38\%) on the named
+function set.  lizard's denominator includes $\approx$628 trivial one-liner
+anonymous closures (e.g., \texttt{function() return x end}) with McCabe~1;
+these pull its average down.  Restricting to named functions converges the
+averages.  The SLOC gap (knots 4.29 vs.\ lizard 3.90, $+$10\%) has the same
+denominator effect.  No calibration action is required.
+
+%% ============================================================
+\section{PHP Complexity: Implementation Findings}
+\label{sec:php-findings}
+
+\subsection{Function Count Comparison: knots vs.\ lizard}
+
+On the Laravel framework corpus (github.com/laravel/framework, 2{,}966
+\texttt{.php} files), knots discovers 30{,}844 functions and lizard
+discovers 26{,}998, a $+$14\% gap.  The pattern is consistent with
+C ($+$19\%) and Kotlin ($+$19\%): knots counts interface methods, trait
+methods, and abstract declarations that lizard's brace-matching logic
+undercounts.
+
+\subsection{McCabe and SLOC Agreement}
+
+Average McCabe is 1.63 (knots) vs.\ 1.7 (lizard) --- essentially equal
+and well within cross-tool noise.  The McCabe calibration is sound.
+
+Average SLOC per function is 8.07 (knots) vs.\ 10.5 (lizard), a $-23\%$
+gap.  The inflated function count deflates the knots average; individual
+functions with SLOC~$\geq 3$ align closely with lizard.  No calibration
+action is required.
+
+%% ============================================================
+\section{Scala Complexity: Implementation Findings}
+\label{sec:scala-findings}
+
+\subsection{Expression-Body \texttt{def} Functions}
+
+Scala permits expression-body method definitions in which the body is
+a single expression following \texttt{=}:
+
+\begin{verbatim}
+def double(x: Int): Int = x * 2
+\end{verbatim}
+
+This syntax is identical in motivation to Kotlin's single-expression
+functions (\cref{sec:kotlin-findings}) but is more pervasive in the
+Scala standard library, where nearly every collection accessor, type
+alias, and compatibility shim is expressed this way.
+
+Lizard's regex parser requires a brace-delimited body and does not
+discover expression-body \texttt{def}s.  knots discovers them correctly
+via tree-sitter.
+
+\subsection{Function Count Comparison: knots vs.\ lizard}
+
+On the Scala standard library corpus (\texttt{scala/src/library},
+542 \texttt{.scala} files), knots discovers 11{,}292 functions and
+lizard discovers 4{,}490, a $+$151\% gap.  knots finds 6{,}695 functions
+with SLOC~$= 1$ (single-line expression-body \texttt{def}s); lizard
+misses essentially all of them.
+
+When restricted to SLOC~$\geq 2$ functions, knots finds 4{,}597 ---
+within 2\% of lizard's 4{,}490.  The difference is methodologically
+correct: knots counts valid functions that lizard skips.
+
+\subsection{McCabe and SLOC Effects}
+
+Average McCabe is 1.74 (knots) vs.\ 2.1 (lizard, $-17\%$).  The
+SLOC~$= 1$ one-liners are trivially simple (McCabe~$= 1$), pulling
+the knots average down.  Average SLOC per function is 3.53 vs.\
+5.4 ($-35\%$) for the same reason.  Users migrating from lizard-based
+Scala baselines should expect substantially higher function counts and
+lower per-function averages from knots; per-function threshold
+enforcement is unaffected.
+
+%% ============================================================
+\section{Fortran Complexity: Implementation Findings}
+\label{sec:fortran-findings}
+
+\subsection{Modern Fortran (\texttt{.f90})}
+
+On the LAPACK reference implementation (\texttt{lapack/SRC}, 31
+\texttt{.f90} files), knots discovers 30 functions and lizard 26
+($+$15\%).  Average McCabe is 44.50 (knots) vs.\ 36.2 (lizard, $+$23\%);
+average SLOC is 202.87 vs.\ 155.3 ($+$31\%).  The small corpus of
+complex scientific routines produces larger relative deltas than
+larger corpora.  No calibration action is required.
+
+\subsection{Fixed-Form Fortran 77 (\texttt{.f}): Root Cause and Fix}
+
+On the full LAPACK \texttt{SRC} directory (2{,}114 \texttt{.f} files),
+knots initially found 1{,}157 functions vs.\ lizard's 2{,}106 ($-$45\%).
+The root cause is a Doxygen-style documentation convention used in
+nearly all LAPACK files: the subroutine signature is repeated verbatim
+in a comment block at the top of the file:
+
+\begin{verbatim}
+*       SUBROUTINE CHEGV( ITYPE, JOBZ, UPLO, N, A,
+*                         LDA, B, LDB, W, WORK, ... )
+\end{verbatim}
+
+When this comment signature spanned multiple lines (using the
+\texttt{*} continuation style), the tree-sitter-fortran grammar
+produced a parse error that prevented the actual subroutine declaration
+from being recognized.  Of 2{,}114 LAPACK SRC files, 2{,}042 use
+this multi-line pattern.
+
+The fix adds \texttt{fixed\_form\_comment} as an external token in
+grammar.js and implements \texttt{scan\_fixed\_form\_comment()} in
+scanner.c.  When the column is zero and the lookahead is \texttt{*},
+\texttt{C}, or \texttt{c}, the scanner consumes the entire line and
+emits the token, which grammar.js lists in \texttt{extras} so
+tree-sitter silently discards it.  After the fix, knots finds 2{,}072
+functions vs.\ lizard 2{,}106 ($-$2\%), up from $-$45\%.
+
+\subsection{Threshold Implications}
+
+Fortran scientific routines have substantially higher average McCabe
+than C or Rust code: LAPACK \texttt{.f90} functions average McCabe
+44.50, and individual linear algebra routines routinely reach
+McCabe~200+.  Thresholds calibrated against C/C++ corpora will produce
+excessive violations on Fortran corpora.  As with Ada dispatch tables
+(\cref{sec:ada-findings}), Cognitive Complexity is a more reliable
+primary gate for Fortran; if McCabe thresholds are used, project-specific
+calibration against the Fortran distribution is required.
+
+%% ============================================================
 \section{Conclusion}
 \label{sec:conclusion}
 

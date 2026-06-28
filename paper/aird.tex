@@ -277,6 +277,44 @@ be simultaneously near the cognitive cap (75), near the SLOC cap (200),
 have significant nesting, and be difficult to test before it reaches 85.
 In mature codebases, 1--2\% of functions exceed this threshold.
 
+\subsubsection{Formula Evolution}
+
+The AIRD formula reached its current form through four calibration
+iterations against the corpus described in \cref{sec:calibration}.
+\Cref{tab:formula-history} documents the changes; each iteration was
+motivated by a concrete calibration failure.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}lp{7cm}@{}}
+\toprule
+\textbf{Version} & \textbf{Change and Rationale} \\
+\midrule
+v1 & Initial hypothesis: cognitive/50$\times$35, sloc/100$\times$25,
+     nesting/8$\times$15, test/40$\times$25, doc/10$\times$15. \\
+v2 & Test ceiling 40$\to$20.  The maximum observed \texttt{test\_score}
+     across the corpus was $\approx$18; the v1 ceiling structurally
+     halved the term's contribution relative to intent. \\
+v3 & Cognitive weight 35$\to$45, test weight 25$\to$15; cognitive
+     ceiling 50$\to$75, sloc ceiling 100$\to$200.  Corpus percentile
+     analysis showed the SLOC ceiling at 100 saturated at p95; the
+     weight shift reduced \texttt{test\_score} inflation of
+     undocumented tool entry points. \\
+v4 & Cognitive weight 45$\to$55, sloc weight 25$\to$15.  Empirical
+     experiment (\cref{sec:empirical}) confirmed cognitive complexity
+     is the primary correlate of AI-rated difficulty; SLOC
+     over-contributed for shallow entry points. \\
+v1.5.0 & Renamed AIM $\to$ AIRD; formula unchanged.  A second metric
+          (AICP) was introduced to capture context-loading cost
+          separately from reasoning cost. \\
+\bottomrule
+\end{tabular}
+\caption{AIRD formula evolution.  Each change was driven by a concrete
+calibration failure against the 32,205-function corpus.}
+\label{tab:formula-history}
+\end{table}
+
 \subsection{AICP --- AI Context Pressure}
 
 AICP is a normalized 0--100 score predicting how many tokens an LLM
@@ -296,8 +334,22 @@ External call breadth is the primary driver (weight 60).  Each external
 call requires the LLM to resolve a function signature, return type, and
 error behavior.  A function that calls 20 distinct external APIs forces
 the model to potentially load 20 dependency chains.  The p99 ceiling of
-20 external calls was consistent across all 6 corpora
-(\cref{sec:calibration}).
+20 external calls was consistent across all 6 corpora (range 15--20
+across lua, libcrc, mosquitto, hostap, sqlite, and curl), establishing
+it as a stable cross-codebase upper bound (\cref{sec:calibration}).
+
+Adding \texttt{external\_calls} to the AIRD formula was considered but
+rejected.  In the corpus, hostapd's \texttt{hostapd\_config\_read\_eap\_user}
+has slightly more external calls (17) than SQLite's
+\texttt{whereLoopAddBtreeIndex} (12), yet the empirical experiment rated
+\texttt{whereLoopAddBtreeIndex} substantially harder to reason about.
+Every SLOC-to-external-call weight transfer that closed one gap widened
+the other.  External call breadth predicts context-loading cost, not
+reasoning cost; it belongs in a separate metric.  Mean external calls by
+AIRD band across the corpus confirms the metric's orthogonality:
+$2.74$ (low AIRD) $\to$ $8.69$ (mid) $\to$ $17.40$ (high) --- monotonically
+increasing and thus informative, but not directly correlated with
+reasoning difficulty within the high band.
 
 SLOC (weight 40) captures the token cost of the function body itself.
 AICP's SLOC weight is higher than AIRD's (40 vs.\ 15) because context
@@ -451,17 +503,17 @@ drawn from 6 production C/C++ codebases:
 \toprule
 \textbf{Project} & \textbf{Functions} & \textbf{Domain} \\
 \midrule
-mosquitto & $\sim$2{,}100  & MQTT broker \\
-SQLite    & $\sim$8{,}200  & Embedded database \\
-curl      & $\sim$5{,}400  & HTTP/transfer library \\
-hostap    & $\sim$12{,}600 & WPA supplicant/AP \\
-Lua       & $\sim$800      & Scripting runtime \\
-libcrc    & $\sim$100      & CRC algorithms \\
+mosquitto & 2{,}559  & MQTT broker \\
+SQLite    & 9{,}491  & Embedded database \\
+curl      & 5{,}474  & HTTP/transfer library \\
+hostap    & 13{,}343 & WPA supplicant/AP \\
+Lua       & 1{,}304  & Scripting runtime \\
+libcrc    & 34       & CRC algorithms \\
 \midrule
-\textbf{Total} & \textbf{32,205} & \\
+\textbf{Total} & \textbf{32{,}205} & \\
 \bottomrule
 \end{tabular}
-\caption{AIRD/AICP calibration corpus.}
+\caption{AIRD/AICP calibration corpus (knots v1.5.0 function counts).}
 \label{tab:corpus}
 \end{table}
 
@@ -497,46 +549,35 @@ ExternalCalls & 3 & 9  & 20  & 20 \\
 
 \subsection{AIRD Distribution}
 
-\Cref{fig:aird-dist} shows the AIRD distribution across the corpus.  The
-distribution is heavily right-skewed: 67--88\% of functions in mature
-codebases score $\leq 10$.  The high-AIRD tail (score $\geq 76$) accounts
-for 1--2\% of all functions.  This distribution is consistent with
-software complexity distributions generally: most functions are simple;
-a small fraction accumulate disproportionate complexity.
+\Cref{tab:aird-dist} shows the AIRD score distribution across each
+corpus.  The distribution is heavily right-skewed in all six projects:
+63--88\% of functions score $\leq 10$, and the high-AIRD tail
+($\geq 76$) accounts for 0--2\% of functions.  This shape is consistent
+with software complexity distributions generally: most functions are
+simple; a small fraction accumulate disproportionate complexity.
 
-\begin{figure}[t]
+\begin{table}[t]
 \centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=\columnwidth,
-    height=5cm,
-    ybar,
-    xlabel={AIRD Score Band},
-    ylabel={Functions (\%)},
-    ymin=0,
-    xtick=data,
-    xticklabels={0--10, 11--25, 26--50, 51--75, 76--100},
-    xticklabel style={font=\footnotesize},
-    ylabel style={font=\footnotesize},
-    xlabel style={font=\footnotesize},
-    tick label style={font=\footnotesize},
-    bar width=16pt,
-    nodes near coords,
-    nodes near coords style={font=\tiny},
-    ymajorgrids=true,
-    grid style={dashed, gray!30},
-]
-\addplot[fill=blue!40, draw=blue!60] coordinates {
-    (1, 78) (2, 13) (3, 5) (4, 3) (5, 1)
-};
-% TODO: replace with actual corpus percentages
-\end{axis}
-\end{tikzpicture}
-\caption{AIRD score distribution across calibration corpus (approximate).
-The distribution is heavily right-skewed: $\sim$78\% of functions score
-$\leq 10$.}
-\label{fig:aird-dist}
-\end{figure}
+\footnotesize
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+\textbf{Corpus} & \textbf{Fns} & \textbf{Avg} & \textbf{Max}
+  & \textbf{0--10} & \textbf{11--25} & \textbf{26--50}
+  & \textbf{$\geq$51} \\
+\midrule
+lua       & 1{,}304  &  5.0 &  87 & 87\% & 11\% & 2\% & 0\% \\
+libcrc    &     34   &  8.2 &  66 & 88\% &  6\% & 0\% & 6\% \\
+mosquitto & 2{,}559  & 10.1 &  97 & 71\% & 20\% & 6\% & 3\% \\
+hostap    & 13{,}343 & 10.9 &  95 & 67\% & 23\% & 8\% & 3\% \\
+sqlite    &  9{,}491 & 10.2 &  99 & 72\% & 17\% & 7\% & 5\% \\
+curl      &  5{,}474 & 12.4 &  95 & 63\% & 23\% & 10\% & 4\% \\
+\bottomrule
+\end{tabular}
+\caption{AIRD distribution across the calibration corpus (knots v1.5.0).
+The $\geq$51 column combines the 51--75 and 76--100 bands; the high-AIRD
+tail ($\geq$76) is 0--2\% in all corpora.}
+\label{tab:aird-dist}
+\end{table}
 
 \subsection{Threshold Validation}
 
@@ -556,6 +597,87 @@ production codebases:
 \end{itemize}
 
 Refactors were verified for behavior preservation where applicable.
+
+\subsection{Distribution Stability: v1.12.0 Re-evaluation}
+\label{sec:reeval}
+
+To detect formula or metric drift, we re-ran all six corpora against
+knots v1.12.0 and compared results to the v1.5.0 baseline.
+\Cref{tab:reeval} reports the comparison.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Corpus} & \multicolumn{2}{c}{\textbf{Functions}}
+  & \multicolumn{2}{c}{\textbf{Avg AIRD}} & \textbf{Drift} \\
+  & v1.5.0 & v1.12.0 & v1.5.0 & v1.12.0 & \\
+\midrule
+lua       &  1{,}304 &  1{,}880 & 5.0  & 6.1  & $+$1.1 \\
+libcrc    &     34   &     34   & 8.2  & 9.9  & $+$1.7 \\
+mosquitto &  2{,}559 &  5{,}549 & 10.1 & 9.6  & $-$0.5 \\
+hostap    & 13{,}343 & 20{,}160 & 10.9 & 12.3 & $+$1.4 \\
+sqlite    &  9{,}491 & 11{,}351 & 10.2 & 11.0 & $+$0.8 \\
+curl      &  5{,}474 &  5{,}836 & 12.4 & 14.2 & $+$1.8 \\
+\bottomrule
+\end{tabular}
+\caption{AIRD distribution stability: v1.5.0 baseline vs.\ v1.12.0
+re-evaluation.  All per-corpus average AIRD values are within 2 points;
+the corpus ordering (curl hardest, lua easiest) is preserved.}
+\label{tab:reeval}
+\end{table}
+
+The function count increases are explained by new language support
+added after v1.5.0: mosquitto ($+$117\%) and hostap ($+$51\%) contain
+substantial C++ code now parsed by the C++ grammar; Lua ($+$44\%)
+files previously fell through to a C fallback and are now parsed
+with the correct Lua grammar.  The distribution \emph{shape} is
+preserved across all corpora: the 0--10 bucket remains dominant
+(59--85\%) and the high-AIRD tail ($\geq$76) remains 0--1\%.
+
+Key validation functions remained stable across versions:
+\texttt{whereLoopAddBtreeIndex} (AIRD 90$\to$93),
+\texttt{hostapd\_config\_read\_eap\_user} (93$\to$95),
+\texttt{mosquitto\_validate\_utf8} (57$\to$59),
+\texttt{luaV\_execute} (87$\to$89 after a SLOC regression was corrected;
+see \cref{sec:vmcase}), and \texttt{sqlite3VdbeExec} (90$\to$91).
+Score shifts of 2--3 points reflect corpus updates (newer upstream
+snapshots), not formula instability.
+
+\subsection{C Macro Pattern: SLOC Deflation in vmcase Blocks}
+\label{sec:vmcase}
+
+During the v1.12.0 re-evaluation, \texttt{luaV\_execute} in
+\texttt{lvm.c} was found to report SLOC~34 rather than the expected
+$\approx$750.  The root cause is a C macro pattern that tree-sitter-c
+misparses as nested function definitions.
+
+Lua's VM interpreter dispatches opcodes via:
+
+\begin{lstlisting}[language=C]
+vmdispatch(GET_OPCODE(i)) {
+  vmcase(OP_MOVE)  { ... vmbreak; }
+  vmcase(OP_LOADI) { ... vmbreak; }
+  /* ... ~80 arms ... */
+}
+\end{lstlisting}
+
+tree-sitter-c parses \texttt{vmcase(OP\_MOVE) \{ \ldots \}} as a
+\texttt{function\_definition} node because the construct is
+syntactically identical to a K\&R-style function definition.  The
+\texttt{nested\_fn\_sloc} subtraction --- added to prevent double-counting
+Python/Rust/JS nested function bodies --- then subtracted each
+\texttt{vmcase} block from the outer function, collapsing SLOC from 751
+to 34 and dropping AIRD from 87 to 76.
+
+The fix distinguishes genuine nested function definitions (whose
+declarator is a plain \texttt{identifier}) from macro call patterns
+(whose declarator is a \texttt{parenthesized\_declarator}, i.e., the
+arguments are a parenthesized expression).  Filtering on this criterion
+in \texttt{accumulate\_nested\_sloc} restored \texttt{luaV\_execute}'s
+SLOC to 751 and AIRD to 89.  No other function in the six corpora was
+affected by this pattern.
 
 %% ============================================================
 \section{Empirical Phenomena}

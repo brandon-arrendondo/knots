@@ -22,5 +22,6 @@ assistance.
    filters
    test-complexity
    alternatives
+   benchmarks
    troubleshooting
    releasing
