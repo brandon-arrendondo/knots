@@ -12,230 +12,133 @@ pub fn calculate_mccabe_complexity(node: Node, source_code: &[u8]) -> u32 {
     complexity
 }
 
+// Increments complexity if node's `operator` field matches one of `valid_ops`.
+fn mccabe_logical_op(node: Node, source_code: &[u8], valid_ops: &[&str], complexity: &mut u32) {
+    if let Some(op) = node.child_by_field_name("operator") {
+        if let Ok(op_text) = op.utf8_text(source_code) {
+            if valid_ops.contains(&op_text) {
+                *complexity += 1;
+            }
+        }
+    }
+}
+
 fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
-    // Skip unnamed/anonymous tokens (keyword literals, punctuation). Without this guard,
-    // the Ada "guard" rule would fire on Swift's unnamed `guard` keyword token, and similar
-    // unnamed keywords from one grammar would spuriously match rules for another language.
+    // Skip unnamed tokens (punctuation, keyword literals). Without this guard, Ada's named
+    // `guard` rule would fire on Swift's unnamed `guard` keyword token, and similar cross-
+    // grammar collisions would produce false positives.
     if !node.is_named() {
         return;
     }
-    // Decision points that increase cyclomatic complexity
     match node.kind() {
-        // C/C++ conditional statements
-        "if_statement" => *complexity += 1,
-        "while_statement" => *complexity += 1,
-        "do_statement" => *complexity += 1,
-        "for_statement" | "for_range_loop" => *complexity += 1,
-
-        // Throw creates exceptional control flow path (like goto)
-        "throw_statement" | "raise_statement" | "raise_expression" => *complexity += 1,
-
-        // Switch statement: pmccabe compatibility - count as +1 regardless of cases
-        // This matches pmccabe's simpler approach
-        "switch_statement" => {
-            *complexity += 1;
-        }
-
-        // Don't count individual case statements - handled by switch above
-        // "case_statement" => *complexity += 1,
-
-        // Rust conditional / loop expressions; do_while_expression is Scala's do-while.
-        "if_expression" => *complexity += 1,
-        "while_expression" | "for_expression" | "loop_expression" | "do_while_expression" => {
-            *complexity += 1
-        }
-        // Rust match: same treatment as C switch (+1 for the whole expression)
-        "match_expression" => *complexity += 1,
-        // Rust ? operator / Swift try? — both use node kind "try_expression".
-        // Rust: no named try_operator child (the ? is an anonymous token on the expression).
-        // Swift: has a named try_operator child whose text is "try", "try?", or "try!".
-        // Only try? is a branch; try and try! are not (they throw or crash, not short-circuit).
+        // Rust ? operator / Swift try? — both use "try_expression".
+        // No try_operator child → Rust ? (always a branch) or Scala/Kotlin try-block (skip).
+        // try_operator child text "try?" → Swift short-circuit; "try"/"try!" → no branch.
         "try_expression" => {
             let mut cur = node.walk();
             let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
             match try_op {
                 None => {
-                    // Scala/Kotlin `try { } catch { }` also produces try_expression with no
-                    // try_operator — distinguish by checking for catch/finally children.
-                    // If present, the catch clauses add complexity individually; skip the try.
                     let mut cur2 = node.walk();
                     let is_try_block = node.named_children(&mut cur2)
                         .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"));
                     if !is_try_block {
-                        *complexity += 1; // Rust ? operator — always a CFG branch
+                        *complexity += 1;
                     }
                 }
                 Some(op) => {
                     if op.utf8_text(source_code).ok() == Some("try?") {
-                        *complexity += 1; // Swift try? — short-circuits to nil on error
-                    }
-                    // Swift try / try! — no branch
-                }
-            }
-        }
-
-        // Python elif: each elif clause is an additional branch
-        "elif_clause" => *complexity += 1,
-        // Python except: like catch, creates an alternative path
-        "except_clause" => *complexity += 1,
-        // Python match_statement (3.10+): like switch
-        "match_statement" => *complexity += 1,
-
-        // JavaScript: for...in and for...of share for_in_statement
-        "for_in_statement" => *complexity += 1,
-        // JS/TS optional chaining: a?.b short-circuits to undefined when a is null/undefined
-        "optional_chain" => *complexity += 1,
-
-        // Logical operators (each adds a path)
-        "binary_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    // && / || — short-circuit boolean ops (all languages)
-                    // ?? — null-coalescing (JS/TS/C#/PHP): already counted
-                    // ?: — Kotlin Elvis: same semantics as ?? in other languages
-                    // and / or — PHP word-form logical operators (lower precedence than && / ||)
-                    if matches!(op_text, "&&" | "||" | "??" | "?:" | "and" | "or") {
                         *complexity += 1;
                     }
                 }
             }
         }
 
-        // Ternary operator (C/C++) and Python ternary (x if cond else y)
-        "conditional_expression" => *complexity += 1,
-        // JavaScript ternary expression
-        "ternary_expression" => *complexity += 1,
-
-        // Python boolean operators: and/or each add a path (like && / ||)
-        "boolean_operator" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "and" || op_text == "or" {
-                        *complexity += 1;
-                    }
-                }
-            }
-        }
-
-        // goto/continue/break can create additional paths
-        "goto_statement" => *complexity += 1,
-
-        // Ada: loop_statement covers plain loop, while loop, and for loop
-        "loop_statement" => *complexity += 1,
-        // Ada: each elsif branch is an additional path
-        "elsif_statement_item" => *complexity += 1,
-        // Ada: each case alternative (when branch) is an additional path.
-        // Calibration note: large Ada dispatch tables (e.g. 20 `when` arms) push McCabe
-        // well above thresholds calibrated for C/Rust. Cognitive complexity charges only
-        // +1+nesting for the whole case_statement, making it the better primary metric
-        // for Ada files with large case/dispatch patterns. See CLAUDE.md §Calibration.
-        "case_statement_alternative" => *complexity += 1,
-        // Ada: each exception handler (when clause) is an additional path
-        "exception_handler" => *complexity += 1,
-
-        // Ada: logical operators (and then / or else / xor / and / or).
-        // The `expression` node is flat: relations separated by unnamed keyword tokens.
-        // Count each `and`, `or`, or `xor` child — each one is a branch point.
+        // Ada: logical operators as unnamed keyword children (and / or / xor).
+        // Each occurrence is a separate branch point (unlike cognitive, which chain-counts).
         "expression" => {
             let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
-                    *complexity += 1;
-                }
-            }
+            let count = node
+                .children(&mut cursor)
+                .filter(|c| !c.is_named() && matches!(c.kind(), "and" | "or" | "xor"))
+                .count() as u32;
+            *complexity += count;
         }
 
-        // Ada tasking: selective_accept else clause (unnamed keyword, like if_statement else).
+        // Ada: selective_accept `else` clause (unnamed keyword) adds one alternative path.
         "selective_accept" => {
             let mut cursor = node.walk();
-            let has_else = node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "else");
-            if has_else {
+            if node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "else") {
                 *complexity += 1;
             }
         }
-        // Ada tasking: each select alternative is a separate path (like case_statement_alternative).
-        "select_alternative" => *complexity += 1,
-        // Ada tasking: guard (when Cond =>) makes an accept alternative conditional.
-        "guard" => *complexity += 1,
-        // Ada tasking: two-branch selects each add one extra path.
-        "timed_entry_call" | "conditional_entry_call" | "asynchronous_select" => *complexity += 1,
 
-        // Ada: exit when Condition — conditional loop exit is a branch point.
-        // Bare `exit` (no condition) is not a branch; only `exit when` adds a path.
+        // Ada: exit when Condition — conditional loop exit is a branch; bare exit is not.
         "exit_statement" => {
             let mut cursor = node.walk();
-            let has_when = node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "when");
-            if has_when {
+            if node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "when") {
                 *complexity += 1;
             }
         }
 
-        // Go: switch on value/type and channel select each add one path.
-        "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
-            *complexity += 1;
+        // Logical operators in operator-field expressions.
+        // binary_expression: C/C++/Rust/PHP (&&, ||, ??, ?:, and, or)
+        // boolean_operator: Python (and, or)
+        // infix_expression: Scala (&&, ||)
+        // logical_expression: Fortran (.and., .or., .AND., .OR.)
+        "binary_expression" | "boolean_operator" | "infix_expression" | "logical_expression" => {
+            let valid_ops: &[&str] = match node.kind() {
+                "binary_expression" => &["&&", "||", "??", "?:", "and", "or"],
+                "boolean_operator" => &["and", "or"],
+                "infix_expression" => &["&&", "||"],
+                _ => &[".and.", ".or.", ".AND.", ".OR."],
+            };
+            mccabe_logical_op(node, source_code, valid_ops, complexity);
         }
 
-        // Java: enhanced for-each loop and switch expressions each add one path.
-        "enhanced_for_statement" | "switch_expression" => *complexity += 1,
-
-        // C#: foreach loop and null-conditional operator (a?.b short-circuits on null)
-        "foreach_statement" | "conditional_access_expression" => *complexity += 1,
-
-        // Kotlin: do-while loop, when expression (like switch), catch block.
-        "do_while_statement" | "when_expression" | "catch_block" => *complexity += 1,
-
-        // Swift: guard_statement (conditional early-exit) and repeat_while_statement (do-while loop).
-        "guard_statement" | "repeat_while_statement" => *complexity += 1,
-
-        // PHP: elseif clause — each elseif is an additional branch (like Python elif).
-        "else_if_clause" => *complexity += 1,
-        // PHP 8: throw used as an expression (e.g. `$x = $y ?? throw new Ex()`).
-        "throw_expression" => *complexity += 1,
-        // PHP: null-safe property access `$obj?->prop` short-circuits on null.
-        "nullsafe_member_access_expression" => *complexity += 1,
-
-        // Lua: ELSEIF clause — flat +1 (like Python elif, PHP else_if_clause).
-        "elseif_statement" => *complexity += 1,
-        // Lua: REPEAT ... UNTIL loop — each is a loop branch.
-        "repeat_statement" => *complexity += 1,
-
-        // Scala: logical operators in infix position (&&, ||) — each adds a branch.
-        "infix_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, "&&" | "||") {
-                        *complexity += 1;
-                    }
-                }
-            }
-        }
-
-        // Fortran: ELSE IF clause — flat +1 (like Python elif).
-        "elseif_clause" => *complexity += 1,
-        // Fortran: SELECT CASE / SELECT RANK / SELECT TYPE — counted like switch.
-        "select_case_statement" | "select_rank_statement" | "select_type_statement" => {
-            *complexity += 1
-        }
-        // Fortran: WHERE (conditional array assignment) and ARITHMETIC IF (3-way branch).
-        "where_statement" => *complexity += 1,
-        "elsewhere_clause" => *complexity += 1,
-        "arithmetic_if_statement" => *complexity += 1,
-        // Fortran: logical operators .AND. / .OR. — each adds a branch (like && / ||).
-        // .NOT. is unary (no branching); .EQV./.NEQV. are logical equivalence (no short-circuit).
-        "logical_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, ".and." | ".or." | ".AND." | ".OR.") {
-                        *complexity += 1;
-                    }
-                }
-            }
-        }
+        // Every other decision point: flat +1.
+        // Covers all control-flow structures across all supported languages.
+        //
+        // C/C++: if/while/do/for/switch/goto/throw
+        // Rust: if_expression, loop variants, match_expression, conditional_expression
+        // Python: elif, except, match_statement, ternary (conditional_expression)
+        // JS/TS: for_in_statement, optional_chain, ternary_expression
+        // Ada: loop_statement, elsif, case_statement_alternative, exception_handler,
+        //      select_alternative, guard, timed/conditional/asynchronous select
+        // Go: expression_switch_statement, type_switch_statement, select_statement
+        // Java: enhanced_for_statement, switch_expression
+        // C#: foreach_statement, conditional_access_expression
+        // Kotlin: do_while_statement, when_expression, catch_block
+        // Swift: guard_statement, repeat_while_statement
+        // PHP: else_if_clause, throw_expression, nullsafe_member_access_expression
+        // Lua: elseif_statement, repeat_statement
+        // Fortran: elseif_clause, select_case/rank/type, where_statement,
+        //          elsewhere_clause, arithmetic_if_statement
+        "if_statement" | "while_statement" | "do_statement" | "for_statement" | "for_range_loop"
+        | "throw_statement" | "raise_statement" | "raise_expression" | "switch_statement"
+        | "if_expression" | "while_expression" | "for_expression" | "loop_expression"
+        | "do_while_expression" | "match_expression"
+        | "conditional_expression" | "ternary_expression"
+        | "goto_statement"
+        | "elif_clause" | "except_clause" | "match_statement"
+        | "for_in_statement" | "optional_chain"
+        | "loop_statement" | "elsif_statement_item" | "case_statement_alternative"
+        | "exception_handler" | "select_alternative" | "guard"
+        | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select"
+        | "expression_switch_statement" | "type_switch_statement" | "select_statement"
+        | "enhanced_for_statement" | "switch_expression"
+        | "foreach_statement" | "conditional_access_expression"
+        | "do_while_statement" | "when_expression" | "catch_block"
+        | "guard_statement" | "repeat_while_statement"
+        | "else_if_clause" | "throw_expression" | "nullsafe_member_access_expression"
+        | "elseif_statement" | "repeat_statement"
+        | "elseif_clause"
+        | "select_case_statement" | "select_rank_statement" | "select_type_statement"
+        | "where_statement" | "elsewhere_clause" | "arithmetic_if_statement" => *complexity += 1,
 
         _ => {}
     }
 
-    // Recursively visit children
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         visit_node_mccabe(child, source_code, complexity);
@@ -250,6 +153,26 @@ pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
     complexity
 }
 
+// Handles binary/boolean/logical operator chain-counting for cognitive complexity.
+// Returns true if the node was a logical op of a recognized kind (caller should return early).
+fn handle_logical_op(
+    node: Node,
+    source_code: &[u8],
+    nesting_level: u32,
+    complexity: &mut u32,
+    parent_binary_op: Option<&str>,
+    valid_ops: &[&str],
+) -> bool {
+    let Some(op) = node.child_by_field_name("operator") else { return false; };
+    let Ok(op_text) = op.utf8_text(source_code) else { return false; };
+    if !valid_ops.contains(&op_text) { return false; }
+    if parent_binary_op != Some(op_text) {
+        *complexity += 1;
+    }
+    visit_children_cognitive(node, source_code, nesting_level, complexity, Some(op_text));
+    true
+}
+
 fn visit_node_cognitive(
     node: Node,
     source_code: &[u8],
@@ -258,202 +181,102 @@ fn visit_node_cognitive(
     parent_binary_op: Option<&str>,
 ) {
     match node.kind() {
-        // Control flow structures that increase complexity (C/C++ and Rust share some names)
+        // if/else — special: Ada bare `else` keyword adds a flat +1.
         "if_statement" | "if_expression" => {
             *complexity += 1 + nesting_level;
-            // Ada: else is an unnamed keyword child of if_statement (no named else_clause node).
-            // C/C++ uses a named else_clause, so this check is safe for all grammars.
-            let has_bare_else = {
-                let mut cur = node.walk();
-                let found = node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "else");
-                found
-            };
-            if has_bare_else {
+            let mut cur = node.walk();
+            if node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "else") {
                 *complexity += 1;
             }
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
 
-        // Python elif: flat +1 (no nesting penalty), same semantics as C else-if
-        "elif_clause" => {
-            *complexity += 1;
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // Else clause handling — used by both C/C++ (if_statement) and Rust (if_expression)
+        // else clause — flat +1; if it contains an else-if, recurse into that child directly.
         "else_clause" => {
-            let mut cursor = node.walk();
-
-            for child in node.children(&mut cursor) {
-                if child.kind() == "if_statement" || child.kind() == "if_expression" {
-                    // else-if: +1 flat (no nesting penalty), body gets nesting_level+1
-                    *complexity += 1;
-                    visit_children_cognitive(child, source_code, nesting_level, complexity, None);
-                    return;
-                }
-            }
-
-            // Regular else: +1 without nesting increment
             *complexity += 1;
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
+            let mut cursor = node.walk();
+            let target = node
+                .children(&mut cursor)
+                .find(|c| matches!(c.kind(), "if_statement" | "if_expression"))
+                .unwrap_or(node);
+            visit_children_cognitive(target, source_code, nesting_level, complexity, None);
             return;
         }
 
-        "while_statement" | "do_statement" | "for_statement" | "for_range_loop" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // JavaScript for...in and for...of share for_in_statement
-        "for_in_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Rust loops
-        "while_expression" | "for_expression" | "loop_expression" | "do_while_expression" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Per SonarSource spec: try has NO cost and NO nesting increment.
-        // Only catch gets +1 + nesting penalty from the outer scope.
+        // try has NO cost and NO nesting increment; only catch/except gets the penalty.
         "try_statement" => {
             visit_children_cognitive(node, source_code, nesting_level, complexity, None);
             return;
         }
 
-        // Lambda / closure body is a nested scope — children get increased nesting.
-        // No +1 base cost: a closure is not itself a decision point.
-        // "lambda" covers Python lambdas; "lambda_expression"/"closure_expression" cover C++/Rust.
-        // "arrow_function" covers JavaScript arrow functions (() => ...).
-        // "anonymous_method_expression" covers C# delegate expressions (delegate { ... }).
-        // "local_function_statement" covers C# named local functions nested inside a method.
-        // "lambda_literal"/"anonymous_function"/"annotated_lambda" cover Kotlin lambdas/closures.
+        // Closures/lambdas: nesting +1, no base cost.
+        // Covers C++/Rust, Python, JS/TS arrow functions, C# delegates/local fns,
+        // Kotlin lambdas, Go closures.
         "lambda_expression" | "closure_expression" | "lambda" | "arrow_function"
         | "anonymous_method_expression" | "local_function_statement"
-        | "lambda_literal" | "anonymous_function" | "annotated_lambda" => {
+        | "lambda_literal" | "anonymous_function" | "annotated_lambda"
+        | "func_literal" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
 
-        "switch_statement" => {
+        // Nesting structures: +1 + nesting_level, children at nesting+1.
+        // Covers loops, switch/match/select, catch/except across all supported languages.
+        "while_statement" | "do_statement" | "for_statement" | "for_range_loop"
+        | "for_in_statement"
+        | "while_expression" | "for_expression" | "loop_expression" | "do_while_expression"
+        | "switch_statement" | "match_expression" | "match_statement"
+        | "catch_clause" | "except_clause"
+        | "loop_statement" | "case_statement" | "exception_handler"
+        | "selective_accept" | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select"
+        | "expression_switch_statement" | "type_switch_statement" | "select_statement"
+        | "enhanced_for_statement" | "switch_expression"
+        | "foreach_statement"
+        | "do_while_statement" | "when_expression" | "catch_block"
+        | "guard_statement" | "repeat_while_statement" | "repeat_statement"
+        | "select_case_statement" | "select_rank_statement" | "select_type_statement"
+        | "where_statement" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
         }
 
-        // Rust match expression / Python match_statement: same treatment as switch
-        "match_expression" | "match_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Case statements do NOT add complexity in cognitive complexity
-        // (only the switch itself does); same for Rust match arms
-
-        // Catch/except blocks — C++ uses catch_clause, Python uses except_clause
-        "catch_clause" | "except_clause" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Jump statements: goto and throw (flat +1, no nesting penalty)
-        "goto_statement" | "throw_statement" | "raise_statement" | "raise_expression" => {
-            *complexity += 1;
-        }
-
-        // Binary logical operators (C/C++/Rust: && ||; PHP: and or) — count once per contiguous sequence
-        "binary_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, "&&" | "||" | "??" | "and" | "or") {
-                        if parent_binary_op != Some(op_text) {
-                            *complexity += 1;
-                        }
-                        visit_children_cognitive_with_op(
-                            node,
-                            source_code,
-                            nesting_level,
-                            complexity,
-                            Some(op_text),
-                        );
-                        return;
-                    }
-                }
-            }
-        }
-
-        // Python boolean operators (and / or) — same chain-counting logic as binary_expression
-        "boolean_operator" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "and" || op_text == "or" {
-                        if parent_binary_op != Some(op_text) {
-                            *complexity += 1;
-                        }
-                        visit_children_cognitive_with_op(
-                            node,
-                            source_code,
-                            nesting_level,
-                            complexity,
-                            Some(op_text),
-                        );
-                        return;
-                    }
-                }
-            }
-        }
-
-        // Ada: loop_statement covers plain loop, while loop, and for loop
-        "loop_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Ada: elsif is flat +1, like Python elif
-        "elsif_statement_item" => {
+        // Flat branches: +1, children at same nesting.
+        // elif/elsif/elseif/elsewhere across Python, Ada, PHP, Lua, Fortran.
+        "elif_clause" | "elsif_statement_item" | "else_if_clause"
+        | "elseif_statement" | "elseif_clause" | "elsewhere_clause" => {
             *complexity += 1;
             visit_children_cognitive(node, source_code, nesting_level, complexity, None);
             return;
         }
 
-        // Ada: case_statement is like switch
-        "case_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Ada: each exception handler is like a catch clause
-        "exception_handler" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Ada tasking: select statements are structured branching — treated like switch.
-        "selective_accept" | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Ada tasking: guard (when Cond =>) is a flat condition, like elsif.
-        "guard" => {
+        // Flat jumps: +1, no recursion needed.
+        // goto/throw/raise across C/C++, Rust, Python, PHP (throw_expression); Ada guard; Fortran arithmetic-if.
+        "goto_statement" | "throw_statement" | "raise_statement" | "raise_expression"
+        | "guard" | "throw_expression" | "arithmetic_if_statement" => {
             *complexity += 1;
         }
 
-        // Ada: logical operators (and then / or else / xor / and / or).
-        // Count each new operator sequence (+1 per distinct contiguous sequence).
+        // Logical operator chains: +1 per distinct operator kind, not per operator in a sequence.
+        // binary_expression: C/C++/Rust/PHP (&&, ||, ??, and, or)
+        // boolean_operator: Python (and, or)
+        // infix_expression: Scala (&&, ||)
+        // logical_expression: Fortran (.and., .or., .AND., .OR.)
+        "binary_expression" | "boolean_operator" | "infix_expression" | "logical_expression" => {
+            let valid_ops: &[&str] = match node.kind() {
+                "binary_expression" => &["&&", "||", "??", "and", "or"],
+                "boolean_operator" => &["and", "or"],
+                "infix_expression" => &["&&", "||"],
+                _ => &[".and.", ".or.", ".AND.", ".OR."],
+            };
+            if handle_logical_op(node, source_code, nesting_level, complexity, parent_binary_op, valid_ops) {
+                return;
+            }
+        }
+
+        // Ada: logical operators (and / or / xor) as unnamed keyword children of expression.
+        // Count each new operator sequence, not each occurrence.
         "expression" => {
             let mut last_op: Option<&str> = None;
             let mut cursor = node.walk();
@@ -468,188 +291,18 @@ fn visit_node_cognitive(
             }
         }
 
-        // Ada: exit when Condition — flat +1 (conditional jump, like goto/break with condition).
+        // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
         "exit_statement" => {
-            let has_when = {
-                let mut cur = node.walk();
-                let found = node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "when");
-                found
-            };
-            if has_when {
+            let mut cur = node.walk();
+            if node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "when") {
                 *complexity += 1;
-            }
-        }
-
-        // Go: switch on value/type and channel select — like switch_statement.
-        "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Go: func_literal (closure) increments nesting but has no base cost.
-        "func_literal" => {
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Java: enhanced for-each and switch expressions — like their C equivalents.
-        "enhanced_for_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-        "switch_expression" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // C#: foreach loop.
-        "foreach_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Kotlin: do-while loop, when expression (like switch), catch block.
-        "do_while_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-        "when_expression" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-        "catch_block" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Swift: guard_statement (conditional early-exit) and repeat_while_statement (do-while loop).
-        "guard_statement" | "repeat_while_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Swift: lambda_literal is already covered above (Kotlin re-uses the same node kind).
-
-        // PHP: elseif clause — flat +1, same as Python elif (no nesting penalty).
-        "else_if_clause" => {
-            *complexity += 1;
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // PHP 8: throw expression — flat +1 (like throw_statement in C/C++).
-        "throw_expression" => {
-            *complexity += 1;
-        }
-
-        // Lua: ELSEIF is flat +1 (like Python elif).
-        "elseif_statement" => {
-            *complexity += 1;
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // Lua: REPEAT ... UNTIL — looping structure with +1 + nesting.
-        "repeat_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Scala: logical operators && / || in infix_expression — chain-counted like binary_expression.
-        "infix_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, "&&" | "||") {
-                        if parent_binary_op != Some(op_text) {
-                            *complexity += 1;
-                        }
-                        visit_children_cognitive_with_op(
-                            node,
-                            source_code,
-                            nesting_level,
-                            complexity,
-                            Some(op_text),
-                        );
-                        return;
-                    }
-                }
-            }
-        }
-
-        // Fortran: ELSE IF is flat +1 (like Python elif / PHP else_if_clause).
-        "elseif_clause" => {
-            *complexity += 1;
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // Fortran: SELECT CASE / SELECT RANK / SELECT TYPE — like switch_statement.
-        "select_case_statement" | "select_rank_statement" | "select_type_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Fortran: WHERE is a conditional structure — like if_statement.
-        "where_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Fortran: ELSEWHERE (with or without mask) — flat +1, like else_if_clause.
-        "elsewhere_clause" => {
-            *complexity += 1;
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // Fortran: ARITHMETIC IF — flat +1 (archaic 3-way branch, treated like goto).
-        "arithmetic_if_statement" => {
-            *complexity += 1;
-        }
-
-        // Fortran: logical operators .AND. / .OR. — chain-counted like binary_expression.
-        "logical_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, ".and." | ".or." | ".AND." | ".OR.") {
-                        if parent_binary_op != Some(op_text) {
-                            *complexity += 1;
-                        }
-                        visit_children_cognitive_with_op(
-                            node,
-                            source_code,
-                            nesting_level,
-                            complexity,
-                            Some(op_text),
-                        );
-                        return;
-                    }
-                }
             }
         }
 
         _ => {}
     }
 
-    // Visit children with current nesting level for non-control-flow nodes
-    visit_children_cognitive(
-        node,
-        source_code,
-        nesting_level,
-        complexity,
-        parent_binary_op,
-    );
+    visit_children_cognitive(node, source_code, nesting_level, complexity, parent_binary_op);
 }
 
 fn visit_children_cognitive(
@@ -661,32 +314,7 @@ fn visit_children_cognitive(
 ) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_cognitive(
-            child,
-            source_code,
-            nesting_level,
-            complexity,
-            parent_binary_op,
-        );
-    }
-}
-
-fn visit_children_cognitive_with_op(
-    node: Node,
-    source_code: &[u8],
-    nesting_level: u32,
-    complexity: &mut u32,
-    parent_binary_op: Option<&str>,
-) {
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        visit_node_cognitive(
-            child,
-            source_code,
-            nesting_level,
-            complexity,
-            parent_binary_op,
-        );
+        visit_node_cognitive(child, source_code, nesting_level, complexity, parent_binary_op);
     }
 }
 
@@ -1723,240 +1351,177 @@ pub fn calculate_aicp(external_calls: u32, sloc: u32, doc_score: i32) -> u32 {
 /// - C/C++ `function_definition`/`function_declaration`: counts `parameter_declaration`
 ///   children of the `parameter_list` found inside the declarator subtree.
 /// - JavaScript: counts children of the `parameters` (formal_parameters) node.
+// Counts children of `params_node` whose kind is in `kinds`.
+fn count_param_children(params_node: Node, kinds: &[&str]) -> u32 {
+    let mut cursor = params_node.walk();
+    params_node
+        .children(&mut cursor)
+        .filter(|c| kinds.contains(&c.kind()))
+        .count() as u32
+}
+
+// Gets `node`'s `parameters` named field and counts children matching `kinds`; 0 if absent.
+fn count_params_in_field(node: Node, kinds: &[&str]) -> u32 {
+    node.child_by_field_name("parameters")
+        .map(|p| count_param_children(p, kinds))
+        .unwrap_or(0)
+}
+
+// Python/PHP `function_definition` parameters: counts all param kinds, excluding self/cls identifiers.
+fn count_python_params(params: Node, source_code: &[u8]) -> u32 {
+    let mut count = 0u32;
+    let mut cursor = params.walk();
+    for child in params.children(&mut cursor) {
+        match child.kind() {
+            "identifier" => {
+                let text = child.utf8_text(source_code).unwrap_or("");
+                if text != "self" && text != "cls" {
+                    count += 1;
+                }
+            }
+            "typed_parameter"
+            | "default_parameter"
+            | "typed_default_parameter"
+            | "list_splat_pattern"
+            | "dictionary_splat_pattern"
+            | "simple_parameter"
+            | "variadic_parameter"
+            | "property_promotion_parameter"
+            | "parameter" => count += 1,
+            _ => {}
+        }
+    }
+    count
+}
+
+// Fortran: finds the header child of `header_kind` and counts its `parameters` identifiers.
+// module_procedure and program nodes have no dummy argument list and return 0.
+fn count_fortran_params(node: Node, header_kind: &str) -> u32 {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == header_kind {
+            return child
+                .child_by_field_name("parameters")
+                .map(|p| count_param_children(p, &["identifier"]))
+                .unwrap_or(0);
+        }
+    }
+    0
+}
+
+// Ada `parameter_specification`: counts identifier children before the `:` type separator.
+// `X, Y : Integer` → 2 params.
+fn count_ada_param_spec(spec: Node, source_code: &[u8]) -> u32 {
+    let mut count = 0u32;
+    let mut cursor = spec.walk();
+    for child in spec.children(&mut cursor) {
+        if !child.is_named() && child.kind() == ":" {
+            break;
+        }
+        if child.is_named() && child.kind() == "identifier" {
+            count += 1;
+        }
+    }
+    // source_code unused here but kept for signature consistency with callers
+    let _ = source_code;
+    count
+}
+
+// Ada `subprogram_body` / `expression_function_declaration`: walks to the specification,
+// finds formal_part, and sums counts across all parameter_specification children.
+fn count_ada_params(node: Node, source_code: &[u8]) -> u32 {
+    let mut c1 = node.walk();
+    let Some(spec) = node.children(&mut c1)
+        .find(|c| matches!(c.kind(), "function_specification" | "procedure_specification"))
+    else {
+        return 0;
+    };
+    let mut c2 = spec.walk();
+    let Some(formal_part) = spec.children(&mut c2).find(|c| c.kind() == "formal_part") else {
+        return 0;
+    };
+    let mut c3 = formal_part.walk();
+    formal_part
+        .children(&mut c3)
+        .filter(|c| c.kind() == "parameter_specification")
+        .map(|ps| count_ada_param_spec(ps, source_code))
+        .sum()
+}
+
 fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
     match node.kind() {
-        "function_item" => {
-            // Rust: named 'parameters' field; children are 'parameter' or 'self_parameter'
-            if let Some(params) = node.child_by_field_name("parameters") {
-                let mut cursor = params.walk();
-                return params
-                    .children(&mut cursor)
-                    .filter(|c| c.kind() == "parameter")
-                    .count() as u32;
-            }
-            0
-        }
+        // Rust: named 'parameters' field; 'self_parameter' is excluded (not a real arg).
+        "function_item" => count_params_in_field(node, &["parameter"]),
+        // Python/PHP/Scala/C: Python and PHP have a 'parameters' field; C uses a declarator chain.
         "function_definition" => {
-            // Python has a named 'parameters' field; C does not (uses declarator).
             if let Some(params) = node.child_by_field_name("parameters") {
-                let mut count = 0u32;
-                let mut cursor = params.walk();
-                for child in params.children(&mut cursor) {
-                    match child.kind() {
-                        "identifier" => {
-                            let text = child.utf8_text(source_code).unwrap_or("");
-                            if text != "self" && text != "cls" {
-                                count += 1;
-                            }
-                        }
-                        "typed_parameter"
-                        | "default_parameter"
-                        | "typed_default_parameter"
-                        | "list_splat_pattern"
-                        | "dictionary_splat_pattern" => count += 1,
-                        // PHP parameter kinds (formal_parameters children)
-                        "simple_parameter"
-                        | "variadic_parameter"
-                        | "property_promotion_parameter" => count += 1,
-                        // Scala parameter kind
-                        "parameter" => count += 1,
-                        _ => {}
-                    }
-                }
-                return count;
+                count_python_params(params, source_code)
+            } else {
+                count_c_params_in_subtree(node, source_code)
             }
-            // C/C++ function_definition: drill into the declarator subtree
-            count_c_params_in_subtree(node, source_code)
         }
+        // JS/TS/Go/Kotlin/Swift/C++: four layout variants tried in order.
         "function_declaration" => {
-            // JavaScript/TypeScript/Go: has a direct 'parameters' field.
-            // JS/TS use identifier/required_parameter etc.; Go uses parameter_declaration.
+            // JS/TS/Go: direct 'parameters' field
             if let Some(params) = node.child_by_field_name("parameters") {
-                let mut cursor = params.walk();
-                return params
-                    .children(&mut cursor)
-                    .filter(|c| {
-                        matches!(
-                            c.kind(),
-                            "identifier"
-                                | "required_parameter"
-                                | "optional_parameter"
-                                | "rest_pattern"
-                                | "assignment_pattern"
-                                | "parameter_declaration"
-                                | "variadic_parameter_declaration"
-                        )
-                    })
-                    .count() as u32;
+                return count_param_children(params, &[
+                    "identifier", "required_parameter", "optional_parameter",
+                    "rest_pattern", "assignment_pattern",
+                    "parameter_declaration", "variadic_parameter_declaration",
+                ]);
             }
-            // Kotlin: parameters are in a 'function_value_parameters' child node (no field).
+            // Kotlin: wrapped in a 'function_value_parameters' child (no field name)
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 if child.kind() == "function_value_parameters" {
-                    let mut inner = child.walk();
-                    return child
-                        .children(&mut inner)
-                        .filter(|c| c.kind() == "parameter")
-                        .count() as u32;
+                    return count_param_children(child, &["parameter"]);
                 }
             }
-            // Swift: 'parameter' nodes are direct children of function_declaration (no wrapper field).
-            {
+            // Swift: 'parameter' nodes are direct children (no wrapper)
+            let swift_count = {
                 let mut cursor = node.walk();
-                let count = node
-                    .children(&mut cursor)
-                    .filter(|c| c.kind() == "parameter")
-                    .count() as u32;
-                if count > 0 {
-                    return count;
-                }
+                node.children(&mut cursor).filter(|c| c.kind() == "parameter").count() as u32
+            };
+            if swift_count > 0 {
+                return swift_count;
             }
-            // C/C++: no 'parameters' field, drill into declarator chain
+            // C/C++: no 'parameters' field; drill into the declarator chain
             count_c_params_in_subtree(node, source_code)
         }
-        // Swift: init_declaration — 'parameter' nodes are direct children (same layout as function_declaration).
+        // Swift: init_declaration — same direct-children layout as function_declaration.
         "init_declaration" => {
             let mut cursor = node.walk();
-            return node
-                .children(&mut cursor)
-                .filter(|c| c.kind() == "parameter")
-                .count() as u32;
+            node.children(&mut cursor).filter(|c| c.kind() == "parameter").count() as u32
         }
-        // Go: method_declaration (receiver is separate; count only the regular parameters).
-        // Go: func_literal (anonymous function/closure).
-        // Java: method_declaration and constructor_declaration both use formal_parameter.
-        // C#: method_declaration, constructor_declaration, and local_function_statement use parameter.
-        // PHP: method_declaration also uses formal_parameters with simple_parameter etc.
+        // Go method/closure, Java method/constructor, C# method/constructor/local fn, PHP method.
         "method_declaration" | "func_literal" | "constructor_declaration"
-        | "local_function_statement" => {
-            if let Some(params) = node.child_by_field_name("parameters") {
-                let mut cursor = params.walk();
-                return params
-                    .children(&mut cursor)
-                    .filter(|c| {
-                        matches!(
-                            c.kind(),
-                            // Go parameter kinds
-                            "parameter_declaration" | "variadic_parameter_declaration"
-                            // Java parameter kinds
-                            | "formal_parameter" | "spread_parameter"
-                            // C# parameter kind
-                            | "parameter"
-                            // PHP parameter kinds
-                            | "simple_parameter" | "variadic_parameter"
-                            | "property_promotion_parameter"
-                        )
-                    })
-                    .count() as u32;
-            }
-            0
-        }
-        // JavaScript/TypeScript: method_definition, function_expression, arrow_function, etc.
-        // arrow_function also covers PHP `fn($x) => expr` arrow functions.
+        | "local_function_statement" => count_params_in_field(node, &[
+            "parameter_declaration", "variadic_parameter_declaration",
+            "formal_parameter", "spread_parameter",
+            "parameter",
+            "simple_parameter", "variadic_parameter", "property_promotion_parameter",
+        ]),
+        // JS/TS method/function/arrow/generator. PHP arrow `fn($x) => expr` uses arrow_function.
         "method_definition"
         | "function_expression"
         | "arrow_function"
         | "generator_function_declaration"
         | "generator_function" => {
-            // JS arrow_function with a single unparenthesised parameter uses the 'parameter' field.
-            if node.kind() == "arrow_function" {
-                if node.child_by_field_name("parameter").is_some() {
-                    return 1;
-                }
+            // Single unparenthesised arrow-function parameter uses the singular 'parameter' field.
+            if node.kind() == "arrow_function" && node.child_by_field_name("parameter").is_some() {
+                return 1;
             }
-            if let Some(params) = node.child_by_field_name("parameters") {
-                let mut cursor = params.walk();
-                return params
-                    .children(&mut cursor)
-                    .filter(|c| {
-                        matches!(
-                            c.kind(),
-                            // JS/TS parameter kinds
-                            "identifier"
-                                | "required_parameter"
-                                | "optional_parameter"
-                                | "rest_pattern"
-                                | "assignment_pattern"
-                            // PHP parameter kinds (arrow_function uses formal_parameters)
-                            | "simple_parameter"
-                            | "variadic_parameter"
-                            | "property_promotion_parameter"
-                        )
-                    })
-                    .count() as u32;
-            }
-            0
+            count_params_in_field(node, &[
+                "identifier", "required_parameter", "optional_parameter",
+                "rest_pattern", "assignment_pattern",
+                "simple_parameter", "variadic_parameter", "property_promotion_parameter",
+            ])
         }
-        // Fortran: function and subroutine contain a header statement with a 'parameters' field.
-        // Each parameter in Fortran is an identifier (dummy argument name).
-        // module_procedure and program have no dummy argument list.
-        "function" => {
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if child.kind() == "function_statement" {
-                    if let Some(params) = child.child_by_field_name("parameters") {
-                        let mut pcursor = params.walk();
-                        return params
-                            .children(&mut pcursor)
-                            .filter(|c| c.kind() == "identifier")
-                            .count() as u32;
-                    }
-                    return 0;
-                }
-            }
-            0
-        }
-        "subroutine" => {
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if child.kind() == "subroutine_statement" {
-                    if let Some(params) = child.child_by_field_name("parameters") {
-                        let mut pcursor = params.walk();
-                        return params
-                            .children(&mut pcursor)
-                            .filter(|c| c.kind() == "identifier")
-                            .count() as u32;
-                    }
-                    return 0;
-                }
-            }
-            0
-        }
-        "subprogram_body" | "expression_function_declaration" => {
-            // Ada: traverse to function_specification or procedure_specification,
-            // then find formal_part and count actual parameter names.
-            // Each parameter_specification may declare multiple names: `X, Y : T` → 2 params.
-            // Count identifier children before the `:` separator in each spec.
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if matches!(child.kind(), "function_specification" | "procedure_specification") {
-                    let mut spec_cursor = child.walk();
-                    for spec_child in child.children(&mut spec_cursor) {
-                        if spec_child.kind() == "formal_part" {
-                            let mut total = 0u32;
-                            let mut formal_cursor = spec_child.walk();
-                            for param_spec in spec_child.children(&mut formal_cursor) {
-                                if param_spec.kind() == "parameter_specification" {
-                                    // Identifiers before `:` are parameter names; after `:` is the type.
-                                    let mut ps_cursor = param_spec.walk();
-                                    for ps_child in param_spec.children(&mut ps_cursor) {
-                                        if !ps_child.is_named() && ps_child.kind() == ":" {
-                                            break;
-                                        }
-                                        if ps_child.is_named() && ps_child.kind() == "identifier" {
-                                            total += 1;
-                                        }
-                                    }
-                                }
-                            }
-                            return total;
-                        }
-                    }
-                    return 0;
-                }
-            }
-            0
-        }
+        // Fortran: each parameter is an identifier in the header statement's 'parameters' field.
+        "function" => count_fortran_params(node, "function_statement"),
+        "subroutine" => count_fortran_params(node, "subroutine_statement"),
+        // Ada: walk specification → formal_part → parameter_specification.
+        "subprogram_body" | "expression_function_declaration" => count_ada_params(node, source_code),
         _ => 0,
     }
 }
@@ -1981,106 +1546,57 @@ fn count_c_params_in_subtree(node: Node, source_code: &[u8]) -> u32 {
     0
 }
 
+// Returns the name from `node.child_by_field_name(name_field)` when
+// `node.child_by_field_name(object_field)` equals `self_kw`.
+fn try_extract_named_field<'a>(
+    node: Node,
+    source_code: &'a [u8],
+    object_field: &str,
+    self_kw: &str,
+    name_field: &str,
+) -> Option<&'a str> {
+    let obj = node.child_by_field_name(object_field)?;
+    if obj.utf8_text(source_code).ok()? != self_kw {
+        return None;
+    }
+    node.child_by_field_name(name_field)?.utf8_text(source_code).ok()
+}
+
+// Handles `navigation_expression` for both Kotlin (`this.field`) and Swift (`self.field`).
+// Kotlin AST: navigation_expression { this_expression, <identifier> }
+// Swift AST:  navigation_expression { self_expression, navigation_suffix { <identifier> } }
+fn extract_navigation_self_field<'a>(node: Node, source_code: &'a [u8]) -> Option<&'a str> {
+    let first = node.named_child(0)?;
+    match first.kind() {
+        "this_expression" => node.named_child(1)?.utf8_text(source_code).ok(),
+        "self_expression" => {
+            let suffix = node.named_child(1)?;
+            if suffix.kind() == "navigation_suffix" {
+                suffix.named_child(0)?.utf8_text(source_code).ok()
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut HashSet<String>) {
-    // Rust: field_expression where the 'value' child is the identifier "self"
-    if node.kind() == "field_expression" {
-        if let Some(value) = node.child_by_field_name("value") {
-            if value.utf8_text(source_code).unwrap_or("") == "self" {
-                if let Some(field) = node.child_by_field_name("field") {
-                    if let Ok(name) = field.utf8_text(source_code) {
-                        fields.insert(name.to_string());
-                    }
-                }
-            }
+    let extracted: Option<&str> = match node.kind() {
+        "field_expression" => try_extract_named_field(node, source_code, "value", "self", "field"),
+        "attribute" => try_extract_named_field(node, source_code, "object", "self", "attribute"),
+        "member_expression" => try_extract_named_field(node, source_code, "object", "this", "property"),
+        "field_access" => try_extract_named_field(node, source_code, "object", "this", "field"),
+        "member_access_expression" => {
+            // C#: expression == "this"; PHP: object == "$this" (different field names, no ambiguity)
+            try_extract_named_field(node, source_code, "expression", "this", "name")
+                .or_else(|| try_extract_named_field(node, source_code, "object", "$this", "name"))
         }
-    }
-    // Python: attribute node where the 'object' child is the identifier "self"
-    if node.kind() == "attribute" {
-        if let Some(obj) = node.child_by_field_name("object") {
-            if obj.utf8_text(source_code).unwrap_or("") == "self" {
-                if let Some(attr) = node.child_by_field_name("attribute") {
-                    if let Ok(name) = attr.utf8_text(source_code) {
-                        fields.insert(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    // JavaScript/TypeScript: member_expression where 'object' is 'this'
-    if node.kind() == "member_expression" {
-        if let Some(obj) = node.child_by_field_name("object") {
-            if obj.utf8_text(source_code).unwrap_or("") == "this" {
-                if let Some(prop) = node.child_by_field_name("property") {
-                    if let Ok(name) = prop.utf8_text(source_code) {
-                        fields.insert(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    // Java: field_access where 'object' is 'this'
-    if node.kind() == "field_access" {
-        if let Some(obj) = node.child_by_field_name("object") {
-            if obj.utf8_text(source_code).unwrap_or("") == "this" {
-                if let Some(field) = node.child_by_field_name("field") {
-                    if let Ok(name) = field.utf8_text(source_code) {
-                        fields.insert(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    // Kotlin: navigation_expression where first named child is this_expression (this.field)
-    if node.kind() == "navigation_expression" {
-        if let (Some(first), Some(second)) = (node.named_child(0), node.named_child(1)) {
-            if first.kind() == "this_expression" {
-                if let Ok(name) = second.utf8_text(source_code) {
-                    fields.insert(name.to_string());
-                }
-            }
-        }
-    }
-    // C#: member_access_expression where 'expression' is 'this'
-    if node.kind() == "member_access_expression" {
-        if let Some(obj) = node.child_by_field_name("expression") {
-            if obj.utf8_text(source_code).unwrap_or("") == "this" {
-                if let Some(prop) = node.child_by_field_name("name") {
-                    if let Ok(name) = prop.utf8_text(source_code) {
-                        fields.insert(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    // Swift: navigation_expression where first named child is self_expression (self.field).
-    // AST: navigation_expression { self_expression, navigation_suffix { simple_identifier "field" } }
-    if node.kind() == "navigation_expression" {
-        if let Some(first) = node.named_child(0) {
-            if first.kind() == "self_expression" {
-                if let Some(suffix) = node.named_child(1) {
-                    if suffix.kind() == "navigation_suffix" {
-                        if let Some(name_node) = suffix.named_child(0) {
-                            if let Ok(name) = name_node.utf8_text(source_code) {
-                                fields.insert(name.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // PHP: member_access_expression where 'object' is '$this' (e.g. $this->prop)
-    // Note: C# also uses member_access_expression but with field 'expression', not 'object'.
-    if node.kind() == "member_access_expression" {
-        if let Some(obj) = node.child_by_field_name("object") {
-            if obj.utf8_text(source_code).unwrap_or("") == "$this" {
-                if let Some(prop) = node.child_by_field_name("name") {
-                    if let Ok(name) = prop.utf8_text(source_code) {
-                        fields.insert(name.to_string());
-                    }
-                }
-            }
-        }
+        "navigation_expression" => extract_navigation_self_field(node, source_code),
+        _ => None,
+    };
+    if let Some(name) = extracted {
+        fields.insert(name.to_string());
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {

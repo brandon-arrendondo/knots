@@ -2551,209 +2551,107 @@ fn get_name_from_assignment_context(node: Node, source_code: &str) -> Option<Str
     }
 }
 
-fn get_function_name(node: Node, source_code: &str) -> Option<String> {
-    // Rust function_item has a direct 'name' field
-    if node.kind() == "function_item" {
-        return node
-            .child_by_field_name("name")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string());
-    }
+fn name_field(node: Node, source_code: &str) -> Option<String> {
+    node.child_by_field_name("name")
+        .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+        .map(|s| s.to_string())
+}
 
-    // JavaScript: function_declaration, function_expression, method_definition,
-    // generator_function_declaration, and generator_function all have a direct 'name' field.
-    // function_expression and generator_function may be anonymous (name field absent).
-    // Swift function_declaration has no 'name' field; its name is the first simple_identifier child.
-    if matches!(
-        node.kind(),
-        "function_declaration"
-            | "function_expression"
-            | "method_definition"
-            | "generator_function_declaration"
-            | "generator_function"
-    ) {
-        if let Some(name) = node
-            .child_by_field_name("name")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string())
-        {
-            return Some(name);
-        }
-        // Swift fallback: first simple_identifier child is the function name.
-        if node.kind() == "function_declaration" {
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if child.kind() == "simple_identifier" {
-                    return child
-                        .utf8_text(source_code.as_bytes())
-                        .ok()
-                        .map(|s| s.to_string());
-                }
-            }
-        }
-        // Anonymous function_expression: name comes from the surrounding assignment context.
-        if node.kind() == "function_expression" {
-            return get_name_from_assignment_context(node, source_code);
-        }
-        return None; // anonymous generator_function
-    }
-
-    // JS/TS arrow functions have no name field; the name lives in the parent node.
-    // e.g. `const foo = () => {}`, `{ foo: () => {} }`, `class { foo = () => {} }`.
-    if node.kind() == "arrow_function" {
-        return get_name_from_assignment_context(node, source_code);
-    }
-
-    // Swift: init_declaration — always named "init" (Swift initializer).
-    if node.kind() == "init_declaration" {
-        return Some("init".to_string());
-    }
-
-    // Python function_definition also has a direct 'name' field.
-    // C/C++ function_definition uses 'declarator' instead, so child_by_field_name("name")
-    // returns None for them and we fall through to the declarator chain below.
-    if node.kind() == "function_definition" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            return name_node
-                .utf8_text(source_code.as_bytes())
-                .ok()
-                .map(|s| s.to_string());
-        }
-    }
-
-    // Go method_declaration: name is in the 'name' field (field_identifier).
-    // Java method_declaration: name is also in the 'name' field (identifier).
-    if node.kind() == "method_declaration" {
-        return node
-            .child_by_field_name("name")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string());
-    }
-
-    // Java constructor_declaration: name is in the 'name' field (the class name).
-    if node.kind() == "constructor_declaration" {
-        return node
-            .child_by_field_name("name")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string());
-    }
-
-    // Go func_literal: anonymous closure — no name.
-    if node.kind() == "func_literal" {
-        return None;
-    }
-
-    // C# local_function_statement: named nested function — reads 'name' field.
-    if node.kind() == "local_function_statement" {
-        return node
-            .child_by_field_name("name")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string());
-    }
-
-    // Ada task_body: name is the first identifier child.
-    if node.kind() == "task_body" {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "identifier" {
-                return child
-                    .utf8_text(source_code.as_bytes())
-                    .ok()
-                    .map(|s| s.to_string());
-            }
-        }
-        return None;
-    }
-
-    // Ada subprogram_body: name lives inside the function_specification or
-    // procedure_specification child, under its 'name' field.
-    if matches!(node.kind(), "subprogram_body" | "expression_function_declaration") {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if matches!(child.kind(), "function_specification" | "procedure_specification") {
-                if let Some(name_node) = child.child_by_field_name("name") {
-                    return name_node
-                        .utf8_text(source_code.as_bytes())
-                        .ok()
-                        .map(|s| s.to_string());
-                }
-            }
-        }
-        return None;
-    }
-
-    // Fortran: function/subroutine/module_procedure extract the name from their header statement.
-    // program extracts from program_statement whose first named child is the name.
-    if node.kind() == "function" {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "function_statement" {
-                return child
-                    .child_by_field_name("name")
-                    .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-                    .map(|s| s.to_string());
-            }
-        }
-        return None;
-    }
-    if node.kind() == "subroutine" {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "subroutine_statement" {
-                return child
-                    .child_by_field_name("name")
-                    .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-                    .map(|s| s.to_string());
-            }
-        }
-        return None;
-    }
-    if node.kind() == "module_procedure" {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "module_procedure_statement" {
-                return child
-                    .child_by_field_name("name")
-                    .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-                    .map(|s| s.to_string());
-            }
-        }
-        return None;
-    }
-    if node.kind() == "program" {
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            if child.kind() == "program_statement" {
-                // Fortran PROGRAM unit — extract its name (or use "program" if unnamed)
-                let mut inner = child.walk();
-                for name_node in child.named_children(&mut inner) {
-                    return name_node
-                        .utf8_text(source_code.as_bytes())
-                        .ok()
-                        .map(|s| s.to_string());
-                }
-                return Some("program".to_string());
-            }
-        }
-        // No program_statement → this is a JS/TS/Java/PHP root node, not a Fortran program
-        return None;
-    }
-
-    // C/C++ function_definition uses a declarator chain
+fn name_in_child(node: Node, child_kind: &str, source_code: &str) -> Option<String> {
     let mut cursor = node.walk();
+    let child = node.children(&mut cursor).find(|c| c.kind() == child_kind)?;
+    name_field(child, source_code)
+}
 
+fn get_c_name(node: Node, source_code: &str) -> Option<String> {
+    let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "function_declarator" {
             return get_declarator_name(child, source_code);
-        } else if child.kind() == "pointer_declarator" {
-            // For functions returning pointers, the function_declarator is nested inside
+        }
+        if child.kind() == "pointer_declarator" {
             if let Some(name) = get_function_name_from_declarator(child, source_code) {
                 return Some(name);
             }
         }
     }
-
     None
+}
+
+fn get_function_name(node: Node, source_code: &str) -> Option<String> {
+    match node.kind() {
+        // Direct 'name' field — Rust, JS/TS methods/generators, Go/Java/C#/PHP methods, constructors
+        "function_item"
+        | "method_definition"
+        | "generator_function_declaration"
+        | "generator_function"
+        | "method_declaration"
+        | "constructor_declaration"
+        | "local_function_statement" => name_field(node, source_code),
+
+        // JS/TS/Go/Kotlin: direct 'name' field; Swift: first simple_identifier child
+        "function_declaration" => name_field(node, source_code).or_else(|| {
+            let mut cursor = node.walk();
+            let found = node.children(&mut cursor).find(|c| c.kind() == "simple_identifier");
+            found.and_then(|c| c.utf8_text(source_code.as_bytes()).ok()).map(|s| s.to_string())
+        }),
+
+        // Python: direct 'name' field; C/C++: no 'name' field, drill into declarator chain
+        "function_definition" => {
+            name_field(node, source_code).or_else(|| get_c_name(node, source_code))
+        }
+
+        // Named or anonymous (name from parent assignment context)
+        "function_expression" => {
+            name_field(node, source_code).or_else(|| get_name_from_assignment_context(node, source_code))
+        }
+
+        // Always anonymous at the node level; name lives in the parent assignment context
+        "arrow_function" => get_name_from_assignment_context(node, source_code),
+
+        // Swift initializer: always "init"
+        "init_declaration" => Some("init".to_string()),
+
+        // Go anonymous closure: no name
+        "func_literal" => None,
+
+        // Ada: name is inside function_specification or procedure_specification
+        "subprogram_body" | "expression_function_declaration" => {
+            let mut cursor = node.walk();
+            let spec = node
+                .children(&mut cursor)
+                .find(|c| matches!(c.kind(), "function_specification" | "procedure_specification"))?;
+            name_field(spec, source_code)
+        }
+
+        // Ada task: first identifier child
+        "task_body" => {
+            let mut cursor = node.walk();
+            let found = node.children(&mut cursor).find(|c| c.kind() == "identifier");
+            found.and_then(|c| c.utf8_text(source_code.as_bytes()).ok()).map(|s| s.to_string())
+        }
+
+        // Fortran: name in the header statement's 'name' field
+        "function" => name_in_child(node, "function_statement", source_code),
+        "subroutine" => name_in_child(node, "subroutine_statement", source_code),
+        "module_procedure" => name_in_child(node, "module_procedure_statement", source_code),
+
+        // Fortran PROGRAM: first named child of program_statement, or "program" if unnamed.
+        // Returns None when there is no program_statement (JS/TS/Java/PHP root nodes).
+        "program" => {
+            let mut cursor = node.walk();
+            let stmt = node.children(&mut cursor).find(|c| c.kind() == "program_statement")?;
+            let mut inner = stmt.walk();
+            let first_named = stmt.named_children(&mut inner).next();
+            first_named
+                .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+                .map(|s| s.to_string())
+                .or_else(|| Some("program".to_string()))
+        }
+
+        // C/C++: drill into the declarator chain
+        _ => get_c_name(node, source_code),
+    }
 }
 
 fn get_function_name_from_declarator(node: Node, source_code: &str) -> Option<String> {
