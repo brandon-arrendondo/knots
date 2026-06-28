@@ -23,18 +23,19 @@ The codebase has three conceptual layers:
 ::
 
     ┌────────────────────────────────────────────────────────────┐
-    │  CLI + pipeline  (src/main.rs, ~3 450 lines)               │
+    │  CLI + pipeline  (src/main.rs, ~2 650 lines)               │
     │  file discovery · function discovery · threshold enforcement│
     │  baseline · git diff integration                           │
     ├────────────────────────────────────────────────────────────┤
-    │  Output formatting  (src/output.rs, ~770 lines)            │
+    │  Output formatting  (src/output.rs, ~750 lines)            │
     │  text/SARIF/JSON/NDJSON/CSV · AIRD display helpers        │
     ├────────────────────────────────────────────────────────────┤
     │  Metric calculation  (src/complexity.rs, ~3 300 lines)     │
     │  pure tree-sitter traversal — no I/O                       │
     ├────────────────────────────────────────────────────────────┤
-    │  Language registry  (src/lib.rs, ~210 lines)               │
+    │  Language registry + data model  (src/lib.rs, ~980 lines)  │
     │  LANGUAGES table · SUPPORTED_EXTENSIONS · grammar dispatch │
+    │  FunctionMetrics · collect_function_metrics · FilterRules  │
     └────────────────────────────────────────────────────────────┘
 
 ---------------------------------------------------------------------------
@@ -53,6 +54,15 @@ recursive discovery vs. explicit-file parsing respectively (e.g. ``.h`` and
 
 All grammars are re-exported as ``pub use tree_sitter_*`` so tests and
 workspace members can reach them without adding their own direct dependencies.
+
+``lib.rs`` also owns the shared data model:
+
+- ``FunctionMetrics`` — the output record of one analysed function (all
+  metric fields, file path, line range).
+- ``collect_function_metrics`` — runs ``visit_functions`` and all
+  ``calculate_*`` calls for every function in a parsed tree.
+- ``FilterRules`` — include/exclude filters (file globs via ``globset``,
+  function regexes, complexity bounds) loaded from a JSON sidecar.
 
 ---------------------------------------------------------------------------
 
@@ -82,12 +92,12 @@ There are five SLOC variants, selected by comment style:
 
 - ``calculate_sloc`` — ``//`` and ``/* */``  (C, C++, Rust, JS, TS, Go, …)
 - ``calculate_sloc_python`` — additionally skips lines starting with ``#``
-- ``calculate_sloc_ada`` — skips ``--`` lines
-- ``calculate_sloc_lua`` — skips ``--`` lines (identical logic to Ada)
+- ``calculate_sloc_ada`` — skips ``--`` lines (delegates to shared helper)
+- ``calculate_sloc_lua`` — skips ``--`` lines (delegates to same helper)
 - ``calculate_sloc_fortran`` — skips ``!`` lines
 
-Ada and Lua share the same ``--`` comment style but have separate
-implementations (copy-paste duplication — see :ref:`known-issues`).
+Ada and Lua share a private ``calculate_sloc_line_comment(node, src, prefix)``
+helper parameterised by the comment-prefix byte sequence.
 
 Selection happens in ``main.rs`` via ``is_python`` / ``is_ada`` /
 ``is_fortran`` / ``is_lua`` boolean flags derived from file extension.
@@ -96,38 +106,38 @@ TestScoring note
 ~~~~~~~~~~~~~~~~
 
 ``calculate_test_scoring`` includes a ``calculate_signature_complexity``
-sub-function that walks the tree looking for ``function_definition`` >
-``declarator`` (C-style node structure) to count parameters.  This heuristic
-produces unreliable results for non-C languages; the signature score
-component of TestScoring should be treated with caution for Java, Kotlin,
-Swift, Scala, PHP, etc.
+sub-function that scores parameter count using ``count_explicit_params``.
+``count_explicit_params`` is language-neutral and handles all 16 supported
+languages, so the signature component of TestScoring is reliable across the
+full language set.
 
 ---------------------------------------------------------------------------
 
 Layer 3a — CLI + Pipeline (``src/main.rs``)
 -------------------------------------------
 
-~3 450 lines. Contains:
+~2 650 lines. Contains:
 
 - **CLI parsing** — ``Args`` struct (clap derive), ``ExplainMetric``,
   ``OutputFormat`` enums
 - **File discovery** — ``collect_files``, ``load_compile_commands``
 - **Function discovery** — ``visit_functions``, ``get_function_name``,
   ``collect_local_names_recursive``, ``is_function_kind``
-- **Metric pipeline** — ``collect_function_metrics``, ``collect_all_metrics``
+- **Metric pipeline** — ``collect_all_metrics``
 - **Threshold enforcement** — ``check_thresholds``, ``check_u32_threshold``,
   ``check_f64_threshold``
 - **Baseline I/O** — ``BaselineEntry``, ``Baseline``, ``write_baseline``,
   ``baseline_from_metrics``
 - **Git integration** — ``collect_changed_lines``, ``ChangedLines``,
   ``parse_hunk_new_range``
-- **Data model** — ``FunctionMetrics`` (private struct, used throughout)
+
+``FunctionMetrics`` and ``collect_function_metrics`` live in ``lib.rs`` and
+are imported here.
 
 Layer 3b — Output Formatting (``src/output.rs``)
 -------------------------------------------------
 
-~770 lines. Contains all display and serialization functions extracted from
-``main.rs`` (task 43):
+~750 lines. Contains all display and serialization functions:
 
 - **Output formatting** — ``analyze_code`` (text/single-file),
   ``display_recursive_summary``, ``display_testability_matrix``,
@@ -146,7 +156,7 @@ Pipeline flow
     main()
       → collect_files() / load_compile_commands()
       → parse_file()                  ← grammar from language_for_file()
-      → collect_function_metrics()
+      → collect_function_metrics()    ← lib.rs; called once per file
           → visit_functions()         ← discovers function nodes
           → get_function_name()       ← extracts name per language
           → calculate_*()             ← all metrics, one pass per function
@@ -159,8 +169,8 @@ Output mode dispatch
 
 After building ``RunContext``, ``main()`` routes to one of:
 
-- ``run_single_file_mode`` — calls ``analyze_code`` (prints per-function
-  lines) then ``collect_function_metrics`` again for threshold checking
+- ``run_single_file_mode`` — calls ``collect_function_metrics`` once, passes
+  the result slice to ``analyze_code`` (display) and ``check_thresholds``
 - ``run_multi_file_mode`` — collects across files, summary display, thresholds
 - ``run_matrix_mode`` — testability matrix display, thresholds
 - ``run_structured_output_mode`` — SARIF / JSON / NDJSON / CSV via
@@ -177,30 +187,14 @@ The items below are not bugs — knots is correct.  They are structural debts
 that will become friction as the language count grows.
 
 1. **main.rs monolith** *(partially resolved)*
-   Output formatters and display functions were extracted into
-   ``src/output.rs`` (task 43), reducing ``main.rs`` from ~4 100 to
-   ~3 450 lines.  A further split of function-discovery helpers into
+   Output formatters were extracted into ``src/output.rs`` (task 43/44) and
+   ``FunctionMetrics`` / ``collect_function_metrics`` moved to ``lib.rs``
+   (task 44), reducing ``main.rs`` from ~4 100 to ~2 650 lines.  A further
+   split of function-discovery helpers (``visit_functions``,
+   ``get_function_name``, ``collect_local_names_recursive``) into
    ``src/discovery.rs`` would further reduce coupling.
 
-2. **FunctionMetrics not exported from lib**
-   ``FunctionMetrics`` is a private struct in ``main.rs``.
-   ``knots-test-complexity`` therefore cannot reuse it and maintains its own
-   parallel metric pipeline.  Moving ``FunctionMetrics`` (and
-   ``collect_function_metrics``) into ``lib.rs`` would unify the two
-   codepaths and let workspace members build on a shared data model.
-
-3. **Double metric calculation in single-file mode**
-   ``run_single_file_mode`` calls ``analyze_code()``, which internally calls
-   ``collect_function_metrics()``, and then calls ``collect_function_metrics``
-   a second time for threshold checking.  For large files this doubles parse
-   and metric computation work unnecessarily.
-
-4. **Ada/Lua SLOC duplication**
-   ``calculate_sloc_ada`` and ``calculate_sloc_lua`` are byte-for-byte
-   identical (both skip ``--`` comment lines).  They should share a private
-   implementation.
-
-5. **Language-specific booleans scattered across main.rs**
+2. **Language-specific booleans scattered across main.rs**
    ``is_python``, ``is_ada``, ``is_fortran``, ``is_lua`` booleans are
    derived from file extension strings at least twice in ``main.rs``
    (``collect_function_metrics`` and ``accumulate_nested_sloc``).  Each new
@@ -208,29 +202,38 @@ that will become friction as the language count grows.
    multiple places.  The right fix is to derive the SLOC mode from the
    grammar/language type, not from extension strings.
 
-6. **``collect_local_names_recursive`` must mirror ``visit_functions``**
-   This is documented as an invariant in ``CLAUDE.md`` but there is no test
-   enforcing it.  Any function node kind added to ``visit_functions`` without
-   a matching addition to ``collect_local_names_recursive`` silently
-   misclassifies locally-defined functions as external calls.
-
-7. **Hand-rolled glob matching**
-   ``glob_match()`` converts a glob pattern to a regex by string replacement.
-   The ``ignore`` crate (already a dependency) provides glob matching;
-   ``glob_match`` is redundant and subtly incomplete (e.g. ``?`` is not
-   handled).
-
-8. **``calculate_signature_complexity`` is C-specific**
-   The sub-function that scores function signature complexity (used inside
-   ``calculate_test_scoring``) searches for ``function_definition`` >
-   ``declarator`` node structure, which is C/C++-only.  Other languages will
-   produce a zero or near-zero signature score regardless of parameter count.
-   This makes the TestScoring metric unreliable as a cross-language signal.
-
-9. **No parallel file processing**
+3. **No parallel file processing**
    File analysis is sequential.  For large recursive analyses (hundreds of
    files) this is a visible bottleneck.  ``rayon`` or ``std::thread`` would
    be straightforward to add since each file is independent.
+
+---------------------------------------------------------------------------
+
+Resolved Issues
+---------------
+
+These were identified during the architecture review and have since been
+addressed.
+
+- **FunctionMetrics not exported from lib** — moved to ``lib.rs`` along with
+  ``collect_function_metrics`` (task 44/commit ``2997cd5``).
+- **Double metric calculation in single-file mode** — ``run_single_file_mode``
+  now calls ``collect_function_metrics`` once and passes the slice to both
+  display and threshold checking (task 45).
+- **Ada/Lua SLOC duplication** — ``calculate_sloc_ada`` and
+  ``calculate_sloc_lua`` now share a private ``calculate_sloc_line_comment``
+  helper (task 46).
+- **``collect_local_names_recursive`` invariant untested** — 9 behavioural
+  tests across 6 languages guard that locally-defined functions are not
+  misclassified as external calls (commit ``55f69be``).
+- **Hand-rolled glob matching** — ``glob_match`` replaced with
+  ``globset::Glob`` (already a transitive dependency via the ``ignore`` crate),
+  which handles ``?``, character classes, and path anchoring correctly
+  (task 48).
+- **``calculate_signature_complexity`` C-specific** — replaced the broken
+  child-search heuristic with a call to the language-neutral
+  ``count_explicit_params``, making the signature component of TestScoring
+  correct for all 16 supported languages (task 49).
 
 ---------------------------------------------------------------------------
 
