@@ -790,6 +790,79 @@ $> 5$) are strong candidates for dispatch-table false positives and warrant
 human review before refactoring action is taken.
 
 %% ============================================================
+\section{Anonymous Function Literals: knots vs.\ lizard}
+\label{sec:anon-fns}
+
+A systematic discrepancy between knots and lizard arises from the treatment
+of anonymous function literals --- inline closures without a declared name.
+knots discovers and counts only \emph{named} callables; anonymous literals
+(Go \texttt{func\_literal}, JavaScript arrow functions, TypeScript closures)
+are visited for complexity rollup into the enclosing function but are not
+emitted as independent entries.  lizard counts them as functions with an
+empty name field.
+
+\subsection{Go: cobra benchmark}
+
+On the \texttt{cobra} corpus (36~Go files, github.com/spf13/cobra), knots
+discovers 595~functions and lizard discovers 805, a $-26\%$ gap.
+
+Decomposing the lizard count via its CSV output:
+
+\begin{itemize}
+  \item \textbf{587 lizard-named + 8 mis-attributed receiver methods = 595
+    named functions.}  knots names all receiver methods correctly
+    (\texttt{(c *Command) RegisterFlagCompletionFunc} $\to$
+    \texttt{RegisterFlagCompletionFunc}).  lizard's Go parser does not always
+    extract the method name from the receiver syntax, reporting those entries
+    with an empty name field.  Netting those 8~entries against
+    lizard's named count gives 595, matching knots exactly.
+  \item \textbf{210 anonymous \texttt{func\_literal} closures} counted by
+    lizard but not knots.  These are predominantly inline callbacks
+    assigned to struct fields
+    (\texttt{ValidArgsFunction: func(\ldots)\{\ldots\}},
+     \texttt{Run: func(\ldots)\{\ldots\}}) and goroutine literals.
+\end{itemize}
+
+The named-function agreement is therefore essentially perfect ($\pm 0$).
+The full $-26\%$ gap is attributable to the anonymous closure policy.
+
+\subsection{TypeScript: zod benchmark}
+
+On the \texttt{zod} corpus (401~TypeScript files), knots discovers 1{,}153
+functions and lizard discovers 6{,}020, an $-81\%$ gap.  The magnitude
+reflects that idiomatic Zod code is built around deeply nested anonymous
+arrow functions and method-chaining callbacks; nearly every schema definition
+contains multiple inline \texttt{(ctx) => \ldots} validators.  knots counts
+the ~1{,}153 named callables (top-level functions, class methods, exported
+arrow functions assigned to variables); lizard additionally counts
+approximately 4{,}900 anonymous callbacks.
+
+\subsection{Policy and implications}
+
+Anonymous closures contribute real complexity to their enclosing context ---
+knots folds their cyclomatic and cognitive scores into the parent function's
+total.  Whether they should also be emitted as independent entries is a
+design choice with real consequences for threshold enforcement:
+
+\begin{itemize}
+  \item \textbf{Counting them inflates function counts and lowers average
+    complexity.}  A file with 10 named functions each containing 3 trivial
+    one-liner closures reports 40 functions.  Per-function thresholds still
+    fire on the complex named functions; the anonymous entries are noise.
+  \item \textbf{Not counting them under-reports function count} relative to
+    lizard and some other tools, which can surprise users migrating
+    thresholds from lizard baselines.
+\end{itemize}
+
+The current knots policy (anonymous literals excluded from output, included
+in parent complexity) is consistent with treating complexity gates as a
+review signal for human-maintained callables.  The naming challenge is real:
+anonymous functions cannot be addressed in a violation report by name.
+A future option (\texttt{--count-anonymous-closures}) could expose them with
+a synthesized label (\texttt{<anonymous>@line:col}), allowing finer-grained
+analysis without changing the default behavior.
+
+%% ============================================================
 \section{Kotlin Complexity: Implementation Findings}
 \label{sec:kotlin-findings}
 

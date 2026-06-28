@@ -57,8 +57,8 @@ rca 0.0.25 from crates.io fails to compile on rustc 1.95; install from git HEAD:
 | Kotlin | srg_collection_manager_app | 381 | 319 | +19% | ✓ explained — see §Kotlin |
 | C | curl | 5,836 | 4,920 | +19% | plausible — knots picks up static inline |
 | C++ | mosquitto | 5,300 | 3,343 | +59% | plausible — templates/lambdas |
-| Go | cobra | 595 | 805 | −26% | open (#23) |
-| TypeScript | zod | 1,153 | 6,020 | −81% | open (#22) |
+| Go | cobra | 595 | 805 | −26% | ✓ explained — see §Anonymous Functions; named counts equal (595 = 595) |
+| TypeScript | zod | 1,153 | 6,020 | −81% | ✓ explained — see §Anonymous Functions; ~4,900 anonymous arrow callbacks |
 | Python | srg_card_search_website | 134 | 133 (Py only) | ~equal | ✓ good |
 | Ada | gnatcoll-core | 2,672 | 386 | n/a | lizard has no Ada support |
 
@@ -119,8 +119,8 @@ Open: todo #21 — evaluate whether to count `?` as +1 McCabe.
 | 19 | JavaScript | `.jsx` extension not in `SUPPORTED_EXTENSIONS`; all JSX files skipped by `--recursive` | #19 |
 | 20 | Kotlin | knots finds 19% more functions than lizard (381 vs 319) — **resolved**: 55 single-expression funs lizard misses + 7 abstract declarations; knots correct | closed |
 | 21 | Rust | knots McCabe ~41% lower than rca due to `?` not counted as branch | #21 |
-| 22 | TypeScript | knots finds 81% fewer functions than lizard (1,153 vs 6,020 on zod) — arrow functions assigned to vars and object method shorthand likely missing | #22 |
-| 23 | Go | knots finds 26% fewer functions than lizard (595 vs 805 on cobra) — cause unknown | #23 |
+| 22 | TypeScript | knots finds 81% fewer functions than lizard on zod — **resolved**: ~4,900 anonymous arrow callbacks; named counts similar | closed |
+| 23 | Go | knots finds 26% fewer functions than lizard on cobra — **resolved**: 210 anonymous `func_literal`; named counts equal (595 vs 595) | closed |
 
 ---
 
