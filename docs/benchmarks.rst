@@ -361,33 +361,41 @@ knots vs. lizard throughput
 knots computes significantly more metrics per function than lizard (McCabe,
 Cognitive, Nesting, ABC, AIRD, AICP, SLOC), so single-threaded throughput is
 roughly at parity with lizard for C and Java and slightly slower for PHP (where
-lizard uses Python multiprocessing internally).  With parallelism, knots is
-6–12× faster than lizard across all tested languages.
+lizard uses Python multiprocessing internally).  lizard also supports
+``-t``/``--working_threads`` (default 1); both tools were benchmarked
+single-threaded and at 16 threads.
 
 .. list-table::
    :header-rows: 1
-   :widths: 25 15 15 15 20
+   :widths: 22 12 12 12 12 18
 
    * - Corpus
      - knots j1
-     - knots jN
-     - lizard
-     - jN vs lizard
+     - knots j16
+     - lizard t1
+     - lizard t16
+     - j16 vs t16
    * - hostap (C, 504 files)
-     - 22.5s
-     - 2.2s (j16)
+     - 22.7s
+     - 2.2s
      - 24.3s
-     - **11×** faster
+     - 3.4s
+     - **1.6×** faster
    * - laravel (PHP, 2,970 files)
-     - 18.2s
-     - 2.2s (j16)
-     - 13.6s
-     - **6×** faster
+     - 17.7s
+     - 2.0s
+     - 13.8s
+     - 2.9s
+     - **1.4×** faster
    * - commons-lang (Java, 623 files)
      - 5.7s
-     - 0.84s (j16)
-     - 10.4s
-     - **12×** faster
+     - 0.93s
+     - 10.3s
+     - 1.76s
+     - **1.9×** faster
+
+At full parallelism knots leads by 1.4–1.9×.  The earlier j16-vs-t1 comparison
+(6–12×) was apples-to-oranges; the fair head-to-head is j16 vs t16.
 
 Known Implementation Notes
 ===========================
