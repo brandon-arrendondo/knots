@@ -22,6 +22,7 @@ pub use tree_sitter_javascript;
 pub use tree_sitter_python;
 pub use tree_sitter_rust;
 pub use tree_sitter_typescript;
+pub use tree_sitter_php;
 
 /// A language knots can analyze, with its display name and file extensions.
 pub struct LanguageInfo {
@@ -51,6 +52,7 @@ pub const LANGUAGES: &[LanguageInfo] = &[
     LanguageInfo { name: "C#",         extensions: &["cs"],                           explicit_only: &[] },
     LanguageInfo { name: "Kotlin",     extensions: &["kt", "kts"],                    explicit_only: &[] },
     LanguageInfo { name: "Swift",      extensions: &["swift"],                        explicit_only: &[] },
+    LanguageInfo { name: "PHP",        extensions: &["php"],                          explicit_only: &[] },
 ];
 
 /// All source file extensions recognized during recursive discovery, grouped
@@ -82,6 +84,8 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "kt", "kts",
     // Swift
     "swift",
+    // PHP
+    "php",
 ];
 
 /// Renders the human-readable `knots --supported-languages` report.
@@ -128,6 +132,7 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         Some("cs") => tree_sitter_c_sharp::LANGUAGE.into(),
         Some("kt") | Some("kts") => tree_sitter_kotlin_ng::LANGUAGE.into(),
         Some("swift") => tree_sitter_swift::LANGUAGE.into(),
+        Some("php") => tree_sitter_php::LANGUAGE_PHP.into(),
         _ => tree_sitter_c::LANGUAGE.into(),
     }
 }

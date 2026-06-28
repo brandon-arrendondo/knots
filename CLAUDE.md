@@ -162,4 +162,5 @@ crates are the `tree_sitter_*` re-exports at the top of `src/lib.rs`.
 | C# | `.cs` | — |
 | Kotlin | `.kt` `.kts` | — |
 | Swift | `.swift` | — |
+| PHP | `.php` | — |
 <!-- END:supported-languages -->

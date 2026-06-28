@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "C/C++/Rust/Python/JavaScript/TypeScript/Ada/Go/Java/C#/Kotlin/Swift complexity analyzer with AI cost metrics (AIRD, AICP), SARIF/JSON/CSV output, and CI threshold enforcement"
+description = "C/C++/Rust/Python/JavaScript/TypeScript/Ada/Go/Java/C#/Kotlin/Swift/PHP complexity analyzer with AI cost metrics (AIRD, AICP), SARIF/JSON/CSV output, and CI threshold enforcement"
 
 [[bin]]
 name = "knots"
@@ -29,6 +29,7 @@ tree-sitter-c-sharp.workspace = true
 tree-sitter-kotlin-ng.workspace = true
 tree-sitter-swift.workspace = true
 tree-sitter-typescript.workspace = true
+tree-sitter-php.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 ignore.workspace = true
@@ -67,6 +68,7 @@ tree-sitter-c-sharp = "0.23"
 tree-sitter-kotlin-ng = "1.1"
 tree-sitter-swift = "0.7"
 tree-sitter-typescript = "0.23"
+tree-sitter-php = "0.24"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 colored = "2.0"

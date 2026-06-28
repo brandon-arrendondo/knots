@@ -79,9 +79,10 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
                     // && / || — short-circuit boolean ops (all languages)
-                    // ?? — null-coalescing (JS/TS/C#): already counted
+                    // ?? — null-coalescing (JS/TS/C#/PHP): already counted
                     // ?: — Kotlin Elvis: same semantics as ?? in other languages
-                    if op_text == "&&" || op_text == "||" || op_text == "??" || op_text == "?:" {
+                    // and / or — PHP word-form logical operators (lower precedence than && / ||)
+                    if matches!(op_text, "&&" | "||" | "??" | "?:" | "and" | "or") {
                         *complexity += 1;
                     }
                 }
@@ -173,6 +174,13 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
 
         // Swift: guard_statement (conditional early-exit) and repeat_while_statement (do-while loop).
         "guard_statement" | "repeat_while_statement" => *complexity += 1,
+
+        // PHP: elseif clause — each elseif is an additional branch (like Python elif).
+        "else_if_clause" => *complexity += 1,
+        // PHP 8: throw used as an expression (e.g. `$x = $y ?? throw new Ex()`).
+        "throw_expression" => *complexity += 1,
+        // PHP: null-safe property access `$obj?->prop` short-circuits on null.
+        "nullsafe_member_access_expression" => *complexity += 1,
 
         _ => {}
     }
@@ -312,11 +320,11 @@ fn visit_node_cognitive(
             *complexity += 1;
         }
 
-        // Binary logical operators (C/C++/Rust: && ||) — count once per contiguous sequence
+        // Binary logical operators (C/C++/Rust: && ||; PHP: and or) — count once per contiguous sequence
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "&&" || op_text == "||" || op_text == "??" {
+                    if matches!(op_text, "&&" | "||" | "??" | "and" | "or") {
                         if parent_binary_op != Some(op_text) {
                             *complexity += 1;
                         }
@@ -479,6 +487,18 @@ fn visit_node_cognitive(
         }
 
         // Swift: lambda_literal is already covered above (Kotlin re-uses the same node kind).
+
+        // PHP: elseif clause — flat +1, same as Python elif (no nesting penalty).
+        "else_if_clause" => {
+            *complexity += 1;
+            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
+            return;
+        }
+
+        // PHP 8: throw expression — flat +1 (like throw_statement in C/C++).
+        "throw_expression" => {
+            *complexity += 1;
+        }
 
         _ => {}
     }
@@ -831,7 +851,15 @@ fn visit_node_abc(
         }
 
         // Branches (Java): method invocations and object creation
+        // object_creation_expression also covers PHP `new Foo()`
         "method_invocation" | "object_creation_expression" => *branches += 1,
+
+        // Branches (PHP): function/method call expressions
+        "function_call_expression" | "member_call_expression" | "nullsafe_member_call_expression" => {
+            *branches += 1
+        }
+        // PHP 8: throw expression used as a value (rhs of ??, assignment, etc.)
+        "throw_expression" => *branches += 1,
 
         // Conditions (Java)
         "enhanced_for_statement" | "switch_expression" => *conditions += 1,
@@ -848,11 +876,14 @@ fn visit_node_abc(
         // JS/TS optional chaining: a?.b
         "optional_chain" => *conditions += 1,
 
-        // Logical operators (C/C++/Rust: &&/||; JS/TS/C#: ??; Kotlin Elvis: ?:)
+        // PHP: elseif clause and null-safe access
+        "else_if_clause" | "nullsafe_member_access_expression" => *conditions += 1,
+
+        // Logical operators (C/C++/Rust: &&/||; JS/TS/C#: ??; Kotlin Elvis: ?:; PHP: and/or)
         "binary_expression" => {
             if let Some(op) = node.child_by_field_name("operator") {
                 if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "&&" || op_text == "||" || op_text == "??" || op_text == "?:" {
+                    if matches!(op_text, "&&" | "||" | "??" | "?:" | "and" | "or") {
                         *conditions += 1;
                     }
                 }
@@ -1491,6 +1522,10 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                         | "typed_default_parameter"
                         | "list_splat_pattern"
                         | "dictionary_splat_pattern" => count += 1,
+                        // PHP parameter kinds (formal_parameters children)
+                        "simple_parameter"
+                        | "variadic_parameter"
+                        | "property_promotion_parameter" => count += 1,
                         _ => {}
                     }
                 }
@@ -1557,6 +1592,7 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
         // Go: func_literal (anonymous function/closure).
         // Java: method_declaration and constructor_declaration both use formal_parameter.
         // C#: method_declaration, constructor_declaration, and local_function_statement use parameter.
+        // PHP: method_declaration also uses formal_parameters with simple_parameter etc.
         "method_declaration" | "func_literal" | "constructor_declaration"
         | "local_function_statement" => {
             if let Some(params) = node.child_by_field_name("parameters") {
@@ -1572,6 +1608,9 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                             | "formal_parameter" | "spread_parameter"
                             // C# parameter kind
                             | "parameter"
+                            // PHP parameter kinds
+                            | "simple_parameter" | "variadic_parameter"
+                            | "property_promotion_parameter"
                         )
                     })
                     .count() as u32;
@@ -1579,12 +1618,13 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             0
         }
         // JavaScript/TypeScript: method_definition, function_expression, arrow_function, etc.
+        // arrow_function also covers PHP `fn($x) => expr` arrow functions.
         "method_definition"
         | "function_expression"
         | "arrow_function"
         | "generator_function_declaration"
         | "generator_function" => {
-            // arrow_function with a single unparenthesised parameter uses the 'parameter' field.
+            // JS arrow_function with a single unparenthesised parameter uses the 'parameter' field.
             if node.kind() == "arrow_function" {
                 if node.child_by_field_name("parameter").is_some() {
                     return 1;
@@ -1597,11 +1637,16 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
                     .filter(|c| {
                         matches!(
                             c.kind(),
+                            // JS/TS parameter kinds
                             "identifier"
                                 | "required_parameter"
                                 | "optional_parameter"
                                 | "rest_pattern"
                                 | "assignment_pattern"
+                            // PHP parameter kinds (arrow_function uses formal_parameters)
+                            | "simple_parameter"
+                            | "variadic_parameter"
+                            | "property_promotion_parameter"
                         )
                     })
                     .count() as u32;
@@ -1750,6 +1795,19 @@ fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut Ha
                                 fields.insert(name.to_string());
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+    // PHP: member_access_expression where 'object' is '$this' (e.g. $this->prop)
+    // Note: C# also uses member_access_expression but with field 'expression', not 'object'.
+    if node.kind() == "member_access_expression" {
+        if let Some(obj) = node.child_by_field_name("object") {
+            if obj.utf8_text(source_code).unwrap_or("") == "$this" {
+                if let Some(prop) = node.child_by_field_name("name") {
+                    if let Ok(name) = prop.utf8_text(source_code) {
+                        fields.insert(name.to_string());
                     }
                 }
             }

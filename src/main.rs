@@ -3778,4 +3778,52 @@ mod tests {
         names.sort();
         assert_eq!(names, vec!["bar", "init"]);
     }
+
+    // ---- PHP function discovery tests ----
+
+    fn discover_php_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_php::LANGUAGE_PHP.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
+    #[test]
+    fn test_php_discover_simple_function() {
+        let code = "<?php function add($a, $b) { return $a + $b; }";
+        let names = discover_php_functions(code);
+        assert_eq!(names, vec!["add"]);
+    }
+
+    #[test]
+    fn test_php_discover_method() {
+        let code = "<?php class Foo { public function bar($x) { return $x; } }";
+        let names = discover_php_functions(code);
+        assert_eq!(names, vec!["bar"]);
+    }
+
+    #[test]
+    fn test_php_discover_multiple_functions() {
+        let code = "<?php function foo() {} function bar() {}";
+        let mut names = discover_php_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_php_discover_constructor_and_method() {
+        let code = "<?php class Foo { public function __construct($x) {} public function greet() {} }";
+        let mut names = discover_php_functions(code);
+        names.sort();
+        assert_eq!(names, vec!["__construct", "greet"]);
+    }
 }
