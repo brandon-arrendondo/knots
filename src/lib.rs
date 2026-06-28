@@ -189,23 +189,24 @@ pub fn is_source_extension(ext: &std::ffi::OsStr) -> bool {
         .unwrap_or(false)
 }
 
+fn language_info_for_ext(ext: &str) -> Option<&'static LanguageInfo> {
+    LANGUAGES
+        .iter()
+        .find(|l| l.extensions.contains(&ext) || l.explicit_only.contains(&ext))
+}
+
 /// Returns true if knots can parse this extension when the file is passed explicitly.
 /// Includes both recursive-discovery extensions and explicit-only ones (e.g. `.f`, `.h`).
 pub fn is_parseable_extension(ext: &std::ffi::OsStr) -> bool {
     let Some(e) = ext.to_str() else { return false };
-    LANGUAGES
-        .iter()
-        .any(|lang| lang.extensions.contains(&e) || lang.explicit_only.contains(&e))
+    language_info_for_ext(e).is_some()
 }
 
 /// Returns the SLOC comment-stripping mode for the given file path,
 /// derived from the `LANGUAGES` table (the single source of truth).
 pub fn sloc_mode_for_file(path: &str) -> SlocMode {
     let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
-    LANGUAGES
-        .iter()
-        .find(|l| l.extensions.contains(&ext) || l.explicit_only.contains(&ext))
-        .map_or(SlocMode::Default, |l| l.sloc_mode)
+    language_info_for_ext(ext).map_or(SlocMode::Default, |l| l.sloc_mode)
 }
 
 /// Filter rules for including/excluding files and functions

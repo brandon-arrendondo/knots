@@ -1037,7 +1037,8 @@ fn collect_all_metrics(
         .flat_map(|file| {
             let source_code = match fs::read_to_string(file) {
                 Ok(c) => c,
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("Warning: Skipping {}: {}", file.display(), e);
                     skipped.fetch_add(1, Ordering::Relaxed);
                     return Vec::new();
                 }
@@ -1045,6 +1046,12 @@ fn collect_all_metrics(
             let tree = match parse_file(file, &source_code) {
                 Ok(t) => t,
                 Err(_) => {
+                    let hint = if file.extension().and_then(|e| e.to_str()) == Some("h") {
+                        " (if this file contains C++, rename to .hpp)"
+                    } else {
+                        ""
+                    };
+                    eprintln!("Warning: Failed to parse {}{}", file.display(), hint);
                     skipped.fetch_add(1, Ordering::Relaxed);
                     return Vec::new();
                 }
@@ -2438,12 +2445,13 @@ mod tests {
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
+        let sloc_mode = knots::sloc_mode_for_file("f.lua");
         visit_functions(&mut cursor, code, &mut |node, src| {
             let name = get_function_name(node, src).or_else(|| {
                 let is_anon = matches!(
                     node.kind(),
                     "func_literal" | "arrow_function" | "function_expression" | "generator_function"
-                ) || node.kind() == "function_definition";
+                ) || (sloc_mode == knots::SlocMode::Lua && node.kind() == "function_definition");
                 if is_anon {
                     let pos = node.start_position();
                     Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
