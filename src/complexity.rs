@@ -390,8 +390,9 @@ pub fn calculate_sloc_python(node: Node, source_code: &[u8]) -> u32 {
     calculate_sloc_inner(node, source_code, true)
 }
 
-/// Calculates SLOC for Ada source — skips lines beginning with `--` (Ada's only comment style).
-pub fn calculate_sloc_ada(node: Node, source_code: &[u8]) -> u32 {
+/// Counts non-blank, non-comment lines within a node's byte range, where a comment
+/// line is any line whose trimmed content starts with `comment_prefix`.
+fn calculate_sloc_line_comment(node: Node, source_code: &[u8], comment_prefix: &[u8]) -> u32 {
     let start_byte = node.start_byte();
     let end_byte = node.end_byte();
 
@@ -404,61 +405,30 @@ pub fn calculate_sloc_ada(node: Node, source_code: &[u8]) -> u32 {
 
     for line in function_text.split(|&b| b == b'\n') {
         let trimmed = trim_bytes(line);
-        if trimmed.is_empty() || trimmed.starts_with(b"--") {
+        if trimmed.is_empty() || trimmed.starts_with(comment_prefix) {
             continue;
         }
         sloc += 1;
     }
 
     sloc
+}
+
+/// Calculates SLOC for Ada source — skips lines beginning with `--` (Ada's only comment style).
+pub fn calculate_sloc_ada(node: Node, source_code: &[u8]) -> u32 {
+    calculate_sloc_line_comment(node, source_code, b"--")
 }
 
 /// Calculates SLOC for Lua source — skips lines beginning with `--` (same style as Ada).
 /// Long-form block comments (`--[[ ... ]]`) have their opening line skipped; interior
 /// lines are counted (a known minor overcount, acceptable in practice).
 pub fn calculate_sloc_lua(node: Node, source_code: &[u8]) -> u32 {
-    let start_byte = node.start_byte();
-    let end_byte = node.end_byte();
-
-    if start_byte >= end_byte || end_byte > source_code.len() {
-        return 0;
-    }
-
-    let function_text = &source_code[start_byte..end_byte];
-    let mut sloc = 0;
-
-    for line in function_text.split(|&b| b == b'\n') {
-        let trimmed = trim_bytes(line);
-        if trimmed.is_empty() || trimmed.starts_with(b"--") {
-            continue;
-        }
-        sloc += 1;
-    }
-
-    sloc
+    calculate_sloc_line_comment(node, source_code, b"--")
 }
 
 /// Calculates SLOC for Fortran source — skips lines beginning with `!` (Fortran's only comment style).
 pub fn calculate_sloc_fortran(node: Node, source_code: &[u8]) -> u32 {
-    let start_byte = node.start_byte();
-    let end_byte = node.end_byte();
-
-    if start_byte >= end_byte || end_byte > source_code.len() {
-        return 0;
-    }
-
-    let function_text = &source_code[start_byte..end_byte];
-    let mut sloc = 0;
-
-    for line in function_text.split(|&b| b == b'\n') {
-        let trimmed = trim_bytes(line);
-        if trimmed.is_empty() || trimmed.starts_with(b"!") {
-            continue;
-        }
-        sloc += 1;
-    }
-
-    sloc
+    calculate_sloc_line_comment(node, source_code, b"!")
 }
 
 fn calculate_sloc_inner(node: Node, source_code: &[u8], skip_hash_comments: bool) -> u32 {
