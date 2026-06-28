@@ -355,47 +355,55 @@ oversubscription on this 24-core machine.
 The j2 laravel variance (σ=3.2s) reflects PHP file size non-uniformity; the
 work-stealing pool evens out by j4.
 
-knots vs. lizard throughput
-----------------------------
+knots vs. lizard vs. rca throughput
+-------------------------------------
 
-knots computes significantly more metrics per function than lizard (McCabe,
-Cognitive, Nesting, ABC, AIRD, AICP, SLOC), so single-threaded throughput is
-roughly at parity with lizard for C and Java and slightly slower for PHP (where
-lizard uses Python multiprocessing internally).  lizard also supports
-``-t``/``--working_threads`` (default 1); both tools were benchmarked
-single-threaded and at 16 threads.
+All three tools support parallelism: knots ``-j``, lizard ``-t``
+(``--working_threads``, default 1), rca ``-j`` (``--num-jobs``).  Each was
+benchmarked single-threaded and at 16 threads.
+
+rca writes one JSON file per source file to a mirrored directory tree; this
+I/O overhead (visible as high sys time) is unavoidable in normal use and is
+included in the numbers below.  rca does not support PHP, so the laravel
+corpus is knots/lizard only.
 
 .. list-table::
    :header-rows: 1
-   :widths: 22 12 12 12 12 18
+   :widths: 22 10 10 10 10 10 10
 
    * - Corpus
      - knots j1
      - knots j16
      - lizard t1
      - lizard t16
-     - j16 vs t16
+     - rca j1
+     - rca j16
    * - hostap (C, 504 files)
-     - 22.7s
-     - 2.2s
-     - 24.3s
+     - 22.3s
+     - **2.4s**
+     - 25.1s
+     - 3.2s
+     - 32.2s
      - 3.4s
-     - **1.6×** faster
    * - laravel (PHP, 2,970 files)
      - 17.7s
-     - 2.0s
+     - **2.0s**
      - 13.8s
      - 2.9s
-     - **1.4×** faster
+     - —
+     - —
    * - commons-lang (Java, 623 files)
      - 5.7s
-     - 0.93s
-     - 10.3s
-     - 1.76s
-     - **1.9×** faster
+     - **0.87s**
+     - 10.2s
+     - 1.6s
+     - 11.0s
+     - 1.2s
 
-At full parallelism knots leads by 1.4–1.9×.  The earlier j16-vs-t1 comparison
-(6–12×) was apples-to-oranges; the fair head-to-head is j16 vs t16.
+At full parallelism knots leads across the board: 1.3–1.4× faster than lizard
+and rca on C, 1.4× faster than rca and 1.9× faster than lizard on Java.  rca
+beats lizard on Java (Rust parser vs Python) but trails on C due to its
+per-file output overhead.
 
 Known Implementation Notes
 ===========================
