@@ -71,6 +71,13 @@ Options
        * - ``csv``
          - CSV with header row.
 
+``-j <N>``, ``--jobs <N>``
+    Number of parallel analysis threads when processing multiple files.
+    ``0`` (the default) auto-detects available CPU cores via
+    ``std::thread::available_parallelism``; ``1`` forces sequential
+    processing; any other value pins the thread-pool to that count.
+    Has no effect when analyzing a single file.
+
 Threshold Flags
 ---------------
 

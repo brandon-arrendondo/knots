@@ -110,6 +110,7 @@ Options:
   --since <REF>                     Gate only functions overlapping lines changed since this git ref
   --changed                         Gate only functions changed in the working tree (sugar for --since HEAD)
   --explain <METRIC>                Explain a metric (e.g. aird, aicp) and how to lower it, then exit
+  -j, --jobs <N>                    Parallel analysis threads (0 = auto-detect, 1 = sequential, default: 0)
   -h, --help                        Print help
   -V, --version                     Print version
 ```

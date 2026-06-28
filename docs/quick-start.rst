@@ -83,6 +83,14 @@ Example output::
       Successfully processed: 163
       Skipped (encoding/parse errors): 2
 
+For large codebases, add ``-j`` to analyse files in parallel::
+
+    knots -r -j 8 ~/projects/bigproject/
+
+``-j 0`` (the default) auto-detects available CPU cores; ``-j 1`` forces
+sequential processing.  Each thread owns its own parser, so there is no
+contention.
+
 To include header files, use an include filter:
 
 .. code-block:: json
