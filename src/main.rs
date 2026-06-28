@@ -1,9 +1,11 @@
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tree_sitter::Tree;
 use ignore::WalkBuilder;
 
@@ -160,6 +162,11 @@ struct Args {
     /// Default: off (only named functions appear in output).
     #[arg(long)]
     count_anonymous_closures: bool,
+
+    /// Number of parallel analysis threads (0 = auto-detect, 1 = sequential).
+    /// Only effective when analyzing multiple files. Default: 0.
+    #[arg(short = 'j', long, value_name = "N", default_value_t = 0)]
+    jobs: usize,
 }
 
 /// Metrics that `--explain` can describe at the command line.
@@ -325,6 +332,7 @@ struct RunContext {
     count_anonymous_closures: bool,
     verbose: bool,
     quiet: bool,
+    jobs: usize,
 }
 
 impl Thresholds {
@@ -735,7 +743,7 @@ fn main() -> Result<()> {
     // identically regardless of --format. clap's `requires` guarantees a path.
     if args.write_baseline {
         let (all_metrics, _) =
-            collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
+            collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures, args.jobs);
         let path = args
             .baseline
             .as_ref()
@@ -759,6 +767,7 @@ fn main() -> Result<()> {
         count_anonymous_closures: args.count_anonymous_closures,
         verbose: args.verbose,
         quiet: args.quiet,
+        jobs: args.jobs,
     };
 
     if args.format != OutputFormat::Text {
@@ -782,7 +791,7 @@ fn run_structured_output_mode(
     ctx: &RunContext,
 ) -> Result<()> {
     let (all_metrics, _) =
-        collect_all_metrics(files, &ctx.include_rules, &ctx.exclude_rules, ctx.count_anonymous_closures);
+        collect_all_metrics(files, &ctx.include_rules, &ctx.exclude_rules, ctx.count_anonymous_closures, ctx.jobs);
     match format {
         OutputFormat::Sarif => emit_sarif(&all_metrics),
         OutputFormat::Json => emit_json(&all_metrics),
@@ -793,41 +802,13 @@ fn run_structured_output_mode(
 }
 
 fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
-    let mut all_metrics = Vec::new();
-    let mut skipped_files = 0;
-
-    for file in files {
-        let source_code = match fs::read_to_string(file) {
-            Ok(code) => code,
-            Err(e) => {
-                eprintln!("Warning: Skipping {}: {}", file.display(), e);
-                skipped_files += 1;
-                continue;
-            }
-        };
-        let tree = match parse_file(file, &source_code) {
-            Ok(t) => t,
-            Err(_) => {
-                let hint = if file.extension().and_then(|e| e.to_str()) == Some("h") {
-                    " (if this file contains C++, rename to .hpp)"
-                } else {
-                    ""
-                };
-                eprintln!("Warning: Failed to parse {}{}", file.display(), hint);
-                skipped_files += 1;
-                continue;
-            }
-        };
-        let metrics = collect_function_metrics(
-            &tree,
-            &source_code,
-            file.to_str().unwrap_or(""),
-            &ctx.include_rules,
-            &ctx.exclude_rules,
-            ctx.count_anonymous_closures,
-        );
-        all_metrics.extend(metrics);
-    }
+    let (all_metrics, skipped_files) = collect_all_metrics(
+        files,
+        &ctx.include_rules,
+        &ctx.exclude_rules,
+        ctx.count_anonymous_closures,
+        ctx.jobs,
+    );
 
     if all_metrics.is_empty() {
         anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
@@ -859,36 +840,13 @@ fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
 }
 
 fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContext) -> Result<()> {
-    let mut all_metrics = Vec::new();
-    let mut skipped_files = 0;
-
-    for file in files {
-        let source_code = match fs::read_to_string(file) {
-            Ok(code) => code,
-            Err(e) => {
-                eprintln!("Warning: Skipping {}: {}", file.display(), e);
-                skipped_files += 1;
-                continue;
-            }
-        };
-        let tree = match parse_file(file, &source_code) {
-            Ok(t) => t,
-            Err(_) => {
-                eprintln!("Warning: Failed to parse {}", file.display());
-                skipped_files += 1;
-                continue;
-            }
-        };
-        let metrics = collect_function_metrics(
-            &tree,
-            &source_code,
-            file.to_str().unwrap_or(""),
-            &ctx.include_rules,
-            &ctx.exclude_rules,
-            ctx.count_anonymous_closures,
-        );
-        all_metrics.extend(metrics);
-    }
+    let (all_metrics, skipped_files) = collect_all_metrics(
+        files,
+        &ctx.include_rules,
+        &ctx.exclude_rules,
+        ctx.count_anonymous_closures,
+        ctx.jobs,
+    );
 
     if all_metrics.is_empty() {
         anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
@@ -1066,39 +1024,73 @@ fn collect_all_metrics(
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
     count_anonymous_closures: bool,
+    jobs: usize,
 ) -> (Vec<FunctionMetrics>, usize) {
-    let mut all_metrics = Vec::new();
-    let mut skipped = 0;
+    let effective = if jobs == 0 {
+        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
+    } else {
+        jobs
+    };
 
-    for file in files {
-        let source_code = match fs::read_to_string(file) {
-            Ok(code) => code,
-            Err(_) => {
-                skipped += 1;
-                continue;
-            }
-        };
-
-        let tree = match parse_file(file, &source_code) {
-            Ok(t) => t,
-            Err(_) => {
-                skipped += 1;
-                continue;
-            }
-        };
-
-        let metrics = collect_function_metrics(
-            &tree,
-            &source_code,
-            file.to_str().unwrap_or(""),
-            include_rules,
-            exclude_rules,
-            count_anonymous_closures,
-        );
-        all_metrics.extend(metrics);
+    if effective > 1 && files.len() > 1 {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(effective)
+            .build()
+            .expect("failed to build rayon thread pool");
+        let skipped = AtomicUsize::new(0);
+        let all_metrics: Vec<FunctionMetrics> = pool.install(|| {
+            files
+                .par_iter()
+                .flat_map(|file| {
+                    let source_code = match fs::read_to_string(file) {
+                        Ok(c) => c,
+                        Err(_) => {
+                            skipped.fetch_add(1, Ordering::Relaxed);
+                            return Vec::new();
+                        }
+                    };
+                    let tree = match parse_file(file, &source_code) {
+                        Ok(t) => t,
+                        Err(_) => {
+                            skipped.fetch_add(1, Ordering::Relaxed);
+                            return Vec::new();
+                        }
+                    };
+                    collect_function_metrics(
+                        &tree,
+                        &source_code,
+                        file.to_str().unwrap_or(""),
+                        include_rules,
+                        exclude_rules,
+                        count_anonymous_closures,
+                    )
+                })
+                .collect()
+        });
+        (all_metrics, skipped.load(Ordering::Relaxed))
+    } else {
+        let mut all_metrics = Vec::new();
+        let mut skipped = 0;
+        for file in files {
+            let source_code = match fs::read_to_string(file) {
+                Ok(c) => c,
+                Err(_) => { skipped += 1; continue; }
+            };
+            let tree = match parse_file(file, &source_code) {
+                Ok(t) => t,
+                Err(_) => { skipped += 1; continue; }
+            };
+            all_metrics.extend(collect_function_metrics(
+                &tree,
+                &source_code,
+                file.to_str().unwrap_or(""),
+                include_rules,
+                exclude_rules,
+                count_anonymous_closures,
+            ));
+        }
+        (all_metrics, skipped)
     }
-
-    (all_metrics, skipped)
 }
 
 

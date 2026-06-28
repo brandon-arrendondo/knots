@@ -196,11 +196,6 @@ that will become friction as the language count grows.
    ``get_function_name``, ``collect_local_names_recursive``) into
    ``src/discovery.rs`` would further reduce coupling.
 
-2. **No parallel file processing**
-   File analysis is sequential.  For large recursive analyses (hundreds of
-   files) this is a visible bottleneck.  ``rayon`` or ``std::thread`` would
-   be straightforward to add since each file is independent.
-
 ---------------------------------------------------------------------------
 
 Resolved Issues
@@ -228,6 +223,13 @@ addressed.
   child-search heuristic with a call to the language-neutral
   ``count_explicit_params``, making the signature component of TestScoring
   correct for all 16 supported languages (task 49).
+- **No parallel file processing** — ``collect_all_metrics`` now uses a
+  rayon ``ThreadPoolBuilder`` when ``--jobs N`` (or ``-j N``) is given,
+  ``N > 1``, and more than one file is being analysed.  ``0`` (the default)
+  auto-detects available parallelism.  Each worker creates its own
+  tree-sitter parser so there is no shared mutable state.  ``run_multi_file_mode``
+  and ``run_matrix_mode`` were folded into the same ``collect_all_metrics``
+  call, eliminating two duplicate file-processing loops.
 - **Language-specific booleans scattered across main.rs** — ``is_python``,
   ``is_ada``, ``is_fortran``, ``is_lua`` replaced by a ``SlocMode`` enum
   carried on ``LanguageInfo``.  ``sloc_mode_for_file()`` derives the mode in
