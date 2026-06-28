@@ -252,10 +252,13 @@ the grammar produces a parse error that prevents the real subroutine declaration
 being recognised. 2,042 of 2,114 LAPACK SRC files use this multi-line doc-comment
 pattern.
 
-**Consequence:** knots is not suitable as-is for LAPACK-style `.f` corpora. For
-other Fortran 77 codebases without this convention, results would be closer to lizard.
-The fix would require patching tree-sitter-fortran's comment handling for fixed-form
-files.
+**Fixed (brandon-arrendondo/tree-sitter-fortran@9dda4e0):** Added `fixed_form_comment`
+as an external token in grammar.js and implemented `scan_fixed_form_comment()` in
+scanner.c. When `get_column() == 0` and lookahead is `*`, `C`, or `c`, the scanner
+consumes the entire line and emits `fixed_form_comment`, which grammar.js lists in
+`extras` so tree-sitter silently skips it. LAPACK SRC result: 2,072 functions vs
+lizard 2,106 (−2%), up from 1,157 (−45%). Cargo.toml now pins the fork at 9dda4e0;
+will revert to upstream once the PR is accepted.
 
 **Bug fixed (discovered during benchmarking):** Explicit-only extensions (`.f`, `.h`,
 `.ads`) were silently rejected by `collect_files` even when passed directly on the
@@ -583,7 +586,7 @@ whose declarator is a `call_expression` (macro pattern) rather than a plain `ide
 | 24 | Lua | `--count-anonymous-closures` did not include Lua anonymous `function_definition` nodes. Fixed in v1.13: assignment-context naming + Lua `function_definition` added to anonymous allowlist. knots (with flag): 1,065; lizard: 1,054 (~equal). | closed |
 | 25 | PHP | No cross-tool validation corpus established — **resolved**: Laravel corpus benchmarked; +14% function count, McCabe ~equal. | closed |
 | 26 | Scala | No cross-tool validation corpus established — **resolved**: scala/src/library benchmarked; +151% explained by expression-body `def`s lizard skips. | closed |
-| 27 | Fortran | No cross-tool validation corpus established — **partially resolved**: `.f90` comparable (+15%); `.f` fixed-form significantly undercounts (−45%) due to LAPACK Doxygen comment pattern confusing tree-sitter-fortran. | open |
+| 27 | Fortran | No cross-tool validation corpus established — **resolved**: `.f90` comparable (+15%); `.f` fixed-form undercount fixed by adding `fixed_form_comment` external token to tree-sitter-fortran fork (brandon-arrendondo/tree-sitter-fortran@9dda4e0). LAPACK SRC: 2,072 vs lizard 2,106 (−2%), up from 1,157 (−45%). | closed |
 | 28 | Fortran | Explicit-only extensions (`.f`, `.h`, `.ads`) silently rejected when passed directly — **fixed in v1.13**: `is_parseable_extension` added to `src/lib.rs`. | closed |
 | 29 | C | `vmcase(args) { block }` macros parsed as `function_definition` by tree-sitter-c; `nested_fn_sloc` subtracts them from outer SLOC — affects `luaV_execute` (SLOC 751→34). **Fixed**: `is_macro_function_definition` filters `function_definition` nodes whose declarator is `parenthesized_declarator` in `accumulate_nested_sloc`. `luaV_execute` SLOC restored to 751, AIRD 89. | closed |
 
@@ -611,7 +614,7 @@ whose declarator is a `call_expression` (macro pattern) rather than a plain `ide
 | PHP | v1.11 | Benchmarked (Laravel); +14% function count, McCabe ~equal (#25 closed) |
 | Scala | v1.12 | Benchmarked (scala/src/library); +151% explained by expression-body `def`s (#26 closed) |
 | Fortran `.f90` | v1.12 | Benchmarked (LAPACK); broadly comparable (+15%) — see §Fortran77 |
-| Fortran `.f` | v1.12 | Grammar limitation with LAPACK Doxygen comment pattern; −45% undercount (#27 open) |
+| Fortran `.f` | v1.12 | Fixed: fork patches tree-sitter-fortran to handle `*`/`C`/`c` at column 0; 2,072 vs lizard 2,106 (−2%) (#27 closed) |
 
 ---
 
