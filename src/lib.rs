@@ -153,11 +153,20 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
     }
 }
 
-/// Returns true if the file extension is supported by knots.
+/// Returns true if the file extension is supported by knots for recursive discovery.
 pub fn is_source_extension(ext: &std::ffi::OsStr) -> bool {
     ext.to_str()
         .map(|e| SUPPORTED_EXTENSIONS.contains(&e))
         .unwrap_or(false)
+}
+
+/// Returns true if knots can parse this extension when the file is passed explicitly.
+/// Includes both recursive-discovery extensions and explicit-only ones (e.g. `.f`, `.h`).
+pub fn is_parseable_extension(ext: &std::ffi::OsStr) -> bool {
+    let Some(e) = ext.to_str() else { return false };
+    LANGUAGES
+        .iter()
+        .any(|lang| lang.extensions.contains(&e) || lang.explicit_only.contains(&e))
 }
 
 #[cfg(test)]

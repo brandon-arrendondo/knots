@@ -590,6 +590,53 @@ pub fn calculate_abc_complexity(node: Node, source_code: &[u8]) -> AbcComplexity
     }
 }
 
+fn abc_try_expression(node: Node, source_code: &[u8], conditions: &mut u32) {
+    let mut cur = node.walk();
+    let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
+    match try_op {
+        None => {
+            let mut cur2 = node.walk();
+            let is_try_block = node
+                .named_children(&mut cur2)
+                .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"));
+            if !is_try_block {
+                *conditions += 1;
+            }
+        }
+        Some(op) => {
+            if op.utf8_text(source_code).ok() == Some("try?") {
+                *conditions += 1;
+            }
+        }
+    }
+}
+
+fn abc_operator_is_condition(node: Node, source_code: &[u8], ops: &[&str]) -> bool {
+    node.child_by_field_name("operator")
+        .and_then(|op| op.utf8_text(source_code).ok())
+        .map(|text| ops.iter().any(|&o| o == text))
+        .unwrap_or(false)
+}
+
+fn abc_expression_ada(node: Node, conditions: &mut u32) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+            *conditions += 1;
+        }
+    }
+}
+
+fn abc_exit_statement_ada(node: Node, conditions: &mut u32) {
+    let mut cursor = node.walk();
+    if node
+        .children(&mut cursor)
+        .any(|c| !c.is_named() && c.kind() == "when")
+    {
+        *conditions += 1;
+    }
+}
+
 fn visit_node_abc(
     node: Node,
     source_code: &[u8],
@@ -641,25 +688,7 @@ fn visit_node_abc(
         | "match_expression" | "do_while_expression" => *conditions += 1,
         // Rust ? / Swift try? — same grammar-level discrimination as visit_node_mccabe.
         // Scala/Kotlin try-catch also uses try_expression; skip the try itself (catch adds conditions).
-        "try_expression" => {
-            let mut cur = node.walk();
-            let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
-            match try_op {
-                None => {
-                    let mut cur2 = node.walk();
-                    let is_try_block = node.named_children(&mut cur2)
-                        .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"));
-                    if !is_try_block {
-                        *conditions += 1;
-                    }
-                }
-                Some(op) => {
-                    if op.utf8_text(source_code).ok() == Some("try?") {
-                        *conditions += 1;
-                    }
-                }
-            }
-        }
+        "try_expression" => abc_try_expression(node, source_code, conditions),
 
         // Conditions (Python)
         "elif_clause" | "match_statement" => *conditions += 1,
@@ -706,12 +735,8 @@ fn visit_node_abc(
         "val_definition" | "var_definition" => *assignments += 1,
         // Scala: logical operators in infix_expression
         "infix_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, "&&" | "||") {
-                        *conditions += 1;
-                    }
-                }
+            if abc_operator_is_condition(node, source_code, &["&&", "||"]) {
+                *conditions += 1;
             }
         }
 
@@ -730,56 +755,31 @@ fn visit_node_abc(
         | "arithmetic_if_statement" => *conditions += 1,
         // Fortran: logical operators .AND. / .OR. are condition branches
         "logical_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, ".and." | ".or." | ".AND." | ".OR.") {
-                        *conditions += 1;
-                    }
-                }
+            if abc_operator_is_condition(node, source_code, &[".and.", ".or.", ".AND.", ".OR."]) {
+                *conditions += 1;
             }
         }
 
         // Logical operators (C/C++/Rust: &&/||; JS/TS/C#: ??; Kotlin Elvis: ?:; PHP: and/or)
         "binary_expression" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if matches!(op_text, "&&" | "||" | "??" | "?:" | "and" | "or") {
-                        *conditions += 1;
-                    }
-                }
+            if abc_operator_is_condition(node, source_code, &["&&", "||", "??", "?:", "and", "or"]) {
+                *conditions += 1;
             }
         }
 
         // Logical operators (Python: and/or)
         "boolean_operator" => {
-            if let Some(op) = node.child_by_field_name("operator") {
-                if let Ok(op_text) = op.utf8_text(source_code) {
-                    if op_text == "and" || op_text == "or" {
-                        *conditions += 1;
-                    }
-                }
+            if abc_operator_is_condition(node, source_code, &["and", "or"]) {
+                *conditions += 1;
             }
         }
 
         // Logical operators (Ada: and then / or else / xor / and / or).
         // Count each and/or/xor child as a condition branch point.
-        "expression" => {
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
-                    *conditions += 1;
-                }
-            }
-        }
+        "expression" => abc_expression_ada(node, conditions),
 
         // Ada: exit when Condition — the `when` makes it a conditional branch.
-        "exit_statement" => {
-            let mut cursor = node.walk();
-            let has_when = node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "when");
-            if has_when {
-                *conditions += 1;
-            }
-        }
+        "exit_statement" => abc_exit_statement_ada(node, conditions),
 
         _ => {}
     }
@@ -1023,6 +1023,40 @@ fn calculate_dependency_score(node: Node, source_code: &[u8]) -> u32 {
     score.min(10)
 }
 
+fn dep_classify_call(func_name: &str, has_io: &mut bool, has_allocation: &mut bool, has_system_calls: &mut bool) {
+    if matches!(
+        func_name,
+        "fopen" | "fclose" | "fread" | "fwrite" | "fprintf" | "fscanf" | "fgets" | "fputs"
+        | "fseek" | "ftell" | "rewind" | "printf" | "scanf" | "puts" | "getc" | "putc"
+        | "open" | "print" | "input"
+    ) {
+        *has_io = true;
+    }
+    if matches!(func_name, "malloc" | "calloc" | "realloc" | "free" | "aligned_alloc") {
+        *has_allocation = true;
+    }
+    if matches!(
+        func_name,
+        "time" | "clock" | "rand" | "srand" | "getpid" | "fork" | "exec" | "system"
+        | "signal" | "kill" | "wait" | "pipe" | "exit" | "abort"
+    ) {
+        *has_system_calls = true;
+    }
+}
+
+fn dep_check_global_assignment(node: Node, source_code: &[u8], modifies_globals: &mut bool) {
+    let left = match node.child_by_field_name("left") {
+        Some(n) if n.kind() == "identifier" => n,
+        _ => return,
+    };
+    // Heuristic: uppercase-initial identifier is likely a global
+    if let Ok(name) = left.utf8_text(source_code) {
+        if name.starts_with(|c: char| c.is_uppercase()) {
+            *modifies_globals = true;
+        }
+    }
+}
+
 fn visit_node_dependencies(
     node: Node,
     source_code: &[u8],
@@ -1031,101 +1065,26 @@ fn visit_node_dependencies(
     has_system_calls: &mut bool,
     modifies_globals: &mut bool,
 ) {
-    if node.kind() == "call_expression" || node.kind() == "call" {
-        if let Some(function) = node.child_by_field_name("function") {
-            if let Ok(func_name) = function.utf8_text(source_code) {
-                // File I/O — C/C++ functions
-                if matches!(
-                    func_name,
-                    "fopen"
-                        | "fclose"
-                        | "fread"
-                        | "fwrite"
-                        | "fprintf"
-                        | "fscanf"
-                        | "fgets"
-                        | "fputs"
-                        | "fseek"
-                        | "ftell"
-                        | "rewind"
-                        | "printf"
-                        | "scanf"
-                        | "puts"
-                        | "getc"
-                        | "putc"
-                ) {
-                    *has_io = true;
-                }
-
-                // File I/O — Python functions
-                if matches!(func_name, "open" | "print" | "input") {
-                    *has_io = true;
-                }
-
-                // Memory allocation (C/C++)
-                if matches!(
-                    func_name,
-                    "malloc" | "calloc" | "realloc" | "free" | "aligned_alloc"
-                ) {
-                    *has_allocation = true;
-                }
-
-                // System calls (C/C++)
-                if matches!(
-                    func_name,
-                    "time"
-                        | "clock"
-                        | "rand"
-                        | "srand"
-                        | "getpid"
-                        | "fork"
-                        | "exec"
-                        | "system"
-                        | "signal"
-                        | "kill"
-                        | "wait"
-                        | "pipe"
-                ) {
-                    *has_system_calls = true;
-                }
-
-                // System calls (Python simple-name form)
-                if matches!(func_name, "exit" | "abort") {
-                    *has_system_calls = true;
-                }
-            }
+    if matches!(node.kind(), "call_expression" | "call") {
+        if let Some(name) = node
+            .child_by_field_name("function")
+            .and_then(|f| f.utf8_text(source_code).ok())
+        {
+            dep_classify_call(name, has_io, has_allocation, has_system_calls);
         }
     }
 
-    // C++ new/delete expressions count as allocation
-    if node.kind() == "new_expression" || node.kind() == "delete_expression" {
+    if matches!(node.kind(), "new_expression" | "delete_expression") {
         *has_allocation = true;
     }
 
-    // Check for global variable modifications (simplified - looks for assignments to identifiers)
     if node.kind() == "assignment_expression" {
-        if let Some(left) = node.child_by_field_name("left") {
-            if left.kind() == "identifier" {
-                // Heuristic: if identifier doesn't start with lowercase, might be global
-                if let Ok(name) = left.utf8_text(source_code) {
-                    if !name.is_empty() && name.chars().next().unwrap().is_uppercase() {
-                        *modifies_globals = true;
-                    }
-                }
-            }
-        }
+        dep_check_global_assignment(node, source_code, modifies_globals);
     }
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_dependencies(
-            child,
-            source_code,
-            has_io,
-            has_allocation,
-            has_system_calls,
-            modifies_globals,
-        );
+        visit_node_dependencies(child, source_code, has_io, has_allocation, has_system_calls, modifies_globals);
     }
 }
 

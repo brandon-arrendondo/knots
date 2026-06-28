@@ -16,7 +16,7 @@ use complexity::{
     calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
     calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_lua, calculate_sloc_python, calculate_test_scoring, TestScoringMetric,
 };
-use knots::{is_source_extension, language_for_file};
+use knots::{is_parseable_extension, is_source_extension, language_for_file};
 
 fn get_complexity_emoji(complexity: u32) -> &'static str {
     match complexity {
@@ -449,6 +449,17 @@ struct Thresholds {
     aird: Option<u32>,
     aicp: Option<u32>,
     external_calls: Option<u32>,
+}
+
+struct RunContext {
+    include_rules: Option<FilterRules>,
+    exclude_rules: Option<FilterRules>,
+    thresholds: Thresholds,
+    baseline: Option<Baseline>,
+    changed: Option<ChangedLines>,
+    count_anonymous_closures: bool,
+    verbose: bool,
+    quiet: bool,
 }
 
 impl Thresholds {
@@ -924,31 +935,18 @@ fn check_thresholds(
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    // --explain prints a metric's meaning and exits; no files required.
     if let Some(metric) = args.explain {
         println!("{}", explain_metric(metric));
         return Ok(());
     }
 
-    // --supported-languages lists the language/extension table and exits.
     if args.supported_languages {
         print!("{}", knots::supported_languages_report());
         return Ok(());
     }
 
-    // Load filter rules
-    let include_rules = if let Some(path) = &args.include {
-        Some(FilterRules::from_file(path)?)
-    } else {
-        None
-    };
-
-    let exclude_rules = if let Some(path) = &args.exclude {
-        Some(FilterRules::from_file(path)?)
-    } else {
-        None
-    };
-
+    let include_rules = args.include.as_ref().map(|p| FilterRules::from_file(p)).transpose()?;
+    let exclude_rules = args.exclude.as_ref().map(|p| FilterRules::from_file(p)).transpose()?;
     let exclude_path_patterns: Vec<regex::Regex> = args
         .exclude_path
         .iter()
@@ -958,12 +956,9 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    // Collect files to process
-    let files = if let Some(compile_commands_path) = &args.compile_commands {
-        // Load files from compile_commands.json
-        load_compile_commands(compile_commands_path, &include_rules, &exclude_rules)?
+    let files = if let Some(cc) = &args.compile_commands {
+        load_compile_commands(cc, &include_rules, &exclude_rules)?
     } else if !args.files.is_empty() {
-        // One or more file/directory paths (supports pre-commit passing multiple staged files)
         let mut collected = Vec::new();
         for path in &args.files {
             collected.extend(collect_files(
@@ -999,7 +994,7 @@ fn main() -> Result<()> {
     // gating. Handled before format/mode dispatch so `--write-baseline` behaves
     // identically regardless of --format. clap's `requires` guarantees a path.
     if args.write_baseline {
-        let (all_metrics, _skipped) =
+        let (all_metrics, _) =
             collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
         let path = args
             .baseline
@@ -1014,144 +1009,54 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Load the baseline for ratchet-mode gating (read-only here).
-    let baseline = match &args.baseline {
-        Some(path) => Some(Baseline::from_file(path)?),
-        None => None,
+    let changed_ref = if args.changed { Some("HEAD") } else { args.since.as_deref() };
+    let ctx = RunContext {
+        thresholds,
+        include_rules,
+        exclude_rules,
+        baseline: args.baseline.as_ref().map(|p| Baseline::from_file(p)).transpose()?,
+        changed: changed_ref.map(collect_changed_lines).transpose()?,
+        count_anonymous_closures: args.count_anonymous_closures,
+        verbose: args.verbose,
+        quiet: args.quiet,
     };
 
-    // Resolve --changed / --since to a git ref, then collect the changed line
-    // ranges used to scope gating. `--changed` is sugar for `--since HEAD`.
-    let changed_ref: Option<&str> = if args.changed {
-        Some("HEAD")
-    } else {
-        args.since.as_deref()
-    };
-    let changed = match changed_ref {
-        Some(reference) => Some(collect_changed_lines(reference)?),
-        None => None,
-    };
-
-    // Structured output modes: collect all metrics then emit and exit.
-    // These bypass text/matrix output so only the structured data goes to stdout.
-    match args.format {
-        OutputFormat::Sarif => {
-            let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
-            emit_sarif(&all_metrics)?;
-            return Ok(());
-        }
-        OutputFormat::Json => {
-            let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
-            emit_json(&all_metrics)?;
-            return Ok(());
-        }
-        OutputFormat::Ndjson => {
-            let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
-            emit_ndjson(&all_metrics)?;
-            return Ok(());
-        }
-        OutputFormat::Csv => {
-            let (all_metrics, _skipped_files) =
-                collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
-            emit_csv(&all_metrics)?;
-            return Ok(());
-        }
-        OutputFormat::Text => {}
+    if args.format != OutputFormat::Text {
+        return run_structured_output_mode(args.format, &files, &ctx);
     }
 
-    // For matrix mode
     if args.matrix {
-        let mut all_metrics = Vec::new();
-        let mut skipped_files = 0;
-
-        for file in &files {
-            let source_code = match fs::read_to_string(file) {
-                Ok(code) => code,
-                Err(e) => {
-                    eprintln!("Warning: Skipping {}: {}", file.display(), e);
-                    skipped_files += 1;
-                    continue;
-                }
-            };
-
-            let tree = match parse_file(file, &source_code) {
-                Ok(t) => t,
-                Err(_) => {
-                    let hint = if file.extension().and_then(|e| e.to_str()) == Some("h") {
-                        " (if this file contains C++, rename to .hpp)"
-                    } else {
-                        ""
-                    };
-                    eprintln!("Warning: Failed to parse {}{}", file.display(), hint);
-                    skipped_files += 1;
-                    continue;
-                }
-            };
-
-            let metrics = collect_function_metrics(
-                &tree,
-                &source_code,
-                file.to_str().unwrap_or(""),
-                &include_rules,
-                &exclude_rules,
-                args.count_anonymous_closures,
-            );
-            all_metrics.extend(metrics);
-        }
-
-        if all_metrics.is_empty() {
-            anyhow::bail!(
-                "No functions found in any files (skipped {} files)",
-                skipped_files
-            );
-        }
-
-        if !args.quiet {
-            display_testability_matrix(&all_metrics, files.len(), skipped_files);
-        }
-        check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
-        return Ok(());
+        return run_matrix_mode(&files, &ctx);
     }
 
-    // For single file mode, use traditional output
     if files.len() == 1 {
-        let file = &files[0];
-        let source_code = fs::read_to_string(file)
-            .with_context(|| format!("Failed to read file: {}", file.display()))?;
-
-        let tree = parse_file(file, &source_code)?;
-
-        if !args.quiet {
-            analyze_code(
-                &tree,
-                &source_code,
-                file.to_str().unwrap_or(""),
-                args.verbose,
-                &include_rules,
-                &exclude_rules,
-                args.count_anonymous_closures,
-            )?;
-        }
-        let metrics = collect_function_metrics(
-            &tree,
-            &source_code,
-            file.to_str().unwrap_or(""),
-            &include_rules,
-            &exclude_rules,
-            args.count_anonymous_closures,
-        );
-        check_thresholds(&metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
-        return Ok(());
+        return run_single_file_mode(&files[0], &ctx);
     }
 
-    // For recursive mode with multiple files: collect all metrics, write report, show summary
+    run_multi_file_mode(&files, args.report.as_deref(), &ctx)
+}
+
+fn run_structured_output_mode(
+    format: OutputFormat,
+    files: &[PathBuf],
+    ctx: &RunContext,
+) -> Result<()> {
+    let (all_metrics, _) =
+        collect_all_metrics(files, &ctx.include_rules, &ctx.exclude_rules, ctx.count_anonymous_closures);
+    match format {
+        OutputFormat::Sarif => emit_sarif(&all_metrics),
+        OutputFormat::Json => emit_json(&all_metrics),
+        OutputFormat::Ndjson => emit_ndjson(&all_metrics),
+        OutputFormat::Csv => emit_csv(&all_metrics),
+        OutputFormat::Text => Ok(()),
+    }
+}
+
+fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
     let mut all_metrics = Vec::new();
     let mut skipped_files = 0;
 
-    for file in &files {
+    for file in files {
         let source_code = match fs::read_to_string(file) {
             Ok(code) => code,
             Err(e) => {
@@ -1160,7 +1065,79 @@ fn main() -> Result<()> {
                 continue;
             }
         };
+        let tree = match parse_file(file, &source_code) {
+            Ok(t) => t,
+            Err(_) => {
+                let hint = if file.extension().and_then(|e| e.to_str()) == Some("h") {
+                    " (if this file contains C++, rename to .hpp)"
+                } else {
+                    ""
+                };
+                eprintln!("Warning: Failed to parse {}{}", file.display(), hint);
+                skipped_files += 1;
+                continue;
+            }
+        };
+        let metrics = collect_function_metrics(
+            &tree,
+            &source_code,
+            file.to_str().unwrap_or(""),
+            &ctx.include_rules,
+            &ctx.exclude_rules,
+            ctx.count_anonymous_closures,
+        );
+        all_metrics.extend(metrics);
+    }
 
+    if all_metrics.is_empty() {
+        anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
+    }
+    if !ctx.quiet {
+        display_testability_matrix(&all_metrics, files.len(), skipped_files);
+    }
+    check_thresholds(&all_metrics, &ctx.thresholds, ctx.baseline.as_ref(), ctx.changed.as_ref())
+}
+
+fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
+    let source_code = fs::read_to_string(file)
+        .with_context(|| format!("Failed to read file: {}", file.display()))?;
+    let tree = parse_file(file, &source_code)?;
+
+    if !ctx.quiet {
+        analyze_code(
+            &tree,
+            &source_code,
+            file.to_str().unwrap_or(""),
+            ctx.verbose,
+            &ctx.include_rules,
+            &ctx.exclude_rules,
+            ctx.count_anonymous_closures,
+        )?;
+    }
+    let metrics = collect_function_metrics(
+        &tree,
+        &source_code,
+        file.to_str().unwrap_or(""),
+        &ctx.include_rules,
+        &ctx.exclude_rules,
+        ctx.count_anonymous_closures,
+    );
+    check_thresholds(&metrics, &ctx.thresholds, ctx.baseline.as_ref(), ctx.changed.as_ref())
+}
+
+fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContext) -> Result<()> {
+    let mut all_metrics = Vec::new();
+    let mut skipped_files = 0;
+
+    for file in files {
+        let source_code = match fs::read_to_string(file) {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("Warning: Skipping {}: {}", file.display(), e);
+                skipped_files += 1;
+                continue;
+            }
+        };
         let tree = match parse_file(file, &source_code) {
             Ok(t) => t,
             Err(_) => {
@@ -1169,35 +1146,27 @@ fn main() -> Result<()> {
                 continue;
             }
         };
-
         let metrics = collect_function_metrics(
             &tree,
             &source_code,
             file.to_str().unwrap_or(""),
-            &include_rules,
-            &exclude_rules,
-            args.count_anonymous_closures,
+            &ctx.include_rules,
+            &ctx.exclude_rules,
+            ctx.count_anonymous_closures,
         );
         all_metrics.extend(metrics);
     }
 
     if all_metrics.is_empty() {
-        anyhow::bail!(
-            "No functions found in any files (skipped {} files)",
-            skipped_files
-        );
+        anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
     }
-
-    if let Some(report_path) = &args.report {
-        write_detailed_report(&all_metrics, args.verbose, report_path)?;
+    if let Some(report_path) = report {
+        write_detailed_report(&all_metrics, ctx.verbose, report_path)?;
     }
-
-    if !args.quiet {
-        display_recursive_summary(&all_metrics, files.len(), skipped_files, args.report.as_deref());
+    if !ctx.quiet {
+        display_recursive_summary(&all_metrics, files.len(), skipped_files, report);
     }
-
-    check_thresholds(&all_metrics, &thresholds, baseline.as_ref(), changed.as_ref())?;
-    Ok(())
+    check_thresholds(&all_metrics, &ctx.thresholds, ctx.baseline.as_ref(), ctx.changed.as_ref())
 }
 
 /// Load file paths from compile_commands.json
@@ -1270,10 +1239,11 @@ fn collect_files(
     let mut files = Vec::new();
 
     if path.is_file() {
-        // Single file mode — skip unsupported types rather than passing them to the parser
+        // Single file mode — accepts explicit-only extensions (e.g. .f, .h) in addition to
+        // recursive-discovery extensions. is_parseable_extension covers both sets.
         let supported = path
             .extension()
-            .map(|e| is_source_extension(e))
+            .map(|e| is_parseable_extension(e))
             .unwrap_or(false);
         if !supported {
             return Ok(files);
@@ -3956,6 +3926,13 @@ mod tests {
         let mut names = discover_fortran_functions(code);
         names.sort();
         assert_eq!(names, vec!["bar", "foo"]);
+    }
+
+    #[test]
+    fn test_fortran_discover_fixed_form_subroutine() {
+        let code = "      SUBROUTINE DSCAL(N,DA)\n      RETURN\n      END\n";
+        let names = discover_fortran_functions(code);
+        assert_eq!(names, vec!["DSCAL"]);
     }
 
     // ---- Scala function discovery tests ----
