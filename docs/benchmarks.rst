@@ -149,6 +149,13 @@ AIRD/AICP calibration corpora
 Cross-Language Calibration Summary
 ===================================
 
+.. note::
+
+   Numbers below reflect the corpus state as of 2026-06-28 (knots v1.13.0,
+   lizard 1.23.0).  Corpora are live git clones and drift over time; the
+   deltas and status notes are the durable signal.  Re-run when a corpus
+   is refreshed or a new knots version ships.
+
 Function Count: knots vs. lizard
 ---------------------------------
 
@@ -200,9 +207,9 @@ Function Count: knots vs. lizard
      - Plausible; knots picks up static inline functions
    * - C++
      - mosquitto
-     - 5,300
-     - 3,343
-     - +59%
+     - 5,549
+     - 3,305
+     - +68%
      - Plausible; templates and lambdas
    * - Go
      - cobra
@@ -212,10 +219,10 @@ Function Count: knots vs. lizard
      - Explained: 210 anonymous ``func_literal`` closures; named counts equal
    * - TypeScript
      - zod
-     - 1,153
-     - 6,020
-     - −81%
-     - Explained: ~4,900 anonymous arrow callbacks; named counts similar
+     - 1,696
+     - 6,081
+     - −72%
+     - Explained: ~4,400 anonymous arrow callbacks; named counts similar
    * - Python
      - srg_card_search_website
      - 134
@@ -242,10 +249,10 @@ Function Count: knots vs. lizard
      - Explained: 6,695 SLOC=1 expression-body defs lizard skips
    * - Fortran (.f90)
      - lapack SRC
-     - 30
-     - 26
-     - +15%
-     - Good; small corpus
+     - 16
+     - 16
+     - 0%
+     - Excellent; corpus reorganized (14 files left SRC/), both tools agree
    * - Fortran (.f)
      - lapack SRC (2,114 files)
      - 2,072
