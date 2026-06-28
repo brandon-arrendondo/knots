@@ -843,17 +843,6 @@ fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
         .with_context(|| format!("Failed to read file: {}", file.display()))?;
     let tree = parse_file(file, &source_code)?;
 
-    if !ctx.quiet {
-        analyze_code(
-            &tree,
-            &source_code,
-            file.to_str().unwrap_or(""),
-            ctx.verbose,
-            &ctx.include_rules,
-            &ctx.exclude_rules,
-            ctx.count_anonymous_closures,
-        )?;
-    }
     let metrics = collect_function_metrics(
         &tree,
         &source_code,
@@ -862,6 +851,10 @@ fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
         &ctx.exclude_rules,
         ctx.count_anonymous_closures,
     );
+
+    if !ctx.quiet {
+        analyze_code(&metrics, ctx.verbose)?;
+    }
     check_thresholds(&metrics, &ctx.thresholds, ctx.baseline.as_ref(), ctx.changed.as_ref())
 }
 

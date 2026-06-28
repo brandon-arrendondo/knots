@@ -4,9 +4,8 @@ use std::cmp::Reverse;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use tree_sitter::Tree;
 
-use knots::{collect_function_metrics, FilterRules, FunctionMetrics};
+use knots::FunctionMetrics;
 use knots::complexity::calculate_aird_raw;
 
 pub(crate) fn get_complexity_emoji(complexity: u32) -> &'static str {
@@ -148,24 +147,7 @@ pub(crate) fn ai_metric_pointer(any_aird: bool, any_aicp: bool) -> Option<String
     }
 }
 
-pub(crate) fn analyze_code(
-    tree: &Tree,
-    source_code: &str,
-    file_path: &str,
-    verbose: bool,
-    include_rules: &Option<FilterRules>,
-    exclude_rules: &Option<FilterRules>,
-    count_anonymous_closures: bool,
-) -> Result<()> {
-    let metrics = collect_function_metrics(
-        tree,
-        source_code,
-        file_path,
-        include_rules,
-        exclude_rules,
-        count_anonymous_closures,
-    );
-
+pub(crate) fn analyze_code(metrics: &[FunctionMetrics], verbose: bool) -> Result<()> {
     let mut total_mccabe = 0;
     let mut total_cognitive = 0;
     let mut total_nesting = 0;
@@ -176,7 +158,7 @@ pub(crate) fn analyze_code(
     let mut total_aird: u64 = 0;
     let mut total_aicp: u64 = 0;
 
-    for func in &metrics {
+    for func in metrics {
         total_mccabe += func.mccabe;
         total_cognitive += func.cognitive;
         total_nesting += func.nesting;
