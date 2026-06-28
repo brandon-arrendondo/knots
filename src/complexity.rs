@@ -856,100 +856,17 @@ fn map_cyclomatic_to_implementation_score(cyclomatic: u32) -> u32 {
     }
 }
 
-/// Calculates signature complexity based on function parameters and return type
+/// Calculates signature complexity based on parameter count (language-neutral).
+/// Maps to [0, 2, 4, 6, 8, 10] following the same grade points as the original
+/// per-param scoring, capped at 10.
 fn calculate_signature_complexity(node: Node, source_code: &[u8]) -> u32 {
-    let mut input_score = 0;
-    let mut output_score = 0;
-
-    // Find function declarator
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "function_definition" {
-            if let Some(declarator) = child.child_by_field_name("declarator") {
-                // Analyze parameters
-                input_score = analyze_parameters(declarator, source_code);
-
-                // Analyze return type
-                if let Some(type_node) = child.child_by_field_name("type") {
-                    output_score = analyze_return_type(type_node, source_code);
-                }
-            }
-        } else if child.kind() == "declaration" {
-            // For function declarations
-            if let Some(declarator) = child.child_by_field_name("declarator") {
-                input_score = analyze_parameters(declarator, source_code);
-            }
-            if let Some(type_node) = child.child_by_field_name("type") {
-                output_score = analyze_return_type(type_node, source_code);
-            }
-        }
-    }
-
-    // Combined score capped at 10
-    (input_score + output_score).min(10)
-}
-
-fn analyze_parameters(declarator: Node, source_code: &[u8]) -> u32 {
-    let mut param_count = 0;
-    let mut has_pointer = false;
-    let mut has_function_pointer = false;
-    let mut has_void_ptr = false;
-    let mut has_variadic = false;
-
-    // Find parameter list
-    let mut cursor = declarator.walk();
-    for child in declarator.children(&mut cursor) {
-        if child.kind() == "parameter_list" {
-            let mut param_cursor = child.walk();
-            for param in child.children(&mut param_cursor) {
-                if param.kind() == "parameter_declaration" {
-                    param_count += 1;
-
-                    // Check for pointers, function pointers, void*
-                    let param_text = param.utf8_text(source_code).unwrap_or("");
-                    if param_text.contains("void*") || param_text.contains("void *") {
-                        has_void_ptr = true;
-                    } else if param_text.contains("(*") || param_text.contains("* )") {
-                        has_function_pointer = true;
-                    } else if param_text.contains('*') {
-                        has_pointer = true;
-                    }
-                } else if param.kind() == "variadic_parameter" {
-                    has_variadic = true;
-                }
-            }
-        }
-    }
-
-    // Score based on complexity
-    if has_function_pointer || has_void_ptr || has_variadic {
-        10
-    } else if has_pointer && param_count > 1 {
-        8
-    } else if has_pointer {
-        6
-    } else if param_count > 1 {
-        4
-    } else if param_count == 1 {
-        2
-    } else {
-        0
-    }
-}
-
-fn analyze_return_type(type_node: Node, source_code: &[u8]) -> u32 {
-    let type_text = type_node.utf8_text(source_code).unwrap_or("");
-
-    if type_text.contains("void") && !type_text.contains('*') {
-        0
-    } else if type_text.contains("struct") {
-        10
-    } else if type_text.contains('*') {
-        6
-    } else if type_text.contains("enum") {
-        4
-    } else {
-        2
+    match count_explicit_params(node, source_code) {
+        0 => 0,
+        1 => 2,
+        2..=3 => 4,
+        4..=5 => 6,
+        6..=9 => 8,
+        _ => 10,
     }
 }
 
@@ -1780,6 +1697,92 @@ mod state_coupling_tests {
             "genuine simplification should still lower AIRD: {} -> {}",
             aird_before,
             aird_after
+        );
+    }
+}
+
+/// Find the first node whose kind matches `target` in a depth-first search.
+#[cfg(test)]
+fn find_node_kind<'a>(node: tree_sitter::Node<'a>, target: &str) -> Option<tree_sitter::Node<'a>> {
+    if node.kind() == target {
+        return Some(node);
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if let Some(found) = find_node_kind(child, target) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::*;
+
+    fn c_sig(code: &str) -> u32 {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_c::LANGUAGE.into()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let node = find_node_kind(tree.root_node(), "function_definition").expect("no function_definition");
+        calculate_test_scoring(node, code.as_bytes()).signature_score
+    }
+
+    fn rust_sig(code: &str) -> u32 {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let node = find_node_kind(tree.root_node(), "function_item").expect("no function_item");
+        calculate_test_scoring(node, code.as_bytes()).signature_score
+    }
+
+    fn python_sig(code: &str) -> u32 {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_python::LANGUAGE.into()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let node = find_node_kind(tree.root_node(), "function_definition").expect("no function_definition");
+        calculate_test_scoring(node, code.as_bytes()).signature_score
+    }
+
+    #[test]
+    fn test_signature_no_params_is_zero() {
+        // void f(void) is C89 "no params" but trees-sitter-c parses void as a parameter_declaration;
+        // use empty parens for the language-neutral zero-param case.
+        assert_eq!(c_sig("void f() {}"), 0);
+        assert_eq!(rust_sig("fn f() {}"), 0);
+        assert_eq!(python_sig("def f():\n    pass\n"), 0);
+    }
+
+    #[test]
+    fn test_signature_one_param_is_two() {
+        assert_eq!(c_sig("int f(int a) { return a; }"), 2);
+        assert_eq!(rust_sig("fn f(a: i32) -> i32 { a }"), 2);
+        assert_eq!(python_sig("def f(x):\n    return x\n"), 2);
+    }
+
+    #[test]
+    fn test_signature_two_params_is_four() {
+        assert_eq!(c_sig("int f(int a, int b) { return a + b; }"), 4);
+        assert_eq!(rust_sig("fn f(a: i32, b: i32) -> i32 { a + b }"), 4);
+    }
+
+    #[test]
+    fn test_signature_six_params_is_eight() {
+        assert_eq!(
+            c_sig("int f(int a, int b, int c, int d, int e, int g) { return a; }"),
+            8
+        );
+        assert_eq!(
+            rust_sig("fn f(a: i32, b: i32, c: i32, d: i32, e: i32, g: i32) -> i32 { a }"),
+            8
+        );
+    }
+
+    #[test]
+    fn test_signature_ten_params_is_ten() {
+        assert_eq!(
+            c_sig("int f(int a,int b,int c,int d,int e,int g,int h,int i,int j,int k){return a;}"),
+            10
         );
     }
 }
