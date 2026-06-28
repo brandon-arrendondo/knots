@@ -4139,4 +4139,117 @@ mod tests {
         let with_flag3 = discover_lua_functions_with_anon("function foo() return 1 end");
         assert_eq!(with_flag3, vec!["foo"]);
     }
+
+    // ---- External-calls / local-names invariant tests ----
+    // Guards the invariant documented in CLAUDE.md and docs/architecture.rst:
+    // collect_local_names_recursive must handle the same node kinds as visit_functions.
+    // If a kind is in visit_functions but not collect_local_names_recursive, locally-
+    // defined functions of that kind are misclassified as external calls (inflating AICP).
+    //
+    // Node kinds covered: function_item (Rust), function_definition (C, Python),
+    // function_declaration (Go), method_declaration (Java), arrow_function (JS),
+    // function_expression (JS), generator_function_declaration (JS).
+    // Kinds not behaviorally tested here (no AICP impact or tested elsewhere):
+    // method_definition, generator_function, subprogram_body, expression_function_declaration,
+    // task_body, func_literal (get_function_name returns None → never local), constructor_declaration,
+    // local_function_statement, init_declaration, function/subroutine/module_procedure/program (Fortran).
+
+    fn external_calls_for(
+        language: tree_sitter::Language,
+        code: &str,
+        file_path: &str,
+        fn_name: &str,
+    ) -> u32 {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let metrics = collect_function_metrics(&tree, code, file_path, &None, &None, false);
+        metrics
+            .iter()
+            .find(|m| m.name == fn_name)
+            .map(|m| m.external_calls)
+            .unwrap_or_else(|| panic!("function '{}' not found in metrics", fn_name))
+    }
+
+    #[test]
+    fn test_local_rust_fn_not_counted_as_external() {
+        let code = "fn helper() {}\nfn caller() { helper(); }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_rust::LANGUAGE.into(), code, "test.rs", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_local_c_fn_not_counted_as_external() {
+        let code = "void helper(void) {}\nvoid caller(void) { helper(); }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_c::LANGUAGE.into(), code, "test.c", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_local_python_fn_not_counted_as_external() {
+        let code = "def helper():\n    pass\n\ndef caller():\n    helper()\n";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_python::LANGUAGE.into(), code, "test.py", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_local_go_fn_not_counted_as_external() {
+        let code = "package main\nfunc helper() {}\nfunc caller() { helper() }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_go::LANGUAGE.into(), code, "test.go", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_local_java_method_not_counted_as_external() {
+        let code = "class Foo { void helper() {} void caller() { helper(); } }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_java::LANGUAGE.into(), code, "test.java", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_local_js_arrow_fn_not_counted_as_external() {
+        let code = "const helper = () => {};\nfunction caller() { helper(); }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_javascript::LANGUAGE.into(), code, "test.js", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_local_js_function_expression_not_counted_as_external() {
+        let code = "const helper = function() {};\nfunction caller() { helper(); }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_javascript::LANGUAGE.into(), code, "test.js", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_local_js_generator_fn_not_counted_as_external() {
+        let code = "function* helper() { yield 1; }\nfunction caller() { helper(); }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_javascript::LANGUAGE.into(), code, "test.js", "caller"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_truly_external_fn_is_counted() {
+        // Sanity-check: a call to a function not defined in the same file IS counted.
+        let code = "fn caller() { external_call(); }";
+        assert_eq!(
+            external_calls_for(knots::tree_sitter_rust::LANGUAGE.into(), code, "test.rs", "caller"),
+            1
+        );
+    }
 }
