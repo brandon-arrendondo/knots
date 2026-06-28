@@ -1629,12 +1629,11 @@ fn collect_function_metrics(
         == Some("lua");
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         let name_opt = get_function_name(node, src).or_else(|| {
-            if count_anonymous_closures
-                && matches!(
-                    node.kind(),
-                    "func_literal" | "arrow_function" | "function_expression" | "generator_function"
-                )
-            {
+            let is_anonymous_node = matches!(
+                node.kind(),
+                "func_literal" | "arrow_function" | "function_expression" | "generator_function"
+            ) || (is_lua && node.kind() == "function_definition");
+            if count_anonymous_closures && is_anonymous_node {
                 let pos = node.start_position();
                 Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
             } else {
@@ -2526,6 +2525,51 @@ where
     }
 }
 
+/// Extract the name of a Lua anonymous function_definition from its assignment context.
+/// Handles: `local x = function()`, `x = function()`, `t = { key = function() }`.
+/// Returns None for callbacks (`foo(function())`), index assignments (`a[i] = function()`),
+/// and any other context where no simple identifier name is available.
+fn get_lua_assignment_name(node: Node, source_code: &str) -> Option<String> {
+    let parent = node.parent()?;
+    match parent.kind() {
+        // { key = function() end }
+        "field" => {
+            let mut cur = parent.walk();
+            let found = parent.named_children(&mut cur).find(|c| c.kind() == "identifier");
+            found
+                .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
+                .map(|s| s.to_string())
+        }
+        // local x = function() end  or  x = function() end
+        // The function_definition is inside expression_list; walk up to assignment_statement.
+        "expression_list" => {
+            let idx = {
+                let mut cur = parent.walk();
+                let pos = parent
+                    .named_children(&mut cur)
+                    .position(|c| c.id() == node.id())
+                    .unwrap_or(0);
+                pos
+            };
+            let assign = parent.parent()?;
+            if assign.kind() != "assignment_statement" {
+                return None;
+            }
+            let mut cur = assign.walk();
+            let found = assign.children(&mut cur).find(|c| c.kind() == "variable_list");
+            let var_list = found?;
+            let mut cur2 = var_list.walk();
+            let var = var_list.named_children(&mut cur2).nth(idx)?;
+            // Only extract name for simple variables, not table index expressions
+            if var.kind() != "identifier" {
+                return None;
+            }
+            var.utf8_text(source_code.as_bytes()).ok().map(|s| s.to_string())
+        }
+        _ => None,
+    }
+}
+
 /// Extract the name of an arrow_function or anonymous function_expression from
 /// the surrounding assignment context. Returns None for truly anonymous usage
 /// (callbacks, IIFEs, return values, etc.).
@@ -2596,10 +2640,10 @@ fn get_function_name(node: Node, source_code: &str) -> Option<String> {
             found.and_then(|c| c.utf8_text(source_code.as_bytes()).ok()).map(|s| s.to_string())
         }),
 
-        // Python: direct 'name' field; C/C++: no 'name' field, drill into declarator chain
-        "function_definition" => {
-            name_field(node, source_code).or_else(|| get_c_name(node, source_code))
-        }
+        // Python: direct 'name' field; C/C++: declarator chain; Lua: assignment context
+        "function_definition" => name_field(node, source_code)
+            .or_else(|| get_c_name(node, source_code))
+            .or_else(|| get_lua_assignment_name(node, source_code)),
 
         // Named or anonymous (name from parent assignment context)
         "function_expression" => {
@@ -4013,5 +4057,65 @@ mod tests {
         let code = "function MyClass:init(x)\n  self.x = x\nend";
         let names = discover_lua_functions(code);
         assert_eq!(names, vec!["MyClass:init"]);
+    }
+
+    fn discover_lua_functions_with_anon(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&knots::tree_sitter_lua::LANGUAGE.into()).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let is_lua = true;
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            let name = get_function_name(node, src).or_else(|| {
+                let is_anon = matches!(
+                    node.kind(),
+                    "func_literal" | "arrow_function" | "function_expression" | "generator_function"
+                ) || (is_lua && node.kind() == "function_definition");
+                if is_anon {
+                    let pos = node.start_position();
+                    Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
+                } else {
+                    None
+                }
+            });
+            if let Some(n) = name { names.push(n); }
+        });
+        names
+    }
+
+    #[test]
+    fn test_lua_assignment_context_names() {
+        // local x = function() → named "x"
+        let names = discover_lua_functions("local x = function(a) return a end");
+        assert_eq!(names, vec!["x"]);
+
+        // plain assign f = function() → named "f"
+        let names = discover_lua_functions("f = function(a) return a end");
+        assert_eq!(names, vec!["f"]);
+
+        // table field { key = function() } → named "key"
+        let names = discover_lua_functions("local t = { key = function(a) return a end }");
+        assert_eq!(names, vec!["key"]);
+    }
+
+    #[test]
+    fn test_lua_anonymous_closures_with_flag() {
+        // callback argument → anonymous when flag on, skipped when flag off
+        let named = discover_lua_functions("foo(function(x) return x end)");
+        assert!(named.is_empty());
+
+        let with_flag = discover_lua_functions_with_anon("foo(function(x) return x end)");
+        assert_eq!(with_flag.len(), 1);
+        assert!(with_flag[0].starts_with("<anonymous>@"));
+
+        // table index assignment → anonymous (not a simple identifier LHS)
+        let with_flag2 = discover_lua_functions_with_anon("a[i] = function() return i end");
+        assert_eq!(with_flag2.len(), 1);
+        assert!(with_flag2[0].starts_with("<anonymous>@"));
+
+        // named function still named, not double-counted
+        let with_flag3 = discover_lua_functions_with_anon("function foo() return 1 end");
+        assert_eq!(with_flag3, vec!["foo"]);
     }
 }

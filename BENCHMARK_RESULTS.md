@@ -75,7 +75,7 @@ rca 0.0.25 from crates.io fails to compile on rustc 1.95; install from git HEAD:
 | TypeScript | zod | 1,153 | 6,020 | −81% | ✓ explained — see §Anonymous Functions; ~4,900 anonymous arrow callbacks |
 | Python | srg_card_search_website | 134 | 133 (Py only) | ~equal | ✓ good |
 | Ada | gnatcoll-core | 2,672 | 386 | n/a | lizard has no Ada support |
-| Lua | lua-main/testes | 426 | 1,054 | −60% | explained — see §Lua; lizard counts anonymous closures, knots named-only |
+| Lua | lua-main/testes | 590 named / 1,065 with `--count-anonymous-closures` | 1,054 | ~equal with flag | ✓ resolved — see §Lua; v1.13 adds assignment-context naming + anonymous flag coverage |
 | PHP | — | — | — | — | no corpus yet |
 | Scala | — | — | — | — | no corpus yet |
 | Fortran | — | — | — | — | no corpus yet |
@@ -142,9 +142,20 @@ callbacks. knots counts only named functions by default; lizard counts all
 `function` tokens. The discrepancy pattern matches the Go/TypeScript cases (see
 §Anonymous Functions).
 
-The `--count-anonymous-closures` flag does **not** currently expand to cover Lua
-anonymous functions — only `func_literal`, `arrow_function`, `function_expression`,
-and `generator_function` are in the allowlist. This is open investigation point #24.
+**Lua anonymous function handling (fixed in v1.13):** The Lua grammar uses
+`function_definition` for anonymous function expressions and `function_declaration`
+for named functions. knots now extracts names from assignment context for:
+- `local x = function()` → named `x`
+- `x = function()` → named `x`
+- `{ key = function() }` → named `key`
+
+Truly anonymous Lua closures (callbacks, index assignments like `a[i] = function()`)
+are counted when `--count-anonymous-closures` is set. Measured on the lua-main
+testes/ corpus: 590 named + 475 anonymous = 1,065 total (vs lizard 1,054). The
+remaining gap (<1%) is within noise.
+
+**Previous behaviour (pre-v1.13):** `--count-anonymous-closures` did not cover Lua
+anonymous functions at all; see closed investigation point #24.
 
 **McCabe gap (knots 2.07 vs lizard 1.50, +38%):** The lizard denominator includes
 ~628 trivial one-liner anonymous closures (e.g. `function() return x end`) which
@@ -182,7 +193,7 @@ Candidate corpora (to be cloned when benchmarking):
 | 21 | Rust | knots McCabe ~41% lower than rca due to `?` not counted as branch | #21 |
 | 22 | TypeScript | knots finds 81% fewer functions than lizard on zod — **resolved**: ~4,900 anonymous arrow callbacks; named counts similar | closed |
 | 23 | Go | knots finds 26% fewer functions than lizard on cobra — **resolved**: 210 anonymous `func_literal`; named counts equal (595 vs 595) | closed |
-| 24 | Lua | `--count-anonymous-closures` does not include Lua anonymous `function_definition` nodes; lizard counts them. knots named-only: 426; lizard total: 1,054. | open |
+| 24 | Lua | `--count-anonymous-closures` did not include Lua anonymous `function_definition` nodes. Fixed in v1.13: assignment-context naming + Lua `function_definition` added to anonymous allowlist. knots (with flag): 1,065; lizard: 1,054 (~equal). | closed |
 | 25 | PHP | No cross-tool validation corpus established | open |
 | 26 | Scala | No cross-tool validation corpus established | open |
 | 27 | Fortran | No cross-tool validation corpus established | open |
@@ -205,7 +216,7 @@ Candidate corpora (to be cloned when benchmarking):
 
 | Language | Added | Blocker |
 |----------|-------|---------|
-| Lua | v1.12 | Anonymous closures not counted by `--count-anonymous-closures` (#24); corpus is test suite only, not application code |
+| Lua | v1.12 | Corpus is test suite only, not application code; anonymous closure handling resolved in v1.13 (#24 closed) |
 | PHP | v1.11 | No corpus (#25) |
 | Scala | v1.12 | No corpus (#26) |
 | Fortran | v1.12 | No corpus (#27) |
