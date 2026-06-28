@@ -21,6 +21,15 @@ jobs:
   build:
     name: build ${{ matrix.package.name }} (${{ matrix.platform.id }})
     runs-on: ${{ matrix.platform.runner }}
+    env:
+      # Passed into the manylinux/musl Docker containers via `--env CFLAGS`
+      # below. _BSD_SOURCE enables le16toh/be16toh on glibc 2.17 (manylinux2014
+      # predates _DEFAULT_SOURCE). -std=c11 ensures tree-sitter-fortran's
+      # parser.c compiles in C11 mode — its build.rs doesn't set a standard, so
+      # manylinux2014's gcc defaults to C89 and rejects C99 for-loop
+      # declarations. Grammars that already request c11 via cc-rs get the flag
+      # twice, which is harmless (last value wins; same value).
+      CFLAGS: -D_BSD_SOURCE -std=c11
     strategy:
       fail-fast: false
       matrix:
@@ -52,18 +61,12 @@ jobs:
           args: --release --out dist -m ${{ matrix.package.manifest }}
           manylinux: ${{ matrix.platform.manylinux }}
           sccache: 'true'
-          # tree-sitter 0.25's runtime includes src/portable/endian.h, which on
-          # Linux pulls glibc <endian.h> and uses le16toh/be16toh. Those macros
-          # are gated behind __USE_MISC. tree-sitter's build.rs enables it via
-          # _DEFAULT_SOURCE, but manylinux2014 ships glibc 2.17 — predating
-          # _DEFAULT_SOURCE (added in 2.19) — so the define is ignored and the
-          # symbols vanish (undefined-symbol link error). _BSD_SOURCE is the
-          # equivalent macro that 2.17 understands; harmless on newer glibc and
-          # musl. -std=c99 is required for tree-sitter-fortran's parser.c, which
-          # uses C99 for-loop initial declarations that manylinux2014's gcc
-          # rejects in its default C89 mode. Only the containerized (linux)
-          # builds use docker-options; macOS/Windows ignore it.
-          docker-options: --env CFLAGS="-D_BSD_SOURCE -std=c99"
+          # Inherit CFLAGS from the job-level env (see above). Passing by name
+          # (no =value) lets docker copy it from the runner's environment,
+          # avoiding shell-quoting issues with multi-word values. Only
+          # containerized (linux) builds use docker-options; macOS/Windows
+          # ignore it, but the env var is harmless there too.
+          docker-options: --env CFLAGS
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
