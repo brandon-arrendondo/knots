@@ -59,9 +59,11 @@ jobs:
           # _DEFAULT_SOURCE (added in 2.19) — so the define is ignored and the
           # symbols vanish (undefined-symbol link error). _BSD_SOURCE is the
           # equivalent macro that 2.17 understands; harmless on newer glibc and
-          # musl. Only the containerized (linux) builds use docker-options;
-          # macOS/Windows ignore it.
-          docker-options: --env CFLAGS=-D_BSD_SOURCE
+          # musl. -std=c99 is required for tree-sitter-fortran's parser.c, which
+          # uses C99 for-loop initial declarations that manylinux2014's gcc
+          # rejects in its default C89 mode. Only the containerized (linux)
+          # builds use docker-options; macOS/Windows ignore it.
+          docker-options: --env CFLAGS="-D_BSD_SOURCE -std=c99"
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
