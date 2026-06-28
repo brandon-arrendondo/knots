@@ -23,9 +23,12 @@ The codebase has three conceptual layers:
 ::
 
     ┌────────────────────────────────────────────────────────────┐
-    │  CLI + pipeline  (src/main.rs, ~4 100 lines)               │
-    │  file discovery · function discovery · output formatting   │
-    │  threshold enforcement · baseline · git diff integration   │
+    │  CLI + pipeline  (src/main.rs, ~3 450 lines)               │
+    │  file discovery · function discovery · threshold enforcement│
+    │  baseline · git diff integration                           │
+    ├────────────────────────────────────────────────────────────┤
+    │  Output formatting  (src/output.rs, ~770 lines)            │
+    │  text/SARIF/JSON/NDJSON/CSV · AIRD display helpers        │
     ├────────────────────────────────────────────────────────────┤
     │  Metric calculation  (src/complexity.rs, ~3 300 lines)     │
     │  pure tree-sitter traversal — no I/O                       │
@@ -101,11 +104,10 @@ Swift, Scala, PHP, etc.
 
 ---------------------------------------------------------------------------
 
-Layer 3 — CLI + Pipeline (``src/main.rs``)
-------------------------------------------
+Layer 3a — CLI + Pipeline (``src/main.rs``)
+-------------------------------------------
 
-This file is a monolith (~4 100 lines) and is the primary coupling hotspot.
-It currently contains:
+~3 450 lines. Contains:
 
 - **CLI parsing** — ``Args`` struct (clap derive), ``ExplainMetric``,
   ``OutputFormat`` enums
@@ -119,14 +121,22 @@ It currently contains:
   ``baseline_from_metrics``
 - **Git integration** — ``collect_changed_lines``, ``ChangedLines``,
   ``parse_hunk_new_range``
+- **Data model** — ``FunctionMetrics`` (private struct, used throughout)
+
+Layer 3b — Output Formatting (``src/output.rs``)
+-------------------------------------------------
+
+~770 lines. Contains all display and serialization functions extracted from
+``main.rs`` (task 43):
+
 - **Output formatting** — ``analyze_code`` (text/single-file),
   ``display_recursive_summary``, ``display_testability_matrix``,
   ``emit_sarif``, ``emit_json``, ``emit_ndjson``, ``emit_csv``,
   ``write_detailed_report``
 - **AIRD display helpers** — ``format_aird_breakdown``, ``aird_drivers``,
-  ``aird_tips``, ``aird_term``
-- **Data model** — ``FunctionMetrics`` (defined at line 2308, used everywhere
-  above it)
+  ``aird_tips``, ``aird_term``, ``ai_metric_pointer``
+- **Utility** — ``get_complexity_emoji``, ``func_location``, ``sarif_level``,
+  ``path_to_sarif_uri``
 
 Pipeline flow
 ~~~~~~~~~~~~~
@@ -166,12 +176,11 @@ Known Issues and Coupling Hotspots
 The items below are not bugs — knots is correct.  They are structural debts
 that will become friction as the language count grows.
 
-1. **main.rs monolith**
-   At ~4 100 lines it is above the typical comfort threshold for navigation
-   and review.  The most natural split would be to extract output formatters
-   and display functions into a ``src/output.rs`` module, leaving the
-   pipeline and CLI in ``main.rs``.  A further split of function-discovery
-   helpers into ``src/discovery.rs`` would also reduce coupling.
+1. **main.rs monolith** *(partially resolved)*
+   Output formatters and display functions were extracted into
+   ``src/output.rs`` (task 43), reducing ``main.rs`` from ~4 100 to
+   ~3 450 lines.  A further split of function-discovery helpers into
+   ``src/discovery.rs`` would further reduce coupling.
 
 2. **FunctionMetrics not exported from lib**
    ``FunctionMetrics`` is a private struct in ``main.rs``.
