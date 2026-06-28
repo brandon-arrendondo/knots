@@ -7,9 +7,9 @@ built on tree-sitter. All metrics are language-neutral; only the node-kind names
 
 | Path | Purpose |
 |------|---------|
-| `src/lib.rs` | Extension list, `language_for_file()`, re-exports — **single source of truth for language registration** |
+| `src/lib.rs` | Language registry, `language_for_file()`, `FunctionMetrics`, `collect_function_metrics()`, `visit_functions()`, `get_function_name()`, `FilterRules`, and all function-analysis helpers — the public library API |
 | `src/complexity.rs` | All 13 metric calculations (pure tree-sitter traversal, no I/O) |
-| `src/main.rs` | CLI, file discovery, `visit_functions()`, `get_function_name()`, output formats, threshold enforcement |
+| `src/main.rs` | CLI, file discovery, output formats, threshold enforcement |
 | `Cargo.toml` | Workspace; tree-sitter language crates live in `[workspace.dependencies]` and are forwarded via `[dependencies]` |
 
 ---
@@ -69,7 +69,7 @@ Find the correct names by running `knots --debug` on a sample file, or by readin
 | `collect_self_fields_recursive` | How the language spells `self.field` / `this.field`. Rust = `field_expression`, Python = `attribute`, JS/TS = `member_expression` with `object == "this"`. |
 | `calculate_sloc_*` | Python (`#` comments) has a separate path; add a new one only if the language uses a comment style not covered by `calculate_sloc` (`//` and `/* */`). |
 
-### 4. `src/main.rs` — wire up function discovery
+### 4. `src/lib.rs` — wire up function discovery
 
 Three places:
 

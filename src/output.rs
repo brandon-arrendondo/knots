@@ -6,8 +6,8 @@ use std::io::Write;
 use std::path::Path;
 use tree_sitter::Tree;
 
-use super::{collect_function_metrics, FilterRules, FunctionMetrics};
-use crate::complexity::calculate_aird_raw;
+use knots::{collect_function_metrics, FilterRules, FunctionMetrics};
+use knots::complexity::calculate_aird_raw;
 
 pub(crate) fn get_complexity_emoji(complexity: u32) -> &'static str {
     match complexity {
