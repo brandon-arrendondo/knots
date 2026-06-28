@@ -1,0 +1,539 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benchmark Reference &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Troubleshooting" href="troubleshooting.html" />
+    <link rel="prev" title="Alternatives Comparison" href="alternatives.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filter Rules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Benchmark Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#comparison-tools">Comparison Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#benchmark-corpora">Benchmark Corpora</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#cross-language-calibration">Cross-language calibration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#aird-aicp-calibration-corpora">AIRD/AICP calibration corpora</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#cross-language-calibration-summary">Cross-Language Calibration Summary</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#function-count-knots-vs-lizard">Function Count: knots vs. lizard</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#rust-knots-vs-rust-code-analysis-rca">Rust: knots vs. rust-code-analysis (rca)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#known-implementation-notes">Known Implementation Notes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#c-macro-pattern-vmcase-sloc-deflation">C macro pattern: vmcase SLOC deflation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fortran-explicit-only-extension-rejection">Fortran explicit-only extension rejection</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="releasing.html">Releasing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Benchmark Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/benchmarks.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="benchmark-reference">
+<h1>Benchmark Reference<a class="headerlink" href="#benchmark-reference" title="Link to this heading"></a></h1>
+<p>Cross-language calibration results for knots against lizard, radon,
+rust-code-analysis (rca), tokei, and cloc.  These results informed the
+AIRD/AICP formula calibration and established per-language validation
+status.</p>
+<section id="comparison-tools">
+<h2>Comparison Tools<a class="headerlink" href="#comparison-tools" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 15.0%" />
+<col style="width: 45.0%" />
+<col style="width: 20.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Version</p></th>
+<th class="head"><p>Location</p></th>
+<th class="head"><p>Metrics</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>lizard</p></td>
+<td><p>1.23.0</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/data-enterprise/venv/bin/lizard</span></code></p></td>
+<td><p>McCabe, NLOC, token count</p></td>
+</tr>
+<tr class="row-odd"><td><p>radon</p></td>
+<td><p>6.0.1</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/data-enterprise/venv/bin/radon</span></code></p></td>
+<td><p>McCabe, Halstead (Python only)</p></td>
+</tr>
+<tr class="row-even"><td><p>rust-code-analysis-cli (rca)</p></td>
+<td><p>0.0.25 (git HEAD)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/.cargo/bin/rust-code-analysis-cli</span></code></p></td>
+<td><p>Cyclomatic, Cognitive, Halstead, SLOC, ABC</p></td>
+</tr>
+<tr class="row-odd"><td><p>tokei</p></td>
+<td><p>(cargo install)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/.cargo/bin/tokei</span></code></p></td>
+<td><p>SLOC by language</p></td>
+</tr>
+<tr class="row-even"><td><p>cloc</p></td>
+<td><p>(apt)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/usr/bin/cloc</span></code></p></td>
+<td><p>SLOC by language</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>rca 0.0.25 from crates.io fails to compile on rustc 1.95.  Install
+from git HEAD:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cargo</span> <span class="n">install</span> <span class="o">--</span><span class="n">git</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">mozilla</span><span class="o">/</span><span class="n">rust</span><span class="o">-</span><span class="n">code</span><span class="o">-</span><span class="n">analysis</span> \
+  <span class="n">rust</span><span class="o">-</span><span class="n">code</span><span class="o">-</span><span class="n">analysis</span><span class="o">-</span><span class="n">cli</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="benchmark-corpora">
+<h2>Benchmark Corpora<a class="headerlink" href="#benchmark-corpora" title="Link to this heading"></a></h2>
+<section id="cross-language-calibration">
+<h3>Cross-language calibration<a class="headerlink" href="#cross-language-calibration" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 20.0%" />
+<col style="width: 10.0%" />
+<col style="width: 45.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Repo</p></th>
+<th class="head"><p>Language</p></th>
+<th class="head"><p>Files</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>cobra</p></td>
+<td><p>Go</p></td>
+<td><p>36</p></td>
+<td><p>github.com/spf13/cobra</p></td>
+</tr>
+<tr class="row-odd"><td><p>zod</p></td>
+<td><p>TypeScript</p></td>
+<td><p>401</p></td>
+<td><p>github.com/colinhacks/zod</p></td>
+</tr>
+<tr class="row-even"><td><p>commons-lang</p></td>
+<td><p>Java</p></td>
+<td><p>623</p></td>
+<td><p>github.com/apache/commons-lang</p></td>
+</tr>
+<tr class="row-odd"><td><p>Newtonsoft.Json</p></td>
+<td><p>C#</p></td>
+<td><p>945</p></td>
+<td><p>github.com/JamesNK/Newtonsoft.Json</p></td>
+</tr>
+<tr class="row-even"><td><p>todo-sqlite-cli</p></td>
+<td><p>Rust</p></td>
+<td><p>36</p></td>
+<td><p>~/toolchain/todo-sqlite-cli</p></td>
+</tr>
+<tr class="row-odd"><td><p>curl</p></td>
+<td><p>C</p></td>
+<td><p>744</p></td>
+<td><p>~/toolchain/curl</p></td>
+</tr>
+<tr class="row-even"><td><p>mosquitto</p></td>
+<td><p>C++</p></td>
+<td><p>974</p></td>
+<td><p>~/toolchain/mosquitto</p></td>
+</tr>
+<tr class="row-odd"><td><p>gnatcoll-core</p></td>
+<td><p>Ada</p></td>
+<td><p>452</p></td>
+<td><p>~/toolchain/gnatcoll-core</p></td>
+</tr>
+<tr class="row-even"><td><p>lua/testes</p></td>
+<td><p>Lua</p></td>
+<td><p>34</p></td>
+<td><p>lua.org reference implementation v5.5.1-dev; test suite only</p></td>
+</tr>
+<tr class="row-odd"><td><p>laravel</p></td>
+<td><p>PHP</p></td>
+<td><p>2,966</p></td>
+<td><p>github.com/laravel/framework</p></td>
+</tr>
+<tr class="row-even"><td><p>scala/src/library</p></td>
+<td><p>Scala</p></td>
+<td><p>542</p></td>
+<td><p>github.com/scala/scala (standard library only)</p></td>
+</tr>
+<tr class="row-odd"><td><p>lapack (SRC)</p></td>
+<td><p>Fortran</p></td>
+<td><p>31 <code class="docutils literal notranslate"><span class="pre">.f90</span></code> / 2,114 <code class="docutils literal notranslate"><span class="pre">.f</span></code></p></td>
+<td><p>github.com/Reference-LAPACK/lapack</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="aird-aicp-calibration-corpora">
+<h3>AIRD/AICP calibration corpora<a class="headerlink" href="#aird-aicp-calibration-corpora" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 15.0%" />
+<col style="width: 10.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Repo</p></th>
+<th class="head"><p>Language</p></th>
+<th class="head"><p>Functions</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>lua</p></td>
+<td><p>C/Lua</p></td>
+<td><p>1,304</p></td>
+<td><p>lua.org reference implementation v5.5.1-dev</p></td>
+</tr>
+<tr class="row-odd"><td><p>libcrc</p></td>
+<td><p>C</p></td>
+<td><p>34</p></td>
+<td><p>libcrc.org CRC library</p></td>
+</tr>
+<tr class="row-even"><td><p>mosquitto</p></td>
+<td><p>C/C++</p></td>
+<td><p>2,559</p></td>
+<td><p>eclipse/mosquitto MQTT broker</p></td>
+</tr>
+<tr class="row-odd"><td><p>hostap</p></td>
+<td><p>C</p></td>
+<td><p>13,343</p></td>
+<td><p>w1.fi/hostapd + wpa_supplicant</p></td>
+</tr>
+<tr class="row-even"><td><p>sqlite</p></td>
+<td><p>C</p></td>
+<td><p>9,491</p></td>
+<td><p>sqlite.org amalgamation + tools</p></td>
+</tr>
+<tr class="row-odd"><td><p>curl</p></td>
+<td><p>C</p></td>
+<td><p>5,474</p></td>
+<td><p>curl/curl HTTP library</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="cross-language-calibration-summary">
+<h2>Cross-Language Calibration Summary<a class="headerlink" href="#cross-language-calibration-summary" title="Link to this heading"></a></h2>
+<section id="function-count-knots-vs-lizard">
+<h3>Function Count: knots vs. lizard<a class="headerlink" href="#function-count-knots-vs-lizard" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 13.6%" />
+<col style="width: 22.7%" />
+<col style="width: 9.1%" />
+<col style="width: 9.1%" />
+<col style="width: 9.1%" />
+<col style="width: 36.4%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Language</p></th>
+<th class="head"><p>Corpus</p></th>
+<th class="head"><p>knots</p></th>
+<th class="head"><p>lizard</p></th>
+<th class="head"><p>Delta</p></th>
+<th class="head"><p>Status</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Java</p></td>
+<td><p>commons-lang</p></td>
+<td><p>10,919</p></td>
+<td><p>10,597</p></td>
+<td><p>+3%</p></td>
+<td><p>Good agreement</p></td>
+</tr>
+<tr class="row-odd"><td><p>C#</p></td>
+<td><p>Newtonsoft.Json</p></td>
+<td><p>7,339</p></td>
+<td><p>6,521</p></td>
+<td><p>+13%</p></td>
+<td><p>Good; knots picks up more interface/abstract methods</p></td>
+</tr>
+<tr class="row-even"><td><p>Rust</p></td>
+<td><p>todo-sqlite-cli</p></td>
+<td><p>120</p></td>
+<td><p>113</p></td>
+<td><p>+6%</p></td>
+<td><p>Good agreement</p></td>
+</tr>
+<tr class="row-odd"><td><p>Swift</p></td>
+<td><p>srg_collection_manager_app_ios</p></td>
+<td><p>199</p></td>
+<td><p>201</p></td>
+<td><p>−1%</p></td>
+<td><p>Excellent</p></td>
+</tr>
+<tr class="row-even"><td><p>Kotlin</p></td>
+<td><p>srg_collection_manager_app</p></td>
+<td><p>381</p></td>
+<td><p>319</p></td>
+<td><p>+19%</p></td>
+<td><p>Explained: 55 single-expression funs + 7 abstract decls lizard skips</p></td>
+</tr>
+<tr class="row-odd"><td><p>C</p></td>
+<td><p>curl</p></td>
+<td><p>5,836</p></td>
+<td><p>4,920</p></td>
+<td><p>+19%</p></td>
+<td><p>Plausible; knots picks up static inline functions</p></td>
+</tr>
+<tr class="row-even"><td><p>C++</p></td>
+<td><p>mosquitto</p></td>
+<td><p>5,300</p></td>
+<td><p>3,343</p></td>
+<td><p>+59%</p></td>
+<td><p>Plausible; templates and lambdas</p></td>
+</tr>
+<tr class="row-odd"><td><p>Go</p></td>
+<td><p>cobra</p></td>
+<td><p>595</p></td>
+<td><p>805</p></td>
+<td><p>−26%</p></td>
+<td><p>Explained: 210 anonymous <code class="docutils literal notranslate"><span class="pre">func_literal</span></code> closures; named counts equal</p></td>
+</tr>
+<tr class="row-even"><td><p>TypeScript</p></td>
+<td><p>zod</p></td>
+<td><p>1,153</p></td>
+<td><p>6,020</p></td>
+<td><p>−81%</p></td>
+<td><p>Explained: ~4,900 anonymous arrow callbacks; named counts similar</p></td>
+</tr>
+<tr class="row-odd"><td><p>Python</p></td>
+<td><p>srg_card_search_website</p></td>
+<td><p>134</p></td>
+<td><p>133</p></td>
+<td><p>~equal</p></td>
+<td><p>Good</p></td>
+</tr>
+<tr class="row-even"><td><p>Lua</p></td>
+<td><p>lua/testes</p></td>
+<td><p>590 named / 1,065 with flag</p></td>
+<td><p>1,054</p></td>
+<td><p>~equal with <code class="docutils literal notranslate"><span class="pre">--count-anonymous-closures</span></code></p></td>
+<td><p>Explained: 475 anonymous closures</p></td>
+</tr>
+<tr class="row-odd"><td><p>PHP</p></td>
+<td><p>laravel</p></td>
+<td><p>30,844</p></td>
+<td><p>26,998</p></td>
+<td><p>+14%</p></td>
+<td><p>Plausible; interface/trait methods</p></td>
+</tr>
+<tr class="row-even"><td><p>Scala</p></td>
+<td><p>scala/src/library</p></td>
+<td><p>11,292</p></td>
+<td><p>4,490</p></td>
+<td><p>+151%</p></td>
+<td><p>Explained: 6,695 SLOC=1 expression-body defs lizard skips</p></td>
+</tr>
+<tr class="row-odd"><td><p>Fortran (.f90)</p></td>
+<td><p>lapack SRC</p></td>
+<td><p>30</p></td>
+<td><p>26</p></td>
+<td><p>+15%</p></td>
+<td><p>Good; small corpus</p></td>
+</tr>
+<tr class="row-even"><td><p>Fortran (.f)</p></td>
+<td><p>lapack SRC (2,114 files)</p></td>
+<td><p>2,072</p></td>
+<td><p>2,106</p></td>
+<td><p>−2%</p></td>
+<td><p>Fixed; was −45% before tree-sitter-fortran fork fixed <code class="docutils literal notranslate"><span class="pre">*</span></code>-continuation comment handling</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="rust-knots-vs-rust-code-analysis-rca">
+<h3>Rust: knots vs. rust-code-analysis (rca)<a class="headerlink" href="#rust-knots-vs-rust-code-analysis-rca" title="Link to this heading"></a></h3>
+<p>rca is the authoritative Rust-specific tool.  Lizard McCabe for Rust is
+non-standard and should not be used as the comparison baseline.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 15.0%" />
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 30.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Metric</p></th>
+<th class="head"><p>knots</p></th>
+<th class="head"><p>rca (named fns only)</p></th>
+<th class="head"><p>Delta</p></th>
+<th class="head"><p>Explanation</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Function count</p></td>
+<td><p>120</p></td>
+<td><p>156</p></td>
+<td><p>rca higher</p></td>
+<td><p>rca counts single-line closures as named functions</p></td>
+</tr>
+<tr class="row-odd"><td><p>Avg McCabe</p></td>
+<td><p>2.37</p></td>
+<td><p>4.04</p></td>
+<td><p>−41%</p></td>
+<td><p>rca counts <code class="docutils literal notranslate"><span class="pre">?</span></code> as a branch; knots does too (see below)</p></td>
+</tr>
+<tr class="row-even"><td><p>Avg Cognitive</p></td>
+<td><p>1.96</p></td>
+<td><p>1.47</p></td>
+<td><p>+33%</p></td>
+<td><p>Similar ballpark</p></td>
+</tr>
+<tr class="row-odd"><td><p>Avg SLOC</p></td>
+<td><p>19.30</p></td>
+<td><p>10.56</p></td>
+<td><p>+83%</p></td>
+<td><p>rca deflated by 36 single-line closures in denominator</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="known-implementation-notes">
+<h2>Known Implementation Notes<a class="headerlink" href="#known-implementation-notes" title="Link to this heading"></a></h2>
+<section id="c-macro-pattern-vmcase-sloc-deflation">
+<h3>C macro pattern: vmcase SLOC deflation<a class="headerlink" href="#c-macro-pattern-vmcase-sloc-deflation" title="Link to this heading"></a></h3>
+<p>Lua’s VM interpreter uses a macro dispatch pattern that tree-sitter-c
+parses as nested <code class="docutils literal notranslate"><span class="pre">function_definition</span></code> nodes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">vmdispatch</span><span class="p">(</span><span class="n">GET_OPCODE</span><span class="p">(</span><span class="n">i</span><span class="p">))</span> <span class="p">{</span>
+  <span class="n">vmcase</span><span class="p">(</span><span class="n">OP_MOVE</span><span class="p">)</span>  <span class="p">{</span> <span class="o">...</span> <span class="n">vmbreak</span><span class="p">;</span> <span class="p">}</span>
+  <span class="n">vmcase</span><span class="p">(</span><span class="n">OP_LOADI</span><span class="p">)</span> <span class="p">{</span> <span class="o">...</span> <span class="n">vmbreak</span><span class="p">;</span> <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Before knots v1.12.0, the <code class="docutils literal notranslate"><span class="pre">nested_fn_sloc</span></code> subtraction incorrectly
+fired on these macro blocks, reducing <code class="docutils literal notranslate"><span class="pre">luaV_execute</span></code> SLOC from 751 to
+34 and AIRD from 87 to 76.  Fixed in v1.12.0: <code class="docutils literal notranslate"><span class="pre">function_definition</span></code>
+nodes whose declarator is a <code class="docutils literal notranslate"><span class="pre">parenthesized_declarator</span></code> (macro call
+pattern) are filtered from the nested-SLOC subtraction.  Only
+<code class="docutils literal notranslate"><span class="pre">identifier</span></code> declarators (genuine nested functions) are subtracted.</p>
+</section>
+<section id="fortran-explicit-only-extension-rejection">
+<h3>Fortran explicit-only extension rejection<a class="headerlink" href="#fortran-explicit-only-extension-rejection" title="Link to this heading"></a></h3>
+<p>Before v1.13, explicit-only extensions (<code class="docutils literal notranslate"><span class="pre">.f</span></code>, <code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.ads</span></code>) were
+silently rejected even when passed directly on the command line.  Fixed
+by introducing <code class="docutils literal notranslate"><span class="pre">is_parseable_extension</span></code> in <code class="docutils literal notranslate"><span class="pre">src/lib.rs</span></code> — the
+command-line path now uses this (includes both recursive and
+explicit-only extensions) rather than <code class="docutils literal notranslate"><span class="pre">is_source_extension</span></code> (recursive
+discovery only).</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="alternatives.html" class="btn btn-neutral float-left" title="Alternatives Comparison" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="troubleshooting.html" class="btn btn-neutral float-right" title="Troubleshooting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
