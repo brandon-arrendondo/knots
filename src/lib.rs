@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use anyhow::{Context, Result};
+use globset::Glob;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tree_sitter::{Node, Tree, TreeCursor};
@@ -273,17 +274,9 @@ impl FilterRules {
 }
 
 fn glob_match(pattern: &str, path: &str) -> bool {
-    let pattern_regex = pattern
-        .replace(".", "\\.")
-        .replace("**", "<!DOUBLESTAR!>")
-        .replace("*", "[^/]*")
-        .replace("<!DOUBLESTAR!>", ".*");
-
-    if let Ok(re) = Regex::new(&format!("^{}$", pattern_regex)) {
-        re.is_match(path)
-    } else {
-        false
-    }
+    Glob::new(pattern)
+        .map(|g| g.compile_matcher().is_match(path))
+        .unwrap_or(false)
 }
 
 #[derive(Debug, Clone)]

@@ -36,6 +36,7 @@ tree-sitter-lua.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 ignore.workspace = true
+globset.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 regex.workspace = true
@@ -80,5 +81,6 @@ anyhow = "1.0"
 colored = "2.0"
 regex = "1.10"
 ignore = "0.4"
+globset = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
