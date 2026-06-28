@@ -790,6 +790,69 @@ $> 5$) are strong candidates for dispatch-table false positives and warrant
 human review before refactoring action is taken.
 
 %% ============================================================
+\section{Kotlin Complexity: Implementation Findings}
+\label{sec:kotlin-findings}
+
+Adding Kotlin support required resolving several function-discovery questions
+specific to Kotlin's grammar that do not arise in C-family languages.  We
+document the findings as a calibration reference and to characterize the
+systematic divergence between knots and lizard on Kotlin corpora.
+
+\subsection{Single-Expression Functions}
+
+Kotlin permits a concise \emph{expression-body} syntax in which the function
+body is a single expression following \texttt{=}:
+
+\begin{verbatim}
+fun double(x: Int): Int = x * 2
+\end{verbatim}
+
+These are semantically equivalent to their block-body counterparts and are
+common in idiomatic Kotlin, particularly in repository and delegate classes
+where every method is a thin wrapper over a DAO call.  The tree-sitter
+\texttt{tree-sitter-kotlin-ng} grammar represents both forms as a
+\texttt{function\_declaration} node with a \texttt{function\_body} child; the
+child contains a \texttt{block} for the brace form and an \texttt{expression}
+for the \texttt{=} form.
+
+Lizard's regex-based parser requires a brace-delimited body and therefore
+does not discover single-expression functions.  knots discovers them
+correctly because it relies on tree-sitter's full parse.
+
+\subsection{Function Count Comparison: knots vs.\ lizard}
+
+On the \texttt{srg\_collection\_manager\_app} corpus (43~Kotlin files,
+an Android project using Room/Retrofit), knots discovers 381~functions versus
+lizard's 319, a 19\% gap.  The gap decomposes as follows:
+
+\begin{itemize}
+  \item \textbf{55 single-expression functions} (\texttt{fun f() = expr}).
+    These are real implementations that lizard's brace-matching misses.
+    knots is correct.
+  \item \textbf{7 abstract declarations} (\texttt{abstract fun f(): T} with
+    no body).  Both knots and lizard make a defensible choice here.  knots
+    counts them as \texttt{function\_declaration} nodes with
+    McCabe~$= 1$ and SLOC~$= 1$; they contribute negligible weight to any
+    aggregate or threshold decision.  Lizard skips them.
+\end{itemize}
+
+Interface methods (e.g., Room DAO methods annotated with \texttt{@Query},
+\texttt{@Insert}) are also bodyless at the Kotlin source level but are
+counted by \emph{both} tools; the Room annotation processor generates the
+implementation at compile time.  Their SLOC is 2 (annotation line plus
+signature line), not~1.
+
+\subsection{Threshold Implications}
+
+The 19\% function-count difference does not materially affect threshold
+enforcement.  Abstract declarations (the knots-only entries) have trivial
+metrics and will not trigger any reasonable threshold.
+Single-expression functions have SLOC~$= 1$ and McCabe~$= 1$; they represent
+real code paths and \emph{should} be counted.  Users migrating from a
+lizard-based gate to knots should expect a slightly higher reported function
+count for Kotlin codebases; per-function thresholds are unaffected.
+
+%% ============================================================
 \section{Conclusion}
 \label{sec:conclusion}
 

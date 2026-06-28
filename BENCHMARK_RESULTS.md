@@ -54,7 +54,7 @@ rca 0.0.25 from crates.io fails to compile on rustc 1.95; install from git HEAD:
 | C# | Newtonsoft.Json | 7,339 | 6,521 | +13% | ✓ good |
 | Rust | todo-sqlite-cli | 120 | 113 | +6% | ✓ good |
 | Swift | srg_collection_manager_app_ios | 199 | 201 | −1% | ✓ excellent |
-| Kotlin | srg_collection_manager_app | 381 | 319 | +19% | open (#20) |
+| Kotlin | srg_collection_manager_app | 381 | 319 | +19% | ✓ explained — see §Kotlin |
 | C | curl | 5,836 | 4,920 | +19% | plausible — knots picks up static inline |
 | C++ | mosquitto | 5,300 | 3,343 | +59% | plausible — templates/lambdas |
 | Go | cobra | 595 | 805 | −26% | open (#23) |
@@ -117,7 +117,7 @@ Open: todo #21 — evaluate whether to count `?` as +1 McCabe.
 | # | Language | Finding | Todo |
 |---|----------|---------|------|
 | 19 | JavaScript | `.jsx` extension not in `SUPPORTED_EXTENSIONS`; all JSX files skipped by `--recursive` | #19 |
-| 20 | Kotlin | knots finds 19% more functions than lizard (381 vs 319) — likely lambda detection | #20 |
+| 20 | Kotlin | knots finds 19% more functions than lizard (381 vs 319) — **resolved**: 55 single-expression funs lizard misses + 7 abstract declarations; knots correct | closed |
 | 21 | Rust | knots McCabe ~41% lower than rca due to `?` not counted as branch | #21 |
 | 22 | TypeScript | knots finds 81% fewer functions than lizard (1,153 vs 6,020 on zod) — arrow functions assigned to vars and object method shorthand likely missing | #22 |
 | 23 | Go | knots finds 26% fewer functions than lizard (595 vs 805 on cobra) — cause unknown | #23 |

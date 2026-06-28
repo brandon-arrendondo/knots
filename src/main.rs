@@ -3719,6 +3719,32 @@ mod tests {
         assert_eq!(names, vec!["outer"]);
     }
 
+    #[test]
+    fn test_kotlin_single_expression_function() {
+        // `fun foo() = expr` style — has a function_body with an expression child.
+        // knots counts these; lizard misses them (requires `{}` body).
+        let code = "fun double(x: Int): Int = x * 2";
+        let names = discover_kotlin_functions(code);
+        assert_eq!(names, vec!["double"]);
+    }
+
+    #[test]
+    fn test_kotlin_abstract_function_counted() {
+        // Abstract declarations have no body but are still function_declaration nodes.
+        // knots counts them (McCabe=1, SLOC=1); they appear as trivial entries.
+        let code = "abstract class Foo { abstract fun bar(): String }";
+        let names = discover_kotlin_functions(code);
+        assert_eq!(names, vec!["bar"]);
+    }
+
+    #[test]
+    fn test_kotlin_interface_method_counted() {
+        // Interface methods have no body but knots counts them, consistent with lizard.
+        let code = "interface Dao { fun getAllItems(): List<String> }";
+        let names = discover_kotlin_functions(code);
+        assert_eq!(names, vec!["getAllItems"]);
+    }
+
     fn discover_swift_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
         parser
