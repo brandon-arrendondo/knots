@@ -1,4 +1,4 @@
-.TH KNOTS 1 "2026-06-24" "knots 1.12.0" "User Commands"
+.TH KNOTS 1 "2026-06-29" "knots 1.13.0" "User Commands"
 .SH NAME
 knots \- multi-language code complexity analyzer with AI cost metrics
 .SH SYNOPSIS
@@ -70,6 +70,25 @@ When used, a
 .I report.txt
 file is generated with per-function details.
 Header files (.h, .hpp, .hxx) are skipped by default.
+.TP
+.BI \-l " LANG" ", " \-\-language " LANG"
+Restrict analysis to files of the given language.
+Repeatable to allow multiple languages (e.g.\&
+.BR "\-l cpp \-l c \-l rust" ).
+.I LANG
+is matched case-insensitively against language names (e.g.\&
+.BR rust ,
+.BR c++ ,
+.BR fortran )
+and against any recognized extension alias (e.g.\&
+.BR rs ,
+.BR cpp ,
+.BR f90 ).
+Run
+.B knots \-\-supported\-languages
+to see the full list.
+Mostly useful with
+.BR \-\-recursive .
 .TP
 .BR \-v ", " \-\-verbose
 Show detailed per-function analysis.
@@ -243,6 +262,20 @@ Parallel analysis of a large codebase:
 .RS
 .nf
 knots \-r \-j 8 path/to/bigproject/
+.fi
+.RE
+.PP
+Analyze only C and C++ files in a mixed-language repository:
+.RS
+.nf
+knots \-r \-l c \-l c++ path/to/project/
+.fi
+.RE
+.PP
+Analyze only Fortran files using an extension alias:
+.RS
+.nf
+knots \-r \-l f90 path/to/project/
 .fi
 .RE
 .PP
