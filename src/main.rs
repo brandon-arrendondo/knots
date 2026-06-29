@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -13,7 +13,7 @@ mod output;
 use output::*;
 use knots::{
     is_parseable_extension, is_source_extension, language_for_file,
-    FilterRules, FunctionMetrics, collect_function_metrics,
+    FilterRules, FunctionMetrics, collect_function_metrics, LANGUAGES,
 };
 
 /// Compilation database entry from compile_commands.json
@@ -167,6 +167,14 @@ struct Args {
     /// Only effective when analyzing multiple files. Default: 0.
     #[arg(short = 'j', long, value_name = "N", default_value_t = 0)]
     jobs: usize,
+
+    /// Restrict analysis to files of this language (repeatable).
+    /// Accepts a language name (e.g. rust, c++, fortran) or any recognized
+    /// extension (e.g. rs, cpp, f90) — case-insensitive.  Run
+    /// `knots --supported-languages` to see the full list.
+    /// Mostly useful with --recursive.
+    #[arg(short = 'l', long = "language", value_name = "LANG", action = clap::ArgAction::Append)]
+    languages: Vec<String>,
 }
 
 /// Metrics that `--explain` can describe at the command line.
@@ -679,6 +687,38 @@ fn check_thresholds(
     Ok(())
 }
 
+/// Resolve `-l`/`--language` names/extensions to the set of file extensions
+/// that should be allowed during file collection.  Returns `None` when no
+/// filter was requested (accept all languages).  Each token is matched
+/// case-insensitively against language names first, then against extensions.
+fn resolve_language_filter(names: &[String]) -> Result<Option<HashSet<&'static str>>> {
+    if names.is_empty() {
+        return Ok(None);
+    }
+    let mut allowed: HashSet<&'static str> = HashSet::new();
+    for token in names {
+        let lower = token.to_lowercase();
+        // Try matching by language name first, then by extension.
+        let lang = LANGUAGES.iter().find(|l| l.name.to_lowercase() == lower).or_else(|| {
+            LANGUAGES.iter().find(|l| {
+                l.extensions.iter().any(|e| e.to_lowercase() == lower)
+                    || l.explicit_only.iter().any(|e| e.to_lowercase() == lower)
+            })
+        });
+        match lang {
+            Some(l) => {
+                allowed.extend(l.extensions.iter().copied());
+                allowed.extend(l.explicit_only.iter().copied());
+            }
+            None => anyhow::bail!(
+                "Unknown language '{}'. Run `knots --supported-languages` to see valid names.",
+                token
+            ),
+        }
+    }
+    Ok(Some(allowed))
+}
+
 fn configure_thread_pool(jobs: usize) {
     let n = if jobs == 0 {
         std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
@@ -712,6 +752,7 @@ fn main() -> Result<()> {
                 .unwrap_or_else(|e| panic!("Invalid --exclude-path pattern '{p}': {e}"))
         })
         .collect();
+    let language_filter = resolve_language_filter(&args.languages)?;
 
     let files = if let Some(cc) = &args.compile_commands {
         load_compile_commands(cc, &include_rules, &exclude_rules)?
@@ -724,6 +765,7 @@ fn main() -> Result<()> {
                 &include_rules,
                 &exclude_rules,
                 &exclude_path_patterns,
+                &language_filter,
             )?);
         }
         collected
@@ -932,17 +974,22 @@ fn collect_files(
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
     exclude_path_patterns: &[regex::Regex],
+    language_filter: &Option<HashSet<&'static str>>,
 ) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
+
+    let ext_allowed = |ext: &std::ffi::OsStr| -> bool {
+        language_filter.as_ref().map_or(true, |set| {
+            ext.to_str().map(|e| set.contains(e)).unwrap_or(false)
+        })
+    };
 
     if path.is_file() {
         // Single file mode — accepts explicit-only extensions (e.g. .f, .h) in addition to
         // recursive-discovery extensions. is_parseable_extension covers both sets.
-        let supported = path
-            .extension()
-            .map(|e| is_parseable_extension(e))
-            .unwrap_or(false);
-        if !supported {
+        let ext = path.extension();
+        let supported = ext.map(|e| is_parseable_extension(e)).unwrap_or(false);
+        if !supported || !ext.map(ext_allowed).unwrap_or(false) {
             return Ok(files);
         }
         let file_str = path.to_string_lossy();
@@ -968,7 +1015,7 @@ fn collect_files(
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension() {
-                    if is_source_extension(ext) {
+                    if is_source_extension(ext) && ext_allowed(ext) {
                         let file_str = file_path.to_string_lossy();
                         if !path_is_excluded(&file_str, exclude_path_patterns)
                             && should_process_file(&file_str, include_rules, exclude_rules)
