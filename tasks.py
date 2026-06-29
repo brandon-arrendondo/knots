@@ -29,7 +29,7 @@ def _read_cargo_version():
 
 
 @task
-def bump_version(c, new_version=None):
+def bump_version(c, new_version=None, date=None):
     """Bump version across all files that reference it.
 
     Reads the current version from Cargo.toml, then updates it there plus
@@ -38,18 +38,24 @@ def bump_version(c, new_version=None):
 
     Args:
         new_version: Target version string, e.g. 1.8.1 (no leading 'v').
+        date: Date string for man page headers, e.g. 2026-07-01 (default: today).
     """
+    import datetime
     current = _read_cargo_version()
+    today = date or datetime.date.today().isoformat()
 
     # Files that embed a bare version number (no 'v' prefix)
     # The man-page patterns match ANY version, not `current`: the .TH line can
     # drift out of sync (it has, historically), and a pattern keyed to `current`
     # silently no-ops in that case instead of healing it.
+    # Templates may use {new} (new version) and/or {date} (today's date).
     bare_version_files = [
         # (path, regex-pattern-to-match, replacement-template)
         ("Cargo.toml",                  rf'^(version = "){re.escape(current)}(")', r"\g<1>{new}\g<2>"),
         ("man/knots.1",                 r'("knots )\d+\.\d+\.\d+(")',              r"\g<1>{new}\g<2>"),
+        ("man/knots.1",                 r'(\.TH \S+ 1 ")\d{4}-\d{2}-\d{2}(")',    r"\g<1>{date}\g<2>"),
         ("man/knots-test-complexity.1", r'("knots )\d+\.\d+\.\d+(")',              r"\g<1>{new}\g<2>"),
+        ("man/knots-test-complexity.1", r'(\.TH \S+ 1 ")\d{4}-\d{2}-\d{2}(")',    r"\g<1>{date}\g<2>"),
     ]
 
     # Files that embed a 'v'-prefixed tag (rev: vX.Y.Z or /vX.Y.Z/ in URLs)
@@ -62,9 +68,10 @@ def bump_version(c, new_version=None):
 
     if not new_version:
         print(f"Current version: {current}")
+        print(f"Current date:    {today}")
         print("\nFiles that would be updated:")
         for path, *_ in bare_version_files:
-            print(f"  {path}  (bare version)")
+            print(f"  {path}  (bare version / date)")
         for path in tagged_version_files:
             print(f"  {path}  (rev: v{current}  →  rev: vNEW)")
         print("\nRun: invoke bump-version --new-version X.Y.Z")
@@ -78,7 +85,7 @@ def bump_version(c, new_version=None):
     for path, pattern, tmpl in bare_version_files:
         p = Path(path)
         text = p.read_text()
-        updated = re.sub(pattern, tmpl.format(new=new_version), text, flags=re.MULTILINE)
+        updated = re.sub(pattern, tmpl.format(new=new_version, date=today), text, flags=re.MULTILINE)
         if updated != text:
             p.write_text(updated)
             changed.append(path)
