@@ -282,6 +282,98 @@ first-class per-file metrics.  The two-phase execution model this requires
 including Ce/Ca) is a natural extension of the existing ``collect_all_metrics``
 pipeline under ``--recursive``.
 
+Substrate — Ecosystem Research (June 2026)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before building ``parse-db``, a survey was done of existing Rust crates that
+might serve as the substrate or as components within it.  **The conclusion is:
+build it.** No existing crate covers cross-file analysis for 16+ languages.
+The table below records what was evaluated and why each was ruled in or out.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 12 12 12 12 30
+
+   * - Crate
+     - Cross-file
+     - Lang-neutral
+     - Maintained
+     - Library API
+     - Verdict
+   * - ``stack-graphs``
+     - Yes (name resolution only)
+     - Yes
+     - **No** — archived Sep 2025
+     - Yes
+     - Dead; do not use
+   * - ``ast-grep-core``
+     - No
+     - Yes
+     - Yes
+     - Unstable
+     - Wrong domain; unstable API
+   * - ``salsa``
+     - N/A (infrastructure)
+     - Agnostic
+     - Yes
+     - Yes
+     - Use for incrementality layer if needed
+   * - ``tree-sitter-graph``
+     - No (per-file DSL)
+     - Yes
+     - Yes
+     - Yes
+     - Low-level building block only
+   * - ``tree-sitter-tags``
+     - No
+     - Yes
+     - Yes
+     - Yes
+     - Useful for definition extraction
+   * - ``tree-sitter-language-pack``
+     - No
+     - Yes (306 langs)
+     - Yes
+     - Yes
+     - Grammar consolidation candidate
+   * - ``rust-code-analysis``
+     - No
+     - Partial
+     - **No** — dead since 2021
+     - Yes
+     - Skip
+   * - ``code-graph-cli``
+     - Yes
+     - Partial (5 langs)
+     - Yes
+     - **No** — CLI only
+     - Right concept; wrong interface
+
+Notable findings:
+
+- **``stack-graphs``** (GitHub's tree-sitter name-resolution framework, backed
+  by SQLite) was the most likely "buy" candidate.  It was archived September 9,
+  2025.  Dead on arrival.
+- **``salsa``** (the incremental computation framework under rust-analyzer) is
+  the right incrementality infrastructure, but adds significant design overhead.
+  For batch-only analysis a plain ``Arc<DashMap<PathBuf, ParsedFile>>``
+  populated with rayon achieves the same result without salsa's query-graph
+  complexity.  Salsa earns its keep only when watch-mode or IDE-mode
+  incremental re-analysis is needed — that is likely sqc's eventual
+  requirement, not knots v1.
+- **``tree-sitter-language-pack``** (v1.12, released June 29, 2026) bundles
+  306 grammars with pre-built tags/highlight/locals queries and could replace
+  all 16 individual ``tree-sitter-*`` entries in ``Cargo.toml``.  Grammar
+  version alignment with existing knots dependencies must be verified before
+  adopting it.
+- **``tree-sitter-tags``** provides "all definitions in this file" nearly for
+  free for any language that ships a ``.scm`` tags query.  Could supplement or
+  simplify ``visit_functions`` for covered languages.
+- **Import and call graph extraction must be built regardless.**  No crate
+  covers 16 languages for this.  The implementation pattern is the same as
+  ``complexity.rs`` — per-node-kind traversal rules, one ``match`` arm per
+  language.
+
 ---------------------------------------------------------------------------
 
 Known Issues and Coupling Hotspots
