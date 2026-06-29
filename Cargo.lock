@@ -531,7 +531,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-fixed-form-fortran"
 version = "0.1.0"
-source = "git+https://github.com/brandon-arrendondo/tree-sitter-fixed-form-fortran?rev=a5c5272#a5c52729bc4e53e6ef957c456faa2541a75bc6d7"
+source = "git+https://github.com/brandon-arrendondo/tree-sitter-fixed-form-fortran?rev=412f6c7#412f6c7bed970fe840461d8f0b6165a58f285492"
 dependencies = [
  "cc",
  "tree-sitter-language",

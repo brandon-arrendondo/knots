@@ -426,9 +426,39 @@ pub fn calculate_sloc_lua(node: Node, source_code: &[u8]) -> u32 {
     calculate_sloc_line_comment(node, source_code, b"--")
 }
 
-/// Calculates SLOC for Fortran source — skips lines beginning with `!` (Fortran's only comment style).
+/// Calculates SLOC for free-form Fortran (.f90/.f95 etc.) — skips lines beginning with `!`.
 pub fn calculate_sloc_fortran(node: Node, source_code: &[u8]) -> u32 {
     calculate_sloc_line_comment(node, source_code, b"!")
+}
+
+/// Calculates SLOC for fixed-form Fortran (.f/.for/.f77).
+/// Skips lines whose FIRST character is `*`, `C`, or `c` (column-1 comment convention)
+/// and lines whose first non-blank character is `!` (inline comments).
+pub fn calculate_sloc_fixed_form_fortran(node: Node, source_code: &[u8]) -> u32 {
+    let start_byte = node.start_byte();
+    let end_byte = node.end_byte();
+    if start_byte >= end_byte || end_byte > source_code.len() {
+        return 0;
+    }
+    let function_text = &source_code[start_byte..end_byte];
+    let mut sloc = 0;
+    for line in function_text.split(|&b| b == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+        // Fixed-form comment: *, C, or c in column 1 (first byte of line)
+        let first = line[0];
+        if first == b'*' || first == b'C' || first == b'c' {
+            continue;
+        }
+        // Blank line or free-form inline comment
+        let trimmed = trim_bytes(line);
+        if trimmed.is_empty() || trimmed.starts_with(b"!") {
+            continue;
+        }
+        sloc += 1;
+    }
+    sloc
 }
 
 fn calculate_sloc_inner(node: Node, source_code: &[u8], skip_hash_comments: bool) -> u32 {

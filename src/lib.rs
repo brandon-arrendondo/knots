@@ -15,7 +15,7 @@ pub use complexity::{
     calculate_abc_complexity, calculate_aicp, calculate_aird,
     calculate_cognitive_complexity, calculate_mccabe_complexity,
     calculate_nesting_depth, calculate_return_count, calculate_sloc,
-    calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_python,
+    calculate_sloc_ada, calculate_sloc_fixed_form_fortran, calculate_sloc_fortran, calculate_sloc_python,
     calculate_state_coupling, calculate_test_scoring,
     TestScoringMetric,
 };
@@ -49,8 +49,10 @@ pub enum SlocMode {
     Python,
     /// Strips `--` comment lines.
     Ada,
-    /// Strips `!` comment lines.
+    /// Strips `!` comment lines (free-form .f90/.f95/…).
     Fortran,
+    /// Strips fixed-form comment lines: `*`, `C`, or `c` at column 1, plus `!` anywhere.
+    FortranFixed,
     /// Strips `--` comment lines (same prefix as Ada, different grammar).
     Lua,
 }
@@ -209,7 +211,11 @@ pub fn is_parseable_extension(ext: &std::ffi::OsStr) -> bool {
 /// derived from the `LANGUAGES` table (the single source of truth).
 pub fn sloc_mode_for_file(path: &str) -> SlocMode {
     let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
-    language_info_for_ext(ext).map_or(SlocMode::Default, |l| l.sloc_mode)
+    match ext {
+        // Fixed-form Fortran uses column-1 *, C, c comments — different from free-form !
+        "f" | "for" | "f77" | "F" | "FOR" | "F77" => SlocMode::FortranFixed,
+        _ => language_info_for_ext(ext).map_or(SlocMode::Default, |l| l.sloc_mode),
+    }
 }
 
 /// Filter rules for including/excluding files and functions
@@ -799,11 +805,12 @@ pub fn nested_fn_sloc(outer: Node, source_code: &str, sloc_mode: SlocMode) -> u3
 fn accumulate_nested_sloc(node: Node, source_code: &str, sloc_mode: SlocMode, total: &mut u32) {
     if is_function_kind(node.kind()) && !is_macro_function_definition(node) {
         *total += match sloc_mode {
-            SlocMode::Python  => calculate_sloc_python(node, source_code.as_bytes()),
-            SlocMode::Ada     => calculate_sloc_ada(node, source_code.as_bytes()),
-            SlocMode::Fortran => calculate_sloc_fortran(node, source_code.as_bytes()),
-            SlocMode::Lua     => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
-            SlocMode::Default => calculate_sloc(node, source_code.as_bytes()),
+            SlocMode::Python       => calculate_sloc_python(node, source_code.as_bytes()),
+            SlocMode::Ada          => calculate_sloc_ada(node, source_code.as_bytes()),
+            SlocMode::Fortran      => calculate_sloc_fortran(node, source_code.as_bytes()),
+            SlocMode::FortranFixed => calculate_sloc_fixed_form_fortran(node, source_code.as_bytes()),
+            SlocMode::Lua          => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
+            SlocMode::Default      => calculate_sloc(node, source_code.as_bytes()),
         };
         return;
     }
@@ -888,11 +895,12 @@ pub fn collect_function_metrics(
             let nesting = calculate_nesting_depth(node);
             let sloc = {
                 let raw = match sloc_mode {
-                    SlocMode::Python  => calculate_sloc_python(node, src.as_bytes()),
-                    SlocMode::Ada     => calculate_sloc_ada(node, src.as_bytes()),
-                    SlocMode::Fortran => calculate_sloc_fortran(node, src.as_bytes()),
-                    SlocMode::Lua     => complexity::calculate_sloc_lua(node, src.as_bytes()),
-                    SlocMode::Default => calculate_sloc(node, src.as_bytes()),
+                    SlocMode::Python       => calculate_sloc_python(node, src.as_bytes()),
+                    SlocMode::Ada          => calculate_sloc_ada(node, src.as_bytes()),
+                    SlocMode::Fortran      => calculate_sloc_fortran(node, src.as_bytes()),
+                    SlocMode::FortranFixed => calculate_sloc_fixed_form_fortran(node, src.as_bytes()),
+                    SlocMode::Lua          => complexity::calculate_sloc_lua(node, src.as_bytes()),
+                    SlocMode::Default      => calculate_sloc(node, src.as_bytes()),
                 };
                 raw.saturating_sub(nested_fn_sloc(node, src, sloc_mode))
             };
