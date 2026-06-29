@@ -163,7 +163,7 @@ crates are the `tree_sitter_*` re-exports at the top of `src/lib.rs`.
 | Kotlin | `.kt` `.kts` | — |
 | Swift | `.swift` | — |
 | PHP | `.php` | — |
-| Fortran | `.f90` `.f95` `.f03` `.f08` | `.f` `.for` `.f77` |
+| Fortran | `.f90` `.f95` `.f03` `.f08` `.F90` `.F95` `.F03` `.F08` | `.f` `.for` `.f77` `.F` `.FOR` `.F77` |
 | Scala | `.scala` `.sc` | — |
 | Lua | `.lua` | — |
 <!-- END:supported-languages -->
