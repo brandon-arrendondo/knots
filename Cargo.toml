@@ -31,6 +31,7 @@ tree-sitter-swift.workspace = true
 tree-sitter-typescript.workspace = true
 tree-sitter-php.workspace = true
 tree-sitter-fortran.workspace = true
+tree-sitter-fixed-form-fortran.workspace = true
 tree-sitter-scala.workspace = true
 tree-sitter-lua.workspace = true
 anyhow.workspace = true
@@ -74,7 +75,8 @@ tree-sitter-kotlin-ng = "1.1"
 tree-sitter-swift = "0.7"
 tree-sitter-typescript = "0.23"
 tree-sitter-php = "0.24"
-tree-sitter-fortran = { git = "https://github.com/brandon-arrendondo/tree-sitter-fortran", rev = "9dda4e0" }
+tree-sitter-fortran = "0.6"
+tree-sitter-fixed-form-fortran = { git = "https://github.com/brandon-arrendondo/tree-sitter-fixed-form-fortran", rev = "a5c5272" }
 tree-sitter-scala = "0.26"
 tree-sitter-lua = "0.5"
 clap = { version = "4.5", features = ["derive"] }

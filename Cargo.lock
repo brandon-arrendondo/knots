@@ -266,6 +266,7 @@ dependencies = [
  "tree-sitter-c",
  "tree-sitter-c-sharp",
  "tree-sitter-cpp",
+ "tree-sitter-fixed-form-fortran",
  "tree-sitter-fortran",
  "tree-sitter-go",
  "tree-sitter-java",
@@ -528,9 +529,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-fixed-form-fortran"
+version = "0.1.0"
+source = "git+https://github.com/brandon-arrendondo/tree-sitter-fixed-form-fortran?rev=a5c5272#a5c52729bc4e53e6ef957c456faa2541a75bc6d7"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-fortran"
-version = "0.5.1"
-source = "git+https://github.com/brandon-arrendondo/tree-sitter-fortran?rev=9dda4e0#9dda4e043bc9b394cd9e14ba59e25556e1461aa2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea5fea41363a9b59666001dc26c4b356d4e164da27c6ce31145e00aba6bf9b16"
 dependencies = [
  "cc",
  "tree-sitter-language",

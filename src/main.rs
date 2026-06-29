@@ -2309,6 +2309,22 @@ mod tests {
         names
     }
 
+    fn discover_fixed_form_fortran_functions(code: &str) -> Vec<String> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&knots::tree_sitter_fixed_form_fortran::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, code, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        names
+    }
+
     #[test]
     fn test_fortran_discover_simple_function() {
         let code = "function add(a, b)\n  implicit none\n  integer :: add, a, b\n  add = a + b\nend function add";
@@ -2334,7 +2350,7 @@ mod tests {
     #[test]
     fn test_fortran_discover_fixed_form_subroutine() {
         let code = "      SUBROUTINE DSCAL(N,DA)\n      RETURN\n      END\n";
-        let names = discover_fortran_functions(code);
+        let names = discover_fixed_form_fortran_functions(code);
         assert_eq!(names, vec!["DSCAL"]);
     }
 

@@ -36,6 +36,7 @@ pub use tree_sitter_rust;
 pub use tree_sitter_typescript;
 pub use tree_sitter_php;
 pub use tree_sitter_fortran;
+pub use tree_sitter_fixed_form_fortran;
 pub use tree_sitter_scala;
 pub use tree_sitter_lua;
 
@@ -85,7 +86,7 @@ pub const LANGUAGES: &[LanguageInfo] = &[
     LanguageInfo { name: "Kotlin",     extensions: &["kt", "kts"],                    explicit_only: &[],                sloc_mode: SlocMode::Default },
     LanguageInfo { name: "Swift",      extensions: &["swift"],                        explicit_only: &[],                sloc_mode: SlocMode::Default },
     LanguageInfo { name: "PHP",        extensions: &["php"],                          explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Fortran",    extensions: &["f90", "f95", "f03", "f08"],     explicit_only: &["f", "for", "f77"], sloc_mode: SlocMode::Fortran },
+    LanguageInfo { name: "Fortran",    extensions: &["f90", "f95", "f03", "f08", "F90", "F95", "F03", "F08"], explicit_only: &["f", "for", "f77", "F", "FOR", "F77"], sloc_mode: SlocMode::Fortran },
     LanguageInfo { name: "Scala",      extensions: &["scala", "sc"],                  explicit_only: &[],                sloc_mode: SlocMode::Default },
     LanguageInfo { name: "Lua",        extensions: &["lua"],                          explicit_only: &[],                sloc_mode: SlocMode::Lua },
 ];
@@ -121,8 +122,8 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "swift",
     // PHP
     "php",
-    // Fortran (modern; fixed-form .f/.for/.f77 are explicit-only)
-    "f90", "f95", "f03", "f08",
+    // Fortran (modern free-form; fixed-form .f/.for/.f77 are explicit-only)
+    "f90", "f95", "f03", "f08", "F90", "F95", "F03", "F08",
     // Scala
     "scala", "sc",
     // Lua
@@ -175,7 +176,9 @@ pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
         Some("swift") => tree_sitter_swift::LANGUAGE.into(),
         Some("php") => tree_sitter_php::LANGUAGE_PHP.into(),
         Some("f90") | Some("f95") | Some("f03") | Some("f08")
-        | Some("f") | Some("for") | Some("f77") => tree_sitter_fortran::LANGUAGE.into(),
+        | Some("F90") | Some("F95") | Some("F03") | Some("F08") => tree_sitter_fortran::LANGUAGE.into(),
+        Some("f") | Some("for") | Some("f77")
+        | Some("F") | Some("FOR") | Some("F77") => tree_sitter_fixed_form_fortran::LANGUAGE.into(),
         Some("scala") | Some("sc") => tree_sitter_scala::LANGUAGE.into(),
         Some("lua") => tree_sitter_lua::LANGUAGE.into(),
         _ => tree_sitter_c::LANGUAGE.into(),
