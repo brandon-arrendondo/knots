@@ -236,13 +236,67 @@ Function Count: knots vs. lizard
      - 16
      - 16
      - 0%
-     - Excellent; corpus reorganized (14 files left SRC/), both tools agree
+     - Excellent; 17 ``.f90`` files in SRC, both tools agree
    * - Fortran (.f)
      - lapack SRC (2,114 files)
-     - 2,072
+     - 2,138
      - 2,106
-     - −2%
-     - Fixed; was −45% before tree-sitter-fortran fork fixed ``*``-continuation comment handling
+     - +2%
+     - Good agreement; was −45% before scanner fixes (PR #4 on tree-sitter-fixed-form-fortran)
+
+Fortran Dialect Coverage
+------------------------
+
+Three corpora cover the full range of Fortran dialects.  The lapack/SRC row
+supersedes the single-row entry in the cross-language table above (same corpus,
+same run).  All ``.f`` files are passed explicitly (they are explicit-only in
+knots; ``--recursive`` does not pick them up).
+
+Corpora on disk: ``~/toolchain/lapack``, ``~/toolchain/fortran-stdlib``,
+``~/toolchain/arpack-ng``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 18 8 8 8 8 30
+
+   * - Corpus
+     - Dialect
+     - Files
+     - knots
+     - lizard
+     - Delta
+     - Notes
+   * - lapack/SRC
+     - Fixed-form ``.f``
+     - 2,114
+     - 2,138
+     - 2,106
+     - +2%
+     - Good agreement.  knots avg McCabe 33.1 vs lizard 22.9 (+45%): knots
+       counts ``.AND.``/``.OR.`` operators per the original McCabe definition;
+       lizard does not.  Use Cognitive complexity as the primary gate for
+       fixed-form Fortran.
+   * - fortran-stdlib
+     - Free-form ``.f90``/``.F90``
+     - 411
+     - 1,363
+     - 805
+     - +69%
+     - Avg McCabe nearly identical (knots 3.1, lizard 3.0), so the extra
+       functions knots finds are low-complexity.  knots visits generic
+       procedure declarations and interface procedures inside modules;
+       lizard skips them.
+   * - arpack-ng
+     - Mixed ``.f`` + ``.F90``
+     - 334
+     - 463
+     - 234
+     - +98%
+     - lizard fails to detect multiple subroutines within single-file
+       examples (EXAMPLES/ pattern: one driver + two helper subroutines per
+       file).  PARPACK/ agrees closely (191 vs ~174).  knots avg McCabe 17.6
+       vs lizard 8.0; gap reflects the missed functions, not a metric formula
+       difference.
 
 Rust: knots vs. rust-code-analysis (rca)
 -----------------------------------------
