@@ -187,18 +187,7 @@ Function Count: knots vs. lizard
      - 113
      - +6%
      - Good agreement
-   * - Swift
-     - srg_collection_manager_app_ios
-     - 199
-     - 201
-     - −1%
-     - Excellent
-   * - Kotlin
-     - srg_collection_manager_app
-     - 381
-     - 319
-     - +19%
-     - Explained: 55 single-expression funs + 7 abstract decls lizard skips
+
    * - C
      - curl
      - 5,836
@@ -223,12 +212,7 @@ Function Count: knots vs. lizard
      - 6,081
      - −72%
      - Explained: ~4,400 anonymous arrow callbacks; named counts similar
-   * - Python
-     - srg_card_search_website
-     - 134
-     - 133
-     - ~equal
-     - Good
+
    * - Lua
      - lua/testes
      - 590 named / 1,065 with flag
