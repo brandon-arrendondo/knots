@@ -182,6 +182,108 @@ After building ``RunContext``, ``main()`` routes to one of:
 
 ---------------------------------------------------------------------------
 
+Tool Suite Vision
+-----------------
+
+knots is one of three planned analysis tools sharing a common language-parsing
+substrate:
+
+- **knots** — code metrics lens (McCabe, Cognitive, SLOC, ABC, AIRD, AICP, …)
+- **sqc** — CERT-C compliance / security-finding lens (the primary motivation
+  for the substrate)
+- **funky** — code formatting lens
+
+Each tool asks a different question of the same parsed representation.  This
+mirrors the architecture of tools like Understand (SciTools), CodeQL, and
+Kythe, all of which converged on the same pattern: *parse once, query many
+times.*  The parse is the expensive, language-specific step; analyses are
+cheaper queries against a persistent store.
+
+The Shared Substrate (``parse-db``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The substrate is a planned ``parse-db`` (working name) crate that would own:
+
+- ``LanguageRegistry`` — already in ``lib.rs``; promote to shared crate
+- ``FileRecord`` — path, detected language, tree-sitter tree, source bytes
+- ``SymbolTable`` — definitions and references, keyed by ``NodeId``
+- ``ImportGraph`` — directed edges ``(file → imported_file)``, built from
+  syntactic import nodes (see below)
+- ``CallGraph`` — ``(caller_fn, callee_fn, is_external)`` edges
+
+**Storage model.** In-memory reconstruction on each invocation is acceptable
+for knots today (single-file or small corpora).  sqc analysing a large C
+codebase demands incremental re-parse keyed on ``(path, mtime/hash)``; SQLite
+is the natural choice (embeddable, queryable, used by Understand and CodeQL for
+the same reason).
+
+**Import graph depth.** Coupling analysis only needs *syntactic* import
+counting — count distinct import-source nodes per file from the tree-sitter
+AST, no path resolution required.  This is far shallower than full symbol
+resolution and sufficient for the Ce/Ca/Instability signal.  Full resolution
+(following re-exports, handling conditional includes) is deferred until sqc
+demands it for taint flow.
+
+Relationship to LSP
+~~~~~~~~~~~~~~~~~~~
+
+A Language Server Protocol server has significant overlap with the substrate:
+both parse files, maintain cross-file symbol tables, and support incremental
+re-parsing.  The differences are fundamental:
+
+- **Execution model.** LSP is a JSON-RPC protocol optimised for interactive
+  single-query latency (IDE hover, completion).  The substrate serves batch
+  analysis — build the full corpus model once, then run many queries.
+- **Query surface.** LSP exposes a fixed set of request types
+  (``textDocument/hover``, ``workspace/references``, etc.).  The substrate
+  exposes arbitrary structured queries tuned to each tool's analysis needs.
+- **Language coverage.** A 16-language suite would require 16 separate LSP
+  servers with wildly varying capability levels (clangd is rich; most
+  tree-sitter LSPs are thin).  The substrate provides one consistent API
+  across all languages, which is knots' existing value proposition.
+- **Ownership.** LSP servers are external dependencies whose analysis depth is
+  bounded by their authors' choices.  sqc performing taint flow and CERT-C
+  checking needs depth most LSP servers do not expose.
+
+The closest real-world analogue is ``rust-analyzer`` extracted as a library
+(the ``ra_ap_*`` crates) — but that is Rust-only.  The substrate here must be
+language-neutral at the tree-sitter level.
+
+Coupling and the AI Metrics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Efferent coupling (Ce), afferent coupling (Ca), and Instability
+(``Ce / (Ca + Ce)``) are Robert Martin's module-level dependency metrics.
+They connect directly to knots' AI-focused metrics:
+
+**AIRD (AI Reasoning Difficulty)** measures how much context an AI must load
+to reason correctly about a function.  Coupling is a direct multiplier:
+
+- A function in a file with high Ce depends on many other files; the AI must
+  understand or infer all those external contracts.  High Ce = wide context
+  requirement = higher AIRD.
+- The existing ``state_coupling`` metric already captures *intra-function*
+  breadth (distinct fields and parameters touched).  File-level Ce captures
+  *inter-module* breadth — the same signal one abstraction level up.
+- The existing ``external_calls`` metric is already a function-level Ce proxy
+  and contributes to AIRD today.
+
+**AICP (AI Code Prediction)** measures how predictable/completable the code
+is.  High Ca (many dependents) correlates with stable, well-established
+interfaces the AI has seen repeatedly — lower completion cost.  High Ce means
+the function's behaviour is contingent on many external contracts not in the
+local context window — higher completion cost.
+
+Because coupling feeds into AIRD and AICP it belongs in knots rather than a
+separate tool.  The substrate provides the import graph; knots consumes it as
+one more input to the AI metrics and also surfaces Ce/Ca/Instability as
+first-class per-file metrics.  The two-phase execution model this requires
+(phase 1: crawl all files and build the import graph; phase 2: compute metrics
+including Ce/Ca) is a natural extension of the existing ``collect_all_metrics``
+pipeline under ``--recursive``.
+
+---------------------------------------------------------------------------
+
 Known Issues and Coupling Hotspots
 -----------------------------------
 
