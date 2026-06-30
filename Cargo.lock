@@ -257,10 +257,32 @@ dependencies = [
  "clap",
  "globset",
  "ignore",
+ "lang-parsing-substrate",
  "rayon",
  "regex",
  "serde",
  "serde_json",
+ "tree-sitter",
+]
+
+[[package]]
+name = "knots-test-complexity"
+version = "1.13.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "colored",
+ "knots",
+ "regex",
+ "tree-sitter",
+ "tree-sitter-c",
+ "tree-sitter-cpp",
+]
+
+[[package]]
+name = "lang-parsing-substrate"
+version = "0.1.0"
+dependencies = [
  "tree-sitter",
  "tree-sitter-ada",
  "tree-sitter-c",
@@ -279,20 +301,6 @@ dependencies = [
  "tree-sitter-scala",
  "tree-sitter-swift",
  "tree-sitter-typescript",
-]
-
-[[package]]
-name = "knots-test-complexity"
-version = "1.13.0"
-dependencies = [
- "anyhow",
- "clap",
- "colored",
- "knots",
- "regex",
- "tree-sitter",
- "tree-sitter-c",
- "tree-sitter-cpp",
 ]
 
 [[package]]

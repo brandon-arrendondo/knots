@@ -20,203 +20,25 @@ pub use complexity::{
     TestScoringMetric,
 };
 
-// Re-export tree-sitter for convenience
+// Re-export tree-sitter core (a direct knots dep) plus every grammar. Grammars
+// now live behind the substrate, so knots carries no direct grammar deps; these
+// re-exports keep existing `knots::tree_sitter_*` paths working.
 pub use tree_sitter;
-pub use tree_sitter_ada;
-pub use tree_sitter_c;
-pub use tree_sitter_cpp;
-pub use tree_sitter_c_sharp;
-pub use tree_sitter_go;
-pub use tree_sitter_kotlin_ng;
-pub use tree_sitter_swift;
-pub use tree_sitter_java;
-pub use tree_sitter_javascript;
-pub use tree_sitter_python;
-pub use tree_sitter_rust;
-pub use tree_sitter_typescript;
-pub use tree_sitter_php;
-pub use tree_sitter_fortran;
-pub use tree_sitter_fixed_form_fortran;
-pub use tree_sitter_scala;
-pub use tree_sitter_lua;
+pub use lang_parsing_substrate::{
+    tree_sitter_ada, tree_sitter_c, tree_sitter_c_sharp, tree_sitter_cpp,
+    tree_sitter_fixed_form_fortran, tree_sitter_fortran, tree_sitter_go,
+    tree_sitter_java, tree_sitter_javascript, tree_sitter_kotlin_ng,
+    tree_sitter_lua, tree_sitter_php, tree_sitter_python, tree_sitter_rust,
+    tree_sitter_scala, tree_sitter_swift, tree_sitter_typescript,
+};
 
-/// Which SLOC variant a language uses (drives comment-stripping strategy).
-#[derive(Clone, Copy, PartialEq)]
-pub enum SlocMode {
-    /// `//` and `/* */` — default for C, C++, Rust, JS, TS, Go, Java, …
-    Default,
-    /// Additionally strips `#`-prefixed comment lines.
-    Python,
-    /// Strips `--` comment lines.
-    Ada,
-    /// Strips `!` comment lines (free-form .f90/.f95/…).
-    Fortran,
-    /// Strips fixed-form comment lines: `*`, `C`, or `c` at column 1, plus `!` anywhere.
-    FortranFixed,
-    /// Strips `--` comment lines (same prefix as Ada, different grammar).
-    Lua,
-}
-
-/// A language knots can analyze, with its display name and file extensions.
-pub struct LanguageInfo {
-    /// Human-facing name, e.g. "C++", "Ada".
-    pub name: &'static str,
-    /// Extensions scanned during recursive discovery (no leading dot).
-    pub extensions: &'static [&'static str],
-    /// Extensions parsed only when a file is passed explicitly, never during
-    /// recursive discovery (e.g. headers, which often hold vendor/inline code).
-    pub explicit_only: &'static [&'static str],
-    /// Comment style used when computing SLOC for this language.
-    pub sloc_mode: SlocMode,
-}
-
-/// The single source of truth for language support. Add a new language here;
-/// `SUPPORTED_EXTENSIONS`, `--supported-languages`, and (via `invoke
-/// sync-languages`) every doc that lists languages all derive from this.
-/// Keep one entry per line — `tasks.py` parses this table.
-pub const LANGUAGES: &[LanguageInfo] = &[
-    LanguageInfo { name: "C",          extensions: &["c"],                            explicit_only: &["h"],             sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "C++",        extensions: &["cpp", "cc", "cxx", "hpp", "hxx"], explicit_only: &[],             sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Rust",       extensions: &["rs"],                           explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Python",     extensions: &["py"],                           explicit_only: &[],                sloc_mode: SlocMode::Python },
-    LanguageInfo { name: "JavaScript", extensions: &["js", "mjs", "cjs", "jsx"],      explicit_only: &[],               sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "TypeScript", extensions: &["ts", "tsx"],                    explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Ada",        extensions: &["adb", "ada"],                   explicit_only: &["ads"],           sloc_mode: SlocMode::Ada },
-    LanguageInfo { name: "Go",         extensions: &["go"],                           explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Java",       extensions: &["java"],                         explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "C#",         extensions: &["cs"],                           explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Kotlin",     extensions: &["kt", "kts"],                    explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Swift",      extensions: &["swift"],                        explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "PHP",        extensions: &["php"],                          explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Fortran",    extensions: &["f90", "f95", "f03", "f08", "F90", "F95", "F03", "F08"], explicit_only: &["f", "for", "f77", "F", "FOR", "F77"], sloc_mode: SlocMode::Fortran },
-    LanguageInfo { name: "Scala",      extensions: &["scala", "sc"],                  explicit_only: &[],                sloc_mode: SlocMode::Default },
-    LanguageInfo { name: "Lua",        extensions: &["lua"],                          explicit_only: &[],                sloc_mode: SlocMode::Lua },
-];
-
-/// All source file extensions recognized during recursive discovery, grouped
-/// by language. Mirrors the `extensions` of [`LANGUAGES`] (a test enforces it).
-/// `.h`/`.ads` are intentionally excluded here — they are `explicit_only`
-/// (parsed when passed directly, but skipped by `--recursive`).
-pub const SUPPORTED_EXTENSIONS: &[&str] = &[
-    // C
-    "c",
-    // C++
-    "cpp", "cc", "cxx", "hpp", "hxx",
-    // Rust
-    "rs",
-    // Python
-    "py",
-    // JavaScript
-    "js", "mjs", "cjs", "jsx",
-    // TypeScript
-    "ts", "tsx",
-    // Ada
-    "adb", "ada",
-    // Go
-    "go",
-    // Java
-    "java",
-    // C#
-    "cs",
-    // Kotlin
-    "kt", "kts",
-    // Swift
-    "swift",
-    // PHP
-    "php",
-    // Fortran (modern free-form; fixed-form .f/.for/.f77 are explicit-only)
-    "f90", "f95", "f03", "f08", "F90", "F95", "F03", "F08",
-    // Scala
-    "scala", "sc",
-    // Lua
-    "lua",
-];
-
-/// Renders the human-readable `knots --supported-languages` report.
-pub fn supported_languages_report() -> String {
-    let width = LANGUAGES.iter().map(|l| l.name.len()).max().unwrap_or(0);
-    let mut out = String::from("Supported languages:\n");
-    for lang in LANGUAGES {
-        let exts = lang
-            .extensions
-            .iter()
-            .map(|e| format!(".{e}"))
-            .collect::<Vec<_>>()
-            .join(" ");
-        out.push_str(&format!("  {:<width$}  {exts}", lang.name, width = width));
-        if !lang.explicit_only.is_empty() {
-            let extra = lang
-                .explicit_only
-                .iter()
-                .map(|e| format!(".{e}"))
-                .collect::<Vec<_>>()
-                .join(" ");
-            out.push_str(&format!("  (also {extra} when passed explicitly)"));
-        }
-        out.push('\n');
-    }
-    out
-}
-
-/// Returns the appropriate tree-sitter language for a file based on extension.
-/// `.h` defaults to C; C++ headers should use `.hpp`/`.hxx`.
-pub fn language_for_file(path: &std::path::Path) -> tree_sitter::Language {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("adb") | Some("ada") | Some("ads") => tree_sitter_ada::LANGUAGE.into(),
-        Some("cpp") | Some("cc") | Some("cxx") | Some("hpp") | Some("hxx") => {
-            tree_sitter_cpp::LANGUAGE.into()
-        }
-        Some("rs") => tree_sitter_rust::LANGUAGE.into(),
-        Some("py") => tree_sitter_python::LANGUAGE.into(),
-        Some("js") | Some("mjs") | Some("cjs") | Some("jsx") => tree_sitter_javascript::LANGUAGE.into(),
-        Some("ts") => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-        Some("tsx") => tree_sitter_typescript::LANGUAGE_TSX.into(),
-        Some("go") => tree_sitter_go::LANGUAGE.into(),
-        Some("java") => tree_sitter_java::LANGUAGE.into(),
-        Some("cs") => tree_sitter_c_sharp::LANGUAGE.into(),
-        Some("kt") | Some("kts") => tree_sitter_kotlin_ng::LANGUAGE.into(),
-        Some("swift") => tree_sitter_swift::LANGUAGE.into(),
-        Some("php") => tree_sitter_php::LANGUAGE_PHP.into(),
-        Some("f90") | Some("f95") | Some("f03") | Some("f08")
-        | Some("F90") | Some("F95") | Some("F03") | Some("F08") => tree_sitter_fortran::LANGUAGE.into(),
-        Some("f") | Some("for") | Some("f77")
-        | Some("F") | Some("FOR") | Some("F77") => tree_sitter_fixed_form_fortran::LANGUAGE.into(),
-        Some("scala") | Some("sc") => tree_sitter_scala::LANGUAGE.into(),
-        Some("lua") => tree_sitter_lua::LANGUAGE.into(),
-        _ => tree_sitter_c::LANGUAGE.into(),
-    }
-}
-
-/// Returns true if the file extension is supported by knots for recursive discovery.
-pub fn is_source_extension(ext: &std::ffi::OsStr) -> bool {
-    ext.to_str()
-        .map(|e| SUPPORTED_EXTENSIONS.contains(&e))
-        .unwrap_or(false)
-}
-
-fn language_info_for_ext(ext: &str) -> Option<&'static LanguageInfo> {
-    LANGUAGES
-        .iter()
-        .find(|l| l.extensions.contains(&ext) || l.explicit_only.contains(&ext))
-}
-
-/// Returns true if knots can parse this extension when the file is passed explicitly.
-/// Includes both recursive-discovery extensions and explicit-only ones (e.g. `.f`, `.h`).
-pub fn is_parseable_extension(ext: &std::ffi::OsStr) -> bool {
-    let Some(e) = ext.to_str() else { return false };
-    language_info_for_ext(e).is_some()
-}
-
-/// Returns the SLOC comment-stripping mode for the given file path,
-/// derived from the `LANGUAGES` table (the single source of truth).
-pub fn sloc_mode_for_file(path: &str) -> SlocMode {
-    let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
-    match ext {
-        // Fixed-form Fortran uses column-1 *, C, c comments — different from free-form !
-        "f" | "for" | "f77" | "F" | "FOR" | "F77" => SlocMode::FortranFixed,
-        _ => language_info_for_ext(ext).map_or(SlocMode::Default, |l| l.sloc_mode),
-    }
-}
+// Language registry, detection, and SLOC-mode lookup also live in the substrate
+// (they were extracted from knots). Re-export so existing `knots::` paths resolve.
+pub use lang_parsing_substrate::{
+    is_parseable_extension, is_source_extension, language_for_file,
+    language_info_for_file, languages, sloc_mode_for_file,
+    supported_languages_report, LanguageInfo, SlocMode,
+};
 
 /// Filter rules for including/excluding files and functions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -875,7 +697,7 @@ pub fn collect_function_metrics(
     let mut cursor = root_node.walk();
     let mut metrics = Vec::new();
 
-    let sloc_mode = sloc_mode_for_file(file_path);
+    let sloc_mode = sloc_mode_for_file(Path::new(file_path)).unwrap_or(SlocMode::Default);
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         let name_opt = get_function_name(node, src).or_else(|| {
             let is_anonymous_node = matches!(
@@ -949,42 +771,6 @@ pub fn collect_function_metrics(
     metrics
 }
 
-#[cfg(test)]
-mod language_registry_tests {
-    use super::*;
-    use std::collections::BTreeSet;
-    use std::path::Path;
-
-    /// `SUPPORTED_EXTENSIONS` must stay exactly the recursive extensions of
-    /// `LANGUAGES` — guards against the two lists drifting apart.
-    #[test]
-    fn supported_extensions_match_languages_table() {
-        let from_table: BTreeSet<&str> =
-            LANGUAGES.iter().flat_map(|l| l.extensions.iter().copied()).collect();
-        let from_const: BTreeSet<&str> = SUPPORTED_EXTENSIONS.iter().copied().collect();
-        assert_eq!(
-            from_table, from_const,
-            "LANGUAGES.extensions and SUPPORTED_EXTENSIONS disagree — update one to match the other"
-        );
-    }
-
-    /// Every extension in the table (recursive and explicit-only) must route to
-    /// a grammar — i.e. it must not silently fall through to the default C arm,
-    /// unless it genuinely belongs to C.
-    #[test]
-    fn every_table_extension_maps_to_its_grammar() {
-        let c_lang: tree_sitter::Language = tree_sitter_c::LANGUAGE.into();
-        for lang in LANGUAGES {
-            for ext in lang.extensions.iter().chain(lang.explicit_only) {
-                let mapped = language_for_file(Path::new(&format!("f.{ext}")));
-                if lang.name != "C" {
-                    assert_ne!(
-                        mapped, c_lang,
-                        "extension .{ext} ({}) falls through to the default C grammar in language_for_file",
-                        lang.name
-                    );
-                }
-            }
-        }
-    }
-}
+// The language-registry tests moved to lang-parsing-substrate along with the
+// registry itself (`every_registered_extension_maps_to_its_grammar`,
+// `fixed_form_fortran_sloc_mode`, etc.).

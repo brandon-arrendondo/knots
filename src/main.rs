@@ -13,7 +13,7 @@ mod output;
 use output::*;
 use knots::{
     is_parseable_extension, is_source_extension, language_for_file,
-    FilterRules, FunctionMetrics, collect_function_metrics, LANGUAGES,
+    FilterRules, FunctionMetrics, collect_function_metrics, languages,
 };
 
 /// Compilation database entry from compile_commands.json
@@ -309,10 +309,16 @@ enum OutputFormat {
 }
 
 /// Parse a source file into a tree-sitter Tree, selecting the grammar by extension.
+///
+/// The substrate returns `None` for an unknown extension or a language whose
+/// feature was compiled out — knots no longer falls back to C. Recursive mode
+/// skips such files (see the caller); single-file mode surfaces the error.
 fn parse_file(file: &Path, source_code: &str) -> Result<Tree> {
+    let language = language_for_file(file)
+        .with_context(|| format!("Unsupported language for {}", file.display()))?;
     let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&language_for_file(file))
+        .set_language(&language)
         .context("Failed to set language")?;
     parser
         .parse(source_code, None)
@@ -699,8 +705,8 @@ fn resolve_language_filter(names: &[String]) -> Result<Option<HashSet<&'static s
     for token in names {
         let lower = token.to_lowercase();
         // Try matching by language name first, then by extension.
-        let lang = LANGUAGES.iter().find(|l| l.name.to_lowercase() == lower).or_else(|| {
-            LANGUAGES.iter().find(|l| {
+        let lang = languages().iter().find(|l| l.name.to_lowercase() == lower).or_else(|| {
+            languages().iter().find(|l| {
                 l.extensions.iter().any(|e| e.to_lowercase() == lower)
                     || l.explicit_only.iter().any(|e| e.to_lowercase() == lower)
             })
@@ -1154,7 +1160,7 @@ mod tests {
     /// Parse C++ code and collect discovered function names via visit_functions + get_function_name.
     fn discover_cpp_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_cpp::LANGUAGE.into()).unwrap();
+        parser.set_language(&knots::tree_sitter_cpp::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -1213,7 +1219,7 @@ mod tests {
     fn cpp_sloc_map(code: &str) -> Vec<(String, u32)> {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_cpp::LANGUAGE.into())
+            .set_language(&knots::tree_sitter_cpp::LANGUAGE.into())
             .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
@@ -1231,7 +1237,7 @@ mod tests {
     fn python_sloc_map(code: &str) -> Vec<(String, u32)> {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
+            .set_language(&knots::tree_sitter_python::LANGUAGE.into())
             .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
@@ -1323,7 +1329,7 @@ mod tests {
 
     fn discover_rust_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser.set_language(&knots::tree_sitter_rust::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -1362,7 +1368,7 @@ mod tests {
 
     fn rust_external_calls(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser.set_language(&knots::tree_sitter_rust::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let root = tree.root_node();
         let local_names = collect_local_names(root, code);
@@ -1431,7 +1437,7 @@ mod tests {
     fn discover_python_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
+            .set_language(&knots::tree_sitter_python::LANGUAGE.into())
             .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
@@ -2508,7 +2514,8 @@ mod tests {
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
-        let sloc_mode = knots::sloc_mode_for_file("f.lua");
+        let sloc_mode = knots::sloc_mode_for_file(std::path::Path::new("f.lua"))
+            .unwrap_or(knots::SlocMode::Default);
         visit_functions(&mut cursor, code, &mut |node, src| {
             let name = get_function_name(node, src).or_else(|| {
                 let is_anon = matches!(

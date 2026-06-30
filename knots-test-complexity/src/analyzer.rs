@@ -236,7 +236,8 @@ pub fn analyze_file(file_path: &str) -> Result<FileAnalysis> {
     let source_code = std::fs::read(file_path)?;
 
     let mut parser = Parser::new();
-    let language = knots::language_for_file(std::path::Path::new(file_path));
+    let language = knots::language_for_file(std::path::Path::new(file_path))
+        .ok_or_else(|| anyhow::anyhow!("Unsupported language for file: {}", file_path))?;
     parser.set_language(&language)?;
 
     let tree = parser

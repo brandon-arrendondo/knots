@@ -16,24 +16,10 @@ name = "knots"
 path = "src/lib.rs"
 
 [dependencies]
+# Language detection + tree-sitter grammar dispatch live in the shared substrate;
+# knots reaches every grammar transitively through it (no direct grammar deps).
+lang-parsing-substrate.workspace = true
 tree-sitter.workspace = true
-tree-sitter-ada.workspace = true
-tree-sitter-c.workspace = true
-tree-sitter-cpp.workspace = true
-tree-sitter-rust.workspace = true
-tree-sitter-python.workspace = true
-tree-sitter-javascript.workspace = true
-tree-sitter-go.workspace = true
-tree-sitter-java.workspace = true
-tree-sitter-c-sharp.workspace = true
-tree-sitter-kotlin-ng.workspace = true
-tree-sitter-swift.workspace = true
-tree-sitter-typescript.workspace = true
-tree-sitter-php.workspace = true
-tree-sitter-fortran.workspace = true
-tree-sitter-fixed-form-fortran.workspace = true
-tree-sitter-scala.workspace = true
-tree-sitter-lua.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 ignore.workspace = true
@@ -61,6 +47,7 @@ keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "typescr
 categories = ["development-tools", "command-line-utilities"]
 
 [workspace.dependencies]
+lang-parsing-substrate = { path = "../lang_parsing_substrate" }
 tree-sitter = "0.25"
 tree-sitter-ada = "0.1"
 tree-sitter-c = "0.24"

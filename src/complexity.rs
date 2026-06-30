@@ -1639,7 +1639,7 @@ mod state_coupling_tests {
     fn parse_rust(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .set_language(&crate::tree_sitter_rust::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -1752,7 +1752,7 @@ mod signature_tests {
 
     fn c_sig(code: &str) -> u32 {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_c::LANGUAGE.into()).unwrap();
+        parser.set_language(&crate::tree_sitter_c::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let node = find_node_kind(tree.root_node(), "function_definition").expect("no function_definition");
         calculate_test_scoring(node, code.as_bytes()).signature_score
@@ -1760,7 +1760,7 @@ mod signature_tests {
 
     fn rust_sig(code: &str) -> u32 {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser.set_language(&crate::tree_sitter_rust::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let node = find_node_kind(tree.root_node(), "function_item").expect("no function_item");
         calculate_test_scoring(node, code.as_bytes()).signature_score
@@ -1768,7 +1768,7 @@ mod signature_tests {
 
     fn python_sig(code: &str) -> u32 {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_python::LANGUAGE.into()).unwrap();
+        parser.set_language(&crate::tree_sitter_python::LANGUAGE.into()).unwrap();
         let tree = parser.parse(code, None).unwrap();
         let node = find_node_kind(tree.root_node(), "function_definition").expect("no function_definition");
         calculate_test_scoring(node, code.as_bytes()).signature_score
@@ -1824,13 +1824,13 @@ mod tests {
 
     fn parse_c_function(code: &str) -> Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_c::LANGUAGE.into()).unwrap();
+        parser.set_language(&crate::tree_sitter_c::LANGUAGE.into()).unwrap();
         parser.parse(code, None).unwrap()
     }
 
     fn parse_cpp_function(code: &str) -> Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_cpp::LANGUAGE.into()).unwrap();
+        parser.set_language(&crate::tree_sitter_cpp::LANGUAGE.into()).unwrap();
         parser.parse(code, None).unwrap()
     }
 
@@ -2241,7 +2241,7 @@ mod tests {
 
     fn parse_rust(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser.set_language(&crate::tree_sitter_rust::LANGUAGE.into()).unwrap();
         parser.parse(code, None).unwrap()
     }
 
@@ -2469,7 +2469,7 @@ mod tests {
     fn parse_python(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_python::LANGUAGE.into())
+            .set_language(&crate::tree_sitter_python::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -2757,7 +2757,7 @@ mod tests {
     fn parse_js_function(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_javascript::LANGUAGE.into())
+            .set_language(&crate::tree_sitter_javascript::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -2931,7 +2931,7 @@ mod tests {
 
     fn parse_ada(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_ada::LANGUAGE.into()).unwrap();
+        parser.set_language(&crate::tree_sitter_ada::LANGUAGE.into()).unwrap();
         parser.parse(code, None).unwrap()
     }
 
@@ -3155,7 +3155,7 @@ mod tests {
     fn parse_ts_function(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+            .set_language(&crate::tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -3200,7 +3200,7 @@ mod tests {
     fn parse_cs(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
+            .set_language(&crate::tree_sitter_c_sharp::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -3244,7 +3244,7 @@ mod tests {
     fn parse_kotlin(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_kotlin_ng::LANGUAGE.into())
+            .set_language(&crate::tree_sitter_kotlin_ng::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
@@ -3289,7 +3289,7 @@ mod tests {
     fn parse_swift(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
         parser
-            .set_language(&tree_sitter_swift::LANGUAGE.into())
+            .set_language(&crate::tree_sitter_swift::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
     }
