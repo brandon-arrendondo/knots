@@ -19,7 +19,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Troubleshooting" href="troubleshooting.html" />
+    <link rel="next" title="Architecture" href="architecture.html" />
     <link rel="prev" title="Alternatives Comparison" href="alternatives.html" /> 
 </head>
 
@@ -63,7 +63,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#cross-language-calibration-summary">Cross-Language Calibration Summary</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#function-count-knots-vs-lizard">Function Count: knots vs. lizard</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fortran-dialect-coverage">Fortran Dialect Coverage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#rust-knots-vs-rust-code-analysis-rca">Rust: knots vs. rust-code-analysis (rca)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#performance">Performance</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#jobs-scaling"><code class="docutils literal notranslate"><span class="pre">--jobs</span></code> scaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#knots-vs-lizard-vs-rca-throughput">knots vs. lizard vs. rca throughput</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#known-implementation-notes">Known Implementation Notes</a><ul>
@@ -73,6 +79,7 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 <li class="toctree-l1"><a class="reference internal" href="releasing.html">Releasing</a></li>
 </ul>
@@ -296,6 +303,13 @@ from git HEAD:</p>
 </section>
 <section id="cross-language-calibration-summary">
 <h2>Cross-Language Calibration Summary<a class="headerlink" href="#cross-language-calibration-summary" title="Link to this heading"></a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Numbers below reflect the corpus state as of 2026-06-28 (knots v1.13.0,
+lizard 1.23.0).  Corpora are live git clones and drift over time; the
+deltas and status notes are the durable signal.  Re-run when a corpus
+is refreshed or a new knots version ships.</p>
+</div>
 <section id="function-count-knots-vs-lizard">
 <h3>Function Count: knots vs. lizard<a class="headerlink" href="#function-count-knots-vs-lizard" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
@@ -338,20 +352,6 @@ from git HEAD:</p>
 <td><p>+6%</p></td>
 <td><p>Good agreement</p></td>
 </tr>
-<tr class="row-odd"><td><p>Swift</p></td>
-<td><p>srg_collection_manager_app_ios</p></td>
-<td><p>199</p></td>
-<td><p>201</p></td>
-<td><p>−1%</p></td>
-<td><p>Excellent</p></td>
-</tr>
-<tr class="row-even"><td><p>Kotlin</p></td>
-<td><p>srg_collection_manager_app</p></td>
-<td><p>381</p></td>
-<td><p>319</p></td>
-<td><p>+19%</p></td>
-<td><p>Explained: 55 single-expression funs + 7 abstract decls lizard skips</p></td>
-</tr>
 <tr class="row-odd"><td><p>C</p></td>
 <td><p>curl</p></td>
 <td><p>5,836</p></td>
@@ -361,9 +361,9 @@ from git HEAD:</p>
 </tr>
 <tr class="row-even"><td><p>C++</p></td>
 <td><p>mosquitto</p></td>
-<td><p>5,300</p></td>
-<td><p>3,343</p></td>
-<td><p>+59%</p></td>
+<td><p>5,549</p></td>
+<td><p>3,305</p></td>
+<td><p>+68%</p></td>
 <td><p>Plausible; templates and lambdas</p></td>
 </tr>
 <tr class="row-odd"><td><p>Go</p></td>
@@ -375,52 +375,111 @@ from git HEAD:</p>
 </tr>
 <tr class="row-even"><td><p>TypeScript</p></td>
 <td><p>zod</p></td>
-<td><p>1,153</p></td>
-<td><p>6,020</p></td>
-<td><p>−81%</p></td>
-<td><p>Explained: ~4,900 anonymous arrow callbacks; named counts similar</p></td>
+<td><p>1,696</p></td>
+<td><p>6,081</p></td>
+<td><p>−72%</p></td>
+<td><p>Explained: ~4,400 anonymous arrow callbacks; named counts similar</p></td>
 </tr>
-<tr class="row-odd"><td><p>Python</p></td>
-<td><p>srg_card_search_website</p></td>
-<td><p>134</p></td>
-<td><p>133</p></td>
-<td><p>~equal</p></td>
-<td><p>Good</p></td>
-</tr>
-<tr class="row-even"><td><p>Lua</p></td>
+<tr class="row-odd"><td><p>Lua</p></td>
 <td><p>lua/testes</p></td>
 <td><p>590 named / 1,065 with flag</p></td>
 <td><p>1,054</p></td>
 <td><p>~equal with <code class="docutils literal notranslate"><span class="pre">--count-anonymous-closures</span></code></p></td>
 <td><p>Explained: 475 anonymous closures</p></td>
 </tr>
-<tr class="row-odd"><td><p>PHP</p></td>
+<tr class="row-even"><td><p>PHP</p></td>
 <td><p>laravel</p></td>
 <td><p>30,844</p></td>
 <td><p>26,998</p></td>
 <td><p>+14%</p></td>
 <td><p>Plausible; interface/trait methods</p></td>
 </tr>
-<tr class="row-even"><td><p>Scala</p></td>
+<tr class="row-odd"><td><p>Scala</p></td>
 <td><p>scala/src/library</p></td>
 <td><p>11,292</p></td>
 <td><p>4,490</p></td>
 <td><p>+151%</p></td>
 <td><p>Explained: 6,695 SLOC=1 expression-body defs lizard skips</p></td>
 </tr>
-<tr class="row-odd"><td><p>Fortran (.f90)</p></td>
+<tr class="row-even"><td><p>Fortran (.f90)</p></td>
 <td><p>lapack SRC</p></td>
-<td><p>30</p></td>
-<td><p>26</p></td>
-<td><p>+15%</p></td>
-<td><p>Good; small corpus</p></td>
+<td><p>16</p></td>
+<td><p>16</p></td>
+<td><p>0%</p></td>
+<td><p>Excellent; 17 <code class="docutils literal notranslate"><span class="pre">.f90</span></code> files in SRC, both tools agree</p></td>
 </tr>
-<tr class="row-even"><td><p>Fortran (.f)</p></td>
+<tr class="row-odd"><td><p>Fortran (.f)</p></td>
 <td><p>lapack SRC (2,114 files)</p></td>
-<td><p>2,072</p></td>
+<td><p>2,138</p></td>
 <td><p>2,106</p></td>
-<td><p>−2%</p></td>
-<td><p>Fixed; was −45% before tree-sitter-fortran fork fixed <code class="docutils literal notranslate"><span class="pre">*</span></code>-continuation comment handling</p></td>
+<td><p>+2%</p></td>
+<td><p>Good agreement; was −45% before scanner fixes (PR #4 on tree-sitter-fixed-form-fortran)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="fortran-dialect-coverage">
+<h3>Fortran Dialect Coverage<a class="headerlink" href="#fortran-dialect-coverage" title="Link to this heading"></a></h3>
+<p>Three corpora cover the full range of Fortran dialects.  The lapack/SRC row
+supersedes the single-row entry in the cross-language table above (same corpus,
+same run).  All <code class="docutils literal notranslate"><span class="pre">.f</span></code> files are passed explicitly (they are explicit-only in
+knots; <code class="docutils literal notranslate"><span class="pre">--recursive</span></code> does not pick them up).</p>
+<p>Corpora on disk: <code class="docutils literal notranslate"><span class="pre">~/toolchain/lapack</span></code>, <code class="docutils literal notranslate"><span class="pre">~/toolchain/fortran-stdlib</span></code>,
+<code class="docutils literal notranslate"><span class="pre">~/toolchain/arpack-ng</span></code>.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 18.0%" />
+<col style="width: 8.0%" />
+<col style="width: 8.0%" />
+<col style="width: 8.0%" />
+<col style="width: 8.0%" />
+<col style="width: 30.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Corpus</p></th>
+<th class="head"><p>Dialect</p></th>
+<th class="head"><p>Files</p></th>
+<th class="head"><p>knots</p></th>
+<th class="head"><p>lizard</p></th>
+<th class="head"><p>Delta</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>lapack/SRC</p></td>
+<td><p>Fixed-form <code class="docutils literal notranslate"><span class="pre">.f</span></code></p></td>
+<td><p>2,114</p></td>
+<td><p>2,138</p></td>
+<td><p>2,106</p></td>
+<td><p>+2%</p></td>
+<td><p>Good agreement.  knots avg McCabe 33.1 vs lizard 22.9 (+45%): knots
+counts <code class="docutils literal notranslate"><span class="pre">.AND.</span></code>/<code class="docutils literal notranslate"><span class="pre">.OR.</span></code> operators per the original McCabe definition;
+lizard does not.  Use Cognitive complexity as the primary gate for
+fixed-form Fortran.</p></td>
+</tr>
+<tr class="row-odd"><td><p>fortran-stdlib</p></td>
+<td><p>Free-form <code class="docutils literal notranslate"><span class="pre">.f90</span></code>/<code class="docutils literal notranslate"><span class="pre">.F90</span></code></p></td>
+<td><p>411</p></td>
+<td><p>1,363</p></td>
+<td><p>805</p></td>
+<td><p>+69%</p></td>
+<td><p>Avg McCabe nearly identical (knots 3.1, lizard 3.0), so the extra
+functions knots finds are low-complexity.  knots visits generic
+procedure declarations and interface procedures inside modules;
+lizard skips them.</p></td>
+</tr>
+<tr class="row-even"><td><p>arpack-ng</p></td>
+<td><p>Mixed <code class="docutils literal notranslate"><span class="pre">.f</span></code> + <code class="docutils literal notranslate"><span class="pre">.F90</span></code></p></td>
+<td><p>334</p></td>
+<td><p>463</p></td>
+<td><p>234</p></td>
+<td><p>+98%</p></td>
+<td><p>lizard fails to detect multiple subroutines within single-file
+examples (EXAMPLES/ pattern: one driver + two helper subroutines per
+file).  PARPACK/ agrees closely (191 vs ~174).  knots avg McCabe 17.6
+vs lizard 8.0; gap reflects the missed functions, not a metric formula
+difference.</p></td>
 </tr>
 </tbody>
 </table>
@@ -474,6 +533,138 @@ non-standard and should not be used as the comparison baseline.</p>
 </table>
 </section>
 </section>
+<section id="performance">
+<h2>Performance<a class="headerlink" href="#performance" title="Link to this heading"></a></h2>
+<p>Measured on the project benchmark machine (24-core, 2026-06-28, knots v1.13.0,
+hyperfine 1.15.0, lizard 1.23.0).  <strong>Absolute times are machine-specific; the
+speedup ratios are the portable signal</strong> and should be used for comparisons
+across versions.</p>
+<section id="jobs-scaling">
+<h3><code class="docutils literal notranslate"><span class="pre">--jobs</span></code> scaling<a class="headerlink" href="#jobs-scaling" title="Link to this heading"></a></h3>
+<p>knots processes files in parallel via rayon (<code class="docutils literal notranslate"><span class="pre">--jobs</span></code>/<code class="docutils literal notranslate"><span class="pre">-j</span></code>).  Both corpora
+show the same scaling shape: near-linear to <code class="docutils literal notranslate"><span class="pre">-j4</span></code>, good gains to <code class="docutils literal notranslate"><span class="pre">-j8</span></code>,
+diminishing returns beyond that, with regression at <code class="docutils literal notranslate"><span class="pre">-j24</span></code> from thread
+oversubscription on this 24-core machine.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 16.7%" />
+<col style="width: 25.0%" />
+<col style="width: 16.7%" />
+<col style="width: 25.0%" />
+<col style="width: 16.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Jobs</p></th>
+<th class="head"><p>hostap (C, 504 files)</p></th>
+<th class="head"><p>Speedup</p></th>
+<th class="head"><p>laravel (PHP, 2,970 files)</p></th>
+<th class="head"><p>Speedup</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>j1</p></td>
+<td><p>22.6s ± 0.3s</p></td>
+<td><p>1×</p></td>
+<td><p>18.1s ± 0.4s</p></td>
+<td><p>1×</p></td>
+</tr>
+<tr class="row-odd"><td><p>j2</p></td>
+<td><p>11.8s ± 0.4s</p></td>
+<td><p>1.9×</p></td>
+<td><p>12.3s ± 3.2s</p></td>
+<td><p>1.5×</p></td>
+</tr>
+<tr class="row-even"><td><p>j4</p></td>
+<td><p>5.9s ± 0.1s</p></td>
+<td><p>3.8×</p></td>
+<td><p>4.8s ± 0.2s</p></td>
+<td><p>3.8×</p></td>
+</tr>
+<tr class="row-odd"><td><p>j8</p></td>
+<td><p>3.2s ± 0.1s</p></td>
+<td><p>7.0×</p></td>
+<td><p>2.8s ± 0.1s</p></td>
+<td><p>6.4×</p></td>
+</tr>
+<tr class="row-even"><td><p>j16</p></td>
+<td><p>2.45s ± 0.05s</p></td>
+<td><p>9.2×</p></td>
+<td><p>2.0s ± 0.2s</p></td>
+<td><p>9.1×</p></td>
+</tr>
+<tr class="row-odd"><td><p>j24</p></td>
+<td><p>3.7s ± 0.9s</p></td>
+<td><p>6.1× (regresses)</p></td>
+<td><p>2.4s ± 0.3s</p></td>
+<td><p>7.4× (regresses)</p></td>
+</tr>
+</tbody>
+</table>
+<p>The j2 laravel variance (σ=3.2s) reflects PHP file size non-uniformity; the
+work-stealing pool evens out by j4.</p>
+</section>
+<section id="knots-vs-lizard-vs-rca-throughput">
+<h3>knots vs. lizard vs. rca throughput<a class="headerlink" href="#knots-vs-lizard-vs-rca-throughput" title="Link to this heading"></a></h3>
+<p>All three tools support parallelism: knots <code class="docutils literal notranslate"><span class="pre">-j</span></code>, lizard <code class="docutils literal notranslate"><span class="pre">-t</span></code>
+(<code class="docutils literal notranslate"><span class="pre">--working_threads</span></code>, default 1), rca <code class="docutils literal notranslate"><span class="pre">-j</span></code> (<code class="docutils literal notranslate"><span class="pre">--num-jobs</span></code>).  Each was
+benchmarked single-threaded and at 16 threads.</p>
+<p>rca writes one JSON file per source file to a mirrored directory tree; this
+I/O overhead (visible as high sys time) is unavoidable in normal use and is
+included in the numbers below.  rca does not support PHP, so the laravel
+corpus is knots/lizard only.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 26.8%" />
+<col style="width: 12.2%" />
+<col style="width: 12.2%" />
+<col style="width: 12.2%" />
+<col style="width: 12.2%" />
+<col style="width: 12.2%" />
+<col style="width: 12.2%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Corpus</p></th>
+<th class="head"><p>knots j1</p></th>
+<th class="head"><p>knots j16</p></th>
+<th class="head"><p>lizard t1</p></th>
+<th class="head"><p>lizard t16</p></th>
+<th class="head"><p>rca j1</p></th>
+<th class="head"><p>rca j16</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>hostap (C, 504 files)</p></td>
+<td><p>22.3s</p></td>
+<td><p><strong>2.4s</strong></p></td>
+<td><p>25.1s</p></td>
+<td><p>3.2s</p></td>
+<td><p>32.2s</p></td>
+<td><p>3.4s</p></td>
+</tr>
+<tr class="row-odd"><td><p>laravel (PHP, 2,970 files)</p></td>
+<td><p>17.7s</p></td>
+<td><p><strong>2.0s</strong></p></td>
+<td><p>13.8s</p></td>
+<td><p>2.9s</p></td>
+<td><p>—</p></td>
+<td><p>—</p></td>
+</tr>
+<tr class="row-even"><td><p>commons-lang (Java, 623 files)</p></td>
+<td><p>5.7s</p></td>
+<td><p><strong>0.87s</strong></p></td>
+<td><p>10.2s</p></td>
+<td><p>1.6s</p></td>
+<td><p>11.0s</p></td>
+<td><p>1.2s</p></td>
+</tr>
+</tbody>
+</table>
+<p>At full parallelism knots leads across the board: 1.3–1.4× faster than lizard
+and rca on C, 1.4× faster than rca and 1.9× faster than lizard on Java.  rca
+beats lizard on Java (Rust parser vs Python) but trails on C due to its
+per-file output overhead.</p>
+</section>
+</section>
 <section id="known-implementation-notes">
 <h2>Known Implementation Notes<a class="headerlink" href="#known-implementation-notes" title="Link to this heading"></a></h2>
 <section id="c-macro-pattern-vmcase-sloc-deflation">
@@ -510,7 +701,7 @@ discovery only).</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="alternatives.html" class="btn btn-neutral float-left" title="Alternatives Comparison" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="troubleshooting.html" class="btn btn-neutral float-right" title="Troubleshooting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="architecture.html" class="btn btn-neutral float-right" title="Architecture" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

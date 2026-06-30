@@ -64,6 +64,7 @@
 <li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmark Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 <li class="toctree-l1"><a class="reference internal" href="releasing.html">Releasing</a></li>
 </ul>
@@ -174,6 +175,13 @@ Average AICP Score: 40.00</p>
   Skipped (encoding/parse errors): 2
 </pre></div>
 </div>
+<p>For large codebases, add <code class="docutils literal notranslate"><span class="pre">-j</span></code> to analyse files in parallel:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">j</span> <span class="mi">8</span> <span class="o">~/</span><span class="n">projects</span><span class="o">/</span><span class="n">bigproject</span><span class="o">/</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">-j</span> <span class="pre">0</span></code> (the default) auto-detects available CPU cores; <code class="docutils literal notranslate"><span class="pre">-j</span> <span class="pre">1</span></code> forces
+sequential processing.  Each thread owns its own parser, so there is no
+contention.</p>
 <p>To include header files, use an include filter:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/*.c&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;**/*.h&quot;</span><span class="p">]</span>

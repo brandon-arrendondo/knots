@@ -54,6 +54,7 @@
 <li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmark Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 <li class="toctree-l1"><a class="reference internal" href="releasing.html">Releasing</a></li>
 </ul>
@@ -206,7 +207,13 @@ assistance.</p>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="benchmarks.html#cross-language-calibration-summary">Cross-Language Calibration Summary</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="benchmarks.html#function-count-knots-vs-lizard">Function Count: knots vs. lizard</a></li>
+<li class="toctree-l3"><a class="reference internal" href="benchmarks.html#fortran-dialect-coverage">Fortran Dialect Coverage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="benchmarks.html#rust-knots-vs-rust-code-analysis-rca">Rust: knots vs. rust-code-analysis (rca)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="benchmarks.html#performance">Performance</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="benchmarks.html#jobs-scaling"><code class="docutils literal notranslate"><span class="pre">--jobs</span></code> scaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="benchmarks.html#knots-vs-lizard-vs-rca-throughput">knots vs. lizard vs. rca throughput</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="benchmarks.html#known-implementation-notes">Known Implementation Notes</a><ul>
@@ -214,6 +221,33 @@ assistance.</p>
 <li class="toctree-l3"><a class="reference internal" href="benchmarks.html#fortran-explicit-only-extension-rejection">Fortran explicit-only extension rejection</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-1-language-registry-src-lib-rs">Layer 1 — Language Registry (<code class="docutils literal notranslate"><span class="pre">src/lib.rs</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-2-metric-calculation-src-complexity-rs">Layer 2 — Metric Calculation (<code class="docutils literal notranslate"><span class="pre">src/complexity.rs</span></code>)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#sloc-dispatch">SLOC dispatch</a></li>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#testscoring-note">TestScoring note</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-3a-cli-pipeline-src-main-rs">Layer 3a — CLI + Pipeline (<code class="docutils literal notranslate"><span class="pre">src/main.rs</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-3b-output-formatting-src-output-rs">Layer 3b — Output Formatting (<code class="docutils literal notranslate"><span class="pre">src/output.rs</span></code>)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#pipeline-flow">Pipeline flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#output-mode-dispatch">Output mode dispatch</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#tool-suite-vision">Tool Suite Vision</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#the-shared-substrate-parse-db">The Shared Substrate (<code class="docutils literal notranslate"><span class="pre">parse-db</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#relationship-to-lsp">Relationship to LSP</a></li>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#coupling-and-the-ai-metrics">Coupling and the AI Metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="architecture.html#substrate-ecosystem-research-june-2026">Substrate — Ecosystem Research (June 2026)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#known-issues-and-coupling-hotspots">Known Issues and Coupling Hotspots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#resolved-issues">Resolved Issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#what-works-well">What Works Well</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#adding-a-language-quick-reference">Adding a Language — Quick Reference</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a><ul>

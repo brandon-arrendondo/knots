@@ -66,6 +66,7 @@
 <li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmark Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
 <li class="toctree-l1"><a class="reference internal" href="releasing.html">Releasing</a></li>
 </ul>
@@ -165,6 +166,12 @@ suppress the file.</p>
 </tr>
 </tbody>
 </table>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-j</span> <span class="pre">&lt;N&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">--jobs</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Number of parallel analysis threads when processing multiple files.
+<code class="docutils literal notranslate"><span class="pre">0</span></code> (the default) auto-detects available CPU cores via
+<code class="docutils literal notranslate"><span class="pre">std::thread::available_parallelism</span></code>; <code class="docutils literal notranslate"><span class="pre">1</span></code> forces sequential
+processing; any other value pins the thread-pool to that count.
+Has no effect when analyzing a single file.</p>
 </dd>
 </dl>
 </section>
