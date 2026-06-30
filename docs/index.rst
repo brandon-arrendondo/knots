@@ -23,5 +23,6 @@ assistance.
    test-complexity
    alternatives
    benchmarks
+   architecture
    troubleshooting
    releasing
