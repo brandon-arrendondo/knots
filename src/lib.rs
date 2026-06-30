@@ -15,7 +15,7 @@ pub use complexity::{
     calculate_abc_complexity, calculate_aicp, calculate_aird,
     calculate_cognitive_complexity, calculate_mccabe_complexity,
     calculate_nesting_depth, calculate_return_count, calculate_sloc,
-    calculate_sloc_ada, calculate_sloc_fixed_form_fortran, calculate_sloc_fortran, calculate_sloc_python,
+    calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_python,
     calculate_state_coupling, calculate_test_scoring,
     TestScoringMetric,
 };
@@ -26,7 +26,7 @@ pub use complexity::{
 pub use tree_sitter;
 pub use lang_parsing_substrate::{
     tree_sitter_ada, tree_sitter_c, tree_sitter_c_sharp, tree_sitter_cpp,
-    tree_sitter_fixed_form_fortran, tree_sitter_fortran, tree_sitter_go,
+    tree_sitter_fortran, tree_sitter_go,
     tree_sitter_java, tree_sitter_javascript, tree_sitter_kotlin_ng,
     tree_sitter_lua, tree_sitter_php, tree_sitter_python, tree_sitter_rust,
     tree_sitter_scala, tree_sitter_swift, tree_sitter_typescript,
@@ -630,7 +630,6 @@ fn accumulate_nested_sloc(node: Node, source_code: &str, sloc_mode: SlocMode, to
             SlocMode::Python       => calculate_sloc_python(node, source_code.as_bytes()),
             SlocMode::Ada          => calculate_sloc_ada(node, source_code.as_bytes()),
             SlocMode::Fortran      => calculate_sloc_fortran(node, source_code.as_bytes()),
-            SlocMode::FortranFixed => calculate_sloc_fixed_form_fortran(node, source_code.as_bytes()),
             SlocMode::Lua          => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
             SlocMode::Default      => calculate_sloc(node, source_code.as_bytes()),
         };
@@ -720,7 +719,6 @@ pub fn collect_function_metrics(
                     SlocMode::Python       => calculate_sloc_python(node, src.as_bytes()),
                     SlocMode::Ada          => calculate_sloc_ada(node, src.as_bytes()),
                     SlocMode::Fortran      => calculate_sloc_fortran(node, src.as_bytes()),
-                    SlocMode::FortranFixed => calculate_sloc_fixed_form_fortran(node, src.as_bytes()),
                     SlocMode::Lua          => complexity::calculate_sloc_lua(node, src.as_bytes()),
                     SlocMode::Default      => calculate_sloc(node, src.as_bytes()),
                 };

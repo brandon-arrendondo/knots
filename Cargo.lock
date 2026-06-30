@@ -281,14 +281,13 @@ dependencies = [
 
 [[package]]
 name = "lang-parsing-substrate"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "tree-sitter",
  "tree-sitter-ada",
  "tree-sitter-c",
  "tree-sitter-c-sharp",
  "tree-sitter-cpp",
- "tree-sitter-fixed-form-fortran",
  "tree-sitter-fortran",
  "tree-sitter-go",
  "tree-sitter-java",
@@ -531,15 +530,6 @@ name = "tree-sitter-cpp"
 version = "0.23.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df2196ea9d47b4ab4a31b9297eaa5a5d19a0b121dceb9f118f6790ad0ab94743"
-dependencies = [
- "cc",
- "tree-sitter-language",
-]
-
-[[package]]
-name = "tree-sitter-fixed-form-fortran"
-version = "0.1.0"
-source = "git+https://github.com/brandon-arrendondo/tree-sitter-fixed-form-fortran?rev=78e67d206c8f8bcc3485e734e235bc762aa92ccb#78e67d206c8f8bcc3485e734e235bc762aa92ccb"
 dependencies = [
  "cc",
  "tree-sitter-language",

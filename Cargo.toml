@@ -63,7 +63,6 @@ tree-sitter-swift = "0.7"
 tree-sitter-typescript = "0.23"
 tree-sitter-php = "0.24"
 tree-sitter-fortran = "0.6"
-tree-sitter-fixed-form-fortran = { git = "https://github.com/brandon-arrendondo/tree-sitter-fixed-form-fortran", rev = "78e67d206c8f8bcc3485e734e235bc762aa92ccb" }
 tree-sitter-scala = "0.26"
 tree-sitter-lua = "0.5"
 clap = { version = "4.5", features = ["derive"] }
