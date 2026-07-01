@@ -366,6 +366,10 @@ struct RunContext {
     count_anonymous_closures: bool,
     verbose: bool,
     quiet: bool,
+    /// Gates the Ce/Ca/Instability file-coupling pass — corpus-wide import
+    /// resolution is only meaningful once `--recursive` has established
+    /// "the corpus" as a real project tree, not an arbitrary file list.
+    recursive: bool,
 }
 
 impl Thresholds {
@@ -1034,6 +1038,7 @@ fn main() -> Result<()> {
         count_anonymous_closures: args.count_anonymous_closures,
         verbose: args.verbose,
         quiet: args.quiet,
+        recursive: args.recursive,
     };
 
     if args.format != OutputFormat::Text {
@@ -1143,7 +1148,13 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
         write_detailed_report(&all_metrics, ctx.verbose, report_path)?;
     }
     if !ctx.quiet {
-        display_recursive_summary(&all_metrics, files.len(), skipped_files, report);
+        display_recursive_summary(
+            &all_metrics,
+            files.len(),
+            skipped_files,
+            report,
+            recursive_file_coupling(files, ctx).as_deref(),
+        );
     }
     check_thresholds(
         &all_metrics,
@@ -1359,6 +1370,49 @@ fn collect_all_metrics(
     all_metrics.retain(|f| !config::exclude_matches(toml_exclude, &f.file_path, &f.name));
     all_metrics.sort_by(|a, b| a.file_path.cmp(&b.file_path).then(a.name.cmp(&b.name)));
     (all_metrics, skipped.load(Ordering::Relaxed))
+}
+
+/// Gates the Ce/Ca/Instability pass behind `--recursive` (see
+/// `RunContext::recursive`) and runs both its phases.
+fn recursive_file_coupling(
+    files: &[PathBuf],
+    ctx: &RunContext,
+) -> Option<Vec<knots::FileCoupling>> {
+    ctx.recursive
+        .then(|| collect_import_graph(files).coupling())
+}
+
+/// Phase 1 of the Ce/Ca/Instability pass: parse every file and extract its
+/// raw import list via the substrate, skipping unreadable/unparseable files
+/// (silently — `collect_all_metrics` already warns about the same files).
+/// Phase 2 (`ImportGraph::coupling`) resolves those into corpus-internal
+/// edges and derives the metrics.
+fn collect_import_graph(files: &[PathBuf]) -> knots::ImportGraph {
+    let per_file: Vec<(String, Vec<String>)> = files
+        .par_iter()
+        .filter_map(|file| extract_file_imports(file))
+        .collect();
+
+    let refs: Vec<(&str, &[String])> = per_file
+        .iter()
+        .map(|(path, imports)| (path.as_str(), imports.as_slice()))
+        .collect();
+    knots::build_import_graph(refs)
+}
+
+/// Parses one file and extracts its raw import list, or `None` if it can't
+/// be read, parsed, or matched to a compiled-in language — mirroring
+/// `collect_all_metrics`'s skip-on-failure behavior, but silently, since
+/// that function already warns about the same files.
+fn extract_file_imports(file: &Path) -> Option<(String, Vec<String>)> {
+    let source_code = fs::read_to_string(file).ok()?;
+    let tree = parse_file(file, &source_code).ok()?;
+    let key = language_info_for_file(file)?.key;
+    let path = file.to_str().unwrap_or("").to_string();
+    Some((
+        path,
+        lang_parsing_substrate::import_sources(&tree, source_code.as_bytes(), key),
+    ))
 }
 
 #[cfg(test)]

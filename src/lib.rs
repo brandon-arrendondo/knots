@@ -9,6 +9,7 @@ use std::fs;
 use std::path::Path;
 use tree_sitter::{Node, Tree, TreeCursor};
 pub mod complexity;
+pub mod coupling;
 
 // Re-export complexity functions for use by workspace members and for internal use
 pub use complexity::{
@@ -17,6 +18,10 @@ pub use complexity::{
     calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_python, calculate_state_coupling,
     calculate_test_scoring, TestScoringMetric,
 };
+
+// File-level Ce/Ca/Instability coupling metrics, built on the substrate's
+// syntactic import extraction.
+pub use coupling::{build_import_graph, FileCoupling, ImportGraph};
 
 // Re-export tree-sitter core (a direct knots dep) plus every grammar. Grammars
 // now live behind the substrate, so knots carries no direct grammar deps; these

@@ -6,7 +6,7 @@ use std::io::Write;
 use std::path::Path;
 
 use knots::complexity::calculate_aird_raw;
-use knots::FunctionMetrics;
+use knots::{FileCoupling, FunctionMetrics};
 
 pub(crate) fn get_complexity_emoji(complexity: u32) -> &'static str {
     match complexity {
@@ -571,6 +571,7 @@ pub(crate) fn display_recursive_summary(
     total_files: usize,
     skipped_files: usize,
     report_path: Option<&Path>,
+    coupling: Option<&[FileCoupling]>,
 ) {
     let mut sorted = all_metrics.to_vec();
     sorted.sort_by_key(|b| Reverse(b.max_complexity()));
@@ -666,11 +667,71 @@ pub(crate) fn display_recursive_summary(
             path.display()
         );
     }
+    if let Some(coupling) = coupling {
+        display_file_coupling(coupling);
+    }
     println!("\n=== FILES PROCESSED ===\n");
     println!("  Total files found: {}", total_files);
     println!("  Successfully processed: {}", total_files - skipped_files);
     if skipped_files > 0 {
         println!("  Skipped (encoding/parse errors): {}", skipped_files);
+    }
+}
+
+/// Prints the Ce/Ca/Instability file-coupling summary. Only files with at
+/// least one corpus-internal edge are shown — files whose imports never
+/// resolved to another corpus file (or that nothing else imports) add no
+/// signal here and would just be noise.
+pub(crate) fn display_file_coupling(coupling: &[FileCoupling]) {
+    let coupled: Vec<&FileCoupling> = coupling.iter().filter(|c| c.ce > 0 || c.ca > 0).collect();
+    if coupled.is_empty() {
+        return;
+    }
+
+    println!("\n=== FILE COUPLING (Ce/Ca/Instability) ===\n");
+    println!(
+        "  {} of {} files have at least one resolved corpus-internal import edge.",
+        coupled.len(),
+        coupling.len()
+    );
+
+    let by_instability = sorted_by_instability(&coupled);
+    print_coupling_list(
+        "Most unstable (high Ce, low Ca — easy to change, hard to depend on)",
+        &by_instability,
+    );
+
+    let by_ca = sorted_by_ca(&coupled);
+    print_coupling_list("Most depended-upon (high Ca — risky to change)", &by_ca);
+}
+
+fn sorted_by_instability<'a>(coupled: &[&'a FileCoupling]) -> Vec<&'a FileCoupling> {
+    let mut sorted = coupled.to_vec();
+    sorted.sort_by(|a, b| {
+        b.instability
+            .partial_cmp(&a.instability)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.ce.cmp(&a.ce))
+    });
+    sorted
+}
+
+fn sorted_by_ca<'a>(coupled: &[&'a FileCoupling]) -> Vec<&'a FileCoupling> {
+    let mut sorted = coupled.to_vec();
+    sorted.sort_by(|a, b| {
+        b.ca.cmp(&a.ca)
+            .then_with(|| a.instability.total_cmp(&b.instability))
+    });
+    sorted
+}
+
+fn print_coupling_list(title: &str, items: &[&FileCoupling]) {
+    println!("\n  {title}:");
+    for c in items.iter().take(5) {
+        println!(
+            "    {:<50} ce={:<4} ca={:<4} instability={:.2}",
+            c.file_path, c.ce, c.ca, c.instability
+        );
     }
 }
 
