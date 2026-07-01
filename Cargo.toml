@@ -28,6 +28,7 @@ serde.workspace = true
 serde_json.workspace = true
 regex.workspace = true
 rayon.workspace = true
+toml = "0.8"
 
 [workspace]
 members = [

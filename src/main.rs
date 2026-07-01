@@ -9,10 +9,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tree_sitter::Tree;
 use ignore::WalkBuilder;
 
+mod config;
 mod output;
+use config::KnotsToml;
 use output::*;
 use knots::{
-    is_parseable_extension, is_source_extension, language_for_file,
+    is_parseable_extension, is_source_extension, language_for_file, language_info_for_file,
     FilterRules, FunctionMetrics, collect_function_metrics, languages,
 };
 
@@ -340,7 +342,8 @@ struct Thresholds {
 struct RunContext {
     include_rules: Option<FilterRules>,
     exclude_rules: Option<FilterRules>,
-    thresholds: Thresholds,
+    toml_exclude: Vec<config::FilterExclude>,
+    thresholds: EffectiveThresholds,
     baseline: Option<Baseline>,
     changed: Option<ChangedLines>,
     count_anonymous_closures: bool,
@@ -362,18 +365,79 @@ impl Thresholds {
     }
 }
 
+/// Merges CLI thresholds (highest precedence), `knots.toml`'s per-language
+/// `[<lang>.thresholds]` (next), and its global `[thresholds]` (lowest) —
+/// the resolution order from `docs/unified-config-spec.md`. Resolved fresh
+/// per function since the per-language layer depends on the file's language.
+struct EffectiveThresholds {
+    cli: Thresholds,
+    global: config::TomlThresholds,
+    per_language: HashMap<String, config::TomlThresholds>,
+}
+
+impl EffectiveThresholds {
+    fn new(cli: Thresholds, toml_config: &Option<KnotsToml>) -> Self {
+        let global = toml_config.as_ref().map(|c| c.thresholds).unwrap_or_default();
+        let per_language = toml_config
+            .as_ref()
+            .map(|c| {
+                c.languages
+                    .iter()
+                    .map(|(key, section)| (key.clone(), section.thresholds))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self { cli, global, per_language }
+    }
+
+    fn active(&self) -> bool {
+        self.cli.active()
+            || self.global.any_set()
+            || self.per_language.values().any(config::TomlThresholds::any_set)
+    }
+
+    fn for_file(&self, file_path: &str) -> Thresholds {
+        let lang_cfg = language_info_for_file(Path::new(file_path))
+            .and_then(|info| self.per_language.get(info.key))
+            .copied()
+            .unwrap_or_default();
+        Thresholds {
+            mccabe: self.cli.mccabe.or(lang_cfg.mccabe).or(self.global.mccabe),
+            cognitive: self.cli.cognitive.or(lang_cfg.cognitive).or(self.global.cognitive),
+            nesting: self.cli.nesting.or(lang_cfg.nesting).or(self.global.nesting),
+            sloc: self.cli.sloc.or(lang_cfg.sloc).or(self.global.sloc),
+            abc: self.cli.abc.or(lang_cfg.abc).or(self.global.abc),
+            returns: self.cli.returns.or(lang_cfg.returns).or(self.global.returns),
+            aird: self.cli.aird.or(lang_cfg.aird).or(self.global.aird),
+            aicp: self.cli.aicp.or(lang_cfg.aicp).or(self.global.aicp),
+            external_calls: self
+                .cli
+                .external_calls
+                .or(lang_cfg.external_calls)
+                .or(self.global.external_calls),
+        }
+    }
+}
+
 /// Records a violation when `value` exceeds `limit`. In baseline mode `baseline`
 /// carries this function's previously-snapshotted value for the metric; a
 /// pre-existing offender that did not get *worse* (`value <= baseline`) is
 /// tolerated. `baseline == None` means either "not in baseline mode" or "new
 /// function not present in the baseline" — both correctly report the violation.
+/// `suppressed` short-circuits the check entirely — set when a
+/// `tools:suppress knots:<metric>` comment or an unqualified `tools:off`
+/// region covers this function (see `knots::FunctionMetrics::suppressed`).
 fn check_u32_threshold(
     out: &mut Vec<String>,
     label: &str,
     limit: Option<u32>,
     value: u32,
     baseline: Option<u32>,
+    suppressed: bool,
 ) {
+    if suppressed {
+        return;
+    }
     if let Some(lim) = limit {
         if value > lim {
             if let Some(base) = baseline {
@@ -392,7 +456,11 @@ fn check_f64_threshold(
     limit: Option<f64>,
     value: f64,
     baseline: Option<f64>,
+    suppressed: bool,
 ) {
+    if suppressed {
+        return;
+    }
     if let Some(lim) = limit {
         if value > lim {
             if let Some(base) = baseline {
@@ -595,7 +663,7 @@ fn collect_changed_lines(reference: &str) -> Result<ChangedLines> {
 
 fn check_thresholds(
     metrics: &[FunctionMetrics],
-    t: &Thresholds,
+    t: &EffectiveThresholds,
     baseline: Option<&Baseline>,
     changed: Option<&ChangedLines>,
 ) -> Result<()> {
@@ -628,16 +696,17 @@ fn check_thresholds(
             .as_ref()
             .and_then(|idx| idx.get(&(func.file_path.as_str(), func.name.as_str())).copied());
 
+        let ft = t.for_file(&func.file_path);
         let mut fv: Vec<String> = Vec::new();
-        check_u32_threshold(&mut fv, "McCabe",        t.mccabe,         func.mccabe,         base.map(|b| b.mccabe));
-        check_u32_threshold(&mut fv, "Cognitive",     t.cognitive,      func.cognitive,      base.map(|b| b.cognitive));
-        check_u32_threshold(&mut fv, "Nesting",       t.nesting,        func.nesting,        base.map(|b| b.nesting));
-        check_u32_threshold(&mut fv, "SLOC",          t.sloc,           func.sloc,           base.map(|b| b.sloc));
-        check_f64_threshold(&mut fv, "ABC",           t.abc,            func.abc_magnitude,  base.map(|b| b.abc_magnitude));
-        check_u32_threshold(&mut fv, "Returns",       t.returns,        func.return_count,   base.map(|b| b.return_count));
-        check_u32_threshold(&mut fv, "AIRD",          t.aird,           func.aird,           base.map(|b| b.aird));
-        check_u32_threshold(&mut fv, "AICP",          t.aicp,           func.aicp,           base.map(|b| b.aicp));
-        check_u32_threshold(&mut fv, "ExternalCalls", t.external_calls, func.external_calls, base.map(|b| b.external_calls));
+        check_u32_threshold(&mut fv, "McCabe",        ft.mccabe,         func.mccabe,         base.map(|b| b.mccabe),         func.suppressed.contains("mccabe"));
+        check_u32_threshold(&mut fv, "Cognitive",     ft.cognitive,      func.cognitive,      base.map(|b| b.cognitive),      func.suppressed.contains("cognitive"));
+        check_u32_threshold(&mut fv, "Nesting",       ft.nesting,        func.nesting,        base.map(|b| b.nesting),        func.suppressed.contains("nesting"));
+        check_u32_threshold(&mut fv, "SLOC",          ft.sloc,           func.sloc,           base.map(|b| b.sloc),           func.suppressed.contains("sloc"));
+        check_f64_threshold(&mut fv, "ABC",           ft.abc,            func.abc_magnitude,  base.map(|b| b.abc_magnitude),  func.suppressed.contains("abc"));
+        check_u32_threshold(&mut fv, "Returns",       ft.returns,        func.return_count,   base.map(|b| b.return_count),   func.suppressed.contains("returns"));
+        check_u32_threshold(&mut fv, "AIRD",          ft.aird,           func.aird,           base.map(|b| b.aird),           func.suppressed.contains("aird"));
+        check_u32_threshold(&mut fv, "AICP",          ft.aicp,           func.aicp,           base.map(|b| b.aicp),           func.suppressed.contains("aicp"));
+        check_u32_threshold(&mut fv, "ExternalCalls", ft.external_calls, func.external_calls, base.map(|b| b.external_calls), func.suppressed.contains("external_calls"));
 
         if !fv.is_empty() {
             violation_count += 1;
@@ -783,7 +852,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let thresholds = Thresholds {
+    let cli_thresholds = Thresholds {
         mccabe: args.mccabe_threshold,
         cognitive: args.cognitive_threshold,
         nesting: args.nesting_threshold,
@@ -794,13 +863,26 @@ fn main() -> Result<()> {
         aicp: args.aicp_threshold,
         external_calls: args.external_calls_threshold,
     };
+    // Optional knots.toml — walked up from cwd. All fields optional; CLI
+    // flags above always win over anything loaded here.
+    let knots_toml = KnotsToml::discover(&std::env::current_dir()?)?;
+    let toml_exclude: Vec<config::FilterExclude> = knots_toml
+        .as_ref()
+        .map(|c| c.filter.exclude.clone())
+        .unwrap_or_default();
+    let thresholds = EffectiveThresholds::new(cli_thresholds, &knots_toml);
 
     // Write-baseline mode: snapshot every analyzed function and exit without
     // gating. Handled before format/mode dispatch so `--write-baseline` behaves
     // identically regardless of --format. clap's `requires` guarantees a path.
     if args.write_baseline {
-        let (all_metrics, _) =
-            collect_all_metrics(&files, &include_rules, &exclude_rules, args.count_anonymous_closures);
+        let (all_metrics, _) = collect_all_metrics(
+            &files,
+            &include_rules,
+            &exclude_rules,
+            &toml_exclude,
+            args.count_anonymous_closures,
+        );
         let path = args
             .baseline
             .as_ref()
@@ -819,6 +901,7 @@ fn main() -> Result<()> {
         thresholds,
         include_rules,
         exclude_rules,
+        toml_exclude,
         baseline: args.baseline.as_ref().map(|p| Baseline::from_file(p)).transpose()?,
         changed: changed_ref.map(collect_changed_lines).transpose()?,
         count_anonymous_closures: args.count_anonymous_closures,
@@ -846,8 +929,13 @@ fn run_structured_output_mode(
     files: &[PathBuf],
     ctx: &RunContext,
 ) -> Result<()> {
-    let (all_metrics, _) =
-        collect_all_metrics(files, &ctx.include_rules, &ctx.exclude_rules, ctx.count_anonymous_closures);
+    let (all_metrics, _) = collect_all_metrics(
+        files,
+        &ctx.include_rules,
+        &ctx.exclude_rules,
+        &ctx.toml_exclude,
+        ctx.count_anonymous_closures,
+    );
     match format {
         OutputFormat::Sarif => emit_sarif(&all_metrics),
         OutputFormat::Json => emit_json(&all_metrics),
@@ -862,6 +950,7 @@ fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
         files,
         &ctx.include_rules,
         &ctx.exclude_rules,
+        &ctx.toml_exclude,
         ctx.count_anonymous_closures,
     );
 
@@ -879,7 +968,7 @@ fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
         .with_context(|| format!("Failed to read file: {}", file.display()))?;
     let tree = parse_file(file, &source_code)?;
 
-    let metrics = collect_function_metrics(
+    let mut metrics = collect_function_metrics(
         &tree,
         &source_code,
         file.to_str().unwrap_or(""),
@@ -887,6 +976,7 @@ fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
         &ctx.exclude_rules,
         ctx.count_anonymous_closures,
     );
+    metrics.retain(|f| !config::exclude_matches(&ctx.toml_exclude, &f.file_path, &f.name));
 
     if !ctx.quiet {
         analyze_code(&metrics, ctx.verbose)?;
@@ -899,6 +989,7 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
         files,
         &ctx.include_rules,
         &ctx.exclude_rules,
+        &ctx.toml_exclude,
         ctx.count_anonymous_closures,
     );
 
@@ -1082,6 +1173,7 @@ fn collect_all_metrics(
     files: &[PathBuf],
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
+    toml_exclude: &[config::FilterExclude],
     count_anonymous_closures: bool,
 ) -> (Vec<FunctionMetrics>, usize) {
     let skipped = AtomicUsize::new(0);
@@ -1119,6 +1211,7 @@ fn collect_all_metrics(
             )
         })
         .collect();
+    all_metrics.retain(|f| !config::exclude_matches(toml_exclude, &f.file_path, &f.name));
     all_metrics.sort_by(|a, b| a.file_path.cmp(&b.file_path).then(a.name.cmp(&b.name)));
     (all_metrics, skipped.load(Ordering::Relaxed))
 }
@@ -1748,6 +1841,7 @@ mod tests {
             aicp: 0,
             external_calls: 0,
             state_coupling: coupling,
+            suppressed: HashSet::new(),
         }
     }
 
@@ -1809,8 +1903,8 @@ mod tests {
         f
     }
 
-    fn aird_thresholds(n: u32) -> Thresholds {
-        Thresholds {
+    fn aird_thresholds(n: u32) -> EffectiveThresholds {
+        let cli = Thresholds {
             mccabe: None,
             cognitive: None,
             nesting: None,
@@ -1820,7 +1914,8 @@ mod tests {
             aird: Some(n),
             aicp: None,
             external_calls: None,
-        }
+        };
+        EffectiveThresholds::new(cli, &None)
     }
 
     fn baseline_with_aird(file: &str, name: &str, aird: u32) -> Baseline {
@@ -1832,6 +1927,65 @@ mod tests {
     fn test_no_baseline_flags_violation() {
         let metrics = vec![func_aird("a.rs", "f", 98)];
         assert!(check_thresholds(&metrics, &aird_thresholds(85), None, None).is_err());
+    }
+
+    /// A `tools:suppress knots:aird` comment (surfaced via `FunctionMetrics::suppressed`)
+    /// takes the violation off the table entirely, even with no baseline.
+    #[test]
+    fn suppressed_metric_is_never_flagged() {
+        let mut f = func_aird("a.rs", "f", 98);
+        f.suppressed.insert("aird".to_string());
+        assert!(check_thresholds(&[f], &aird_thresholds(85), None, None).is_ok());
+    }
+
+    /// Suppressing an unrelated metric doesn't shield this one.
+    #[test]
+    fn suppressing_a_different_metric_still_flags_violation() {
+        let mut f = func_aird("a.rs", "f", 98);
+        f.suppressed.insert("mccabe".to_string());
+        assert!(check_thresholds(&[f], &aird_thresholds(85), None, None).is_err());
+    }
+
+    /// CLI thresholds always win over knots.toml, regardless of layer.
+    #[test]
+    fn effective_thresholds_cli_wins_over_config() {
+        let cli = Thresholds {
+            mccabe: Some(5),
+            cognitive: None,
+            nesting: None,
+            sloc: None,
+            abc: None,
+            returns: None,
+            aird: None,
+            aicp: None,
+            external_calls: None,
+        };
+        let toml_src = "[thresholds]\nmccabe = 20\n";
+        let cfg: KnotsToml = toml::from_str(toml_src).unwrap();
+        let effective = EffectiveThresholds::new(cli, &Some(cfg));
+        assert_eq!(effective.for_file("f.rs").mccabe, Some(5));
+    }
+
+    /// Per-language config overrides the global `[thresholds]` section, and
+    /// only for files in that language.
+    #[test]
+    fn effective_thresholds_per_language_overrides_global() {
+        let cli = Thresholds {
+            mccabe: None,
+            cognitive: None,
+            nesting: None,
+            sloc: None,
+            abc: None,
+            returns: None,
+            aird: None,
+            aicp: None,
+            external_calls: None,
+        };
+        let toml_src = "[thresholds]\nmccabe = 10\n\n[c.thresholds]\nmccabe = 15\n";
+        let cfg: KnotsToml = toml::from_str(toml_src).unwrap();
+        let effective = EffectiveThresholds::new(cli, &Some(cfg));
+        assert_eq!(effective.for_file("f.c").mccabe, Some(15));
+        assert_eq!(effective.for_file("f.rs").mccabe, Some(10));
     }
 
     /// A pre-existing offender at exactly its baselined score is tolerated.

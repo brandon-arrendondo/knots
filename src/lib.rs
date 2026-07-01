@@ -40,6 +40,11 @@ pub use lang_parsing_substrate::{
     supported_languages_report, LanguageInfo, SlocMode,
 };
 
+// Inline suppression / ignore-region scanning (tools:off, tools:suppress)
+// also lives in the substrate — re-exported for consumers that want to
+// inspect suppressions directly rather than through `FunctionMetrics::suppressed`.
+pub use lang_parsing_substrate::{ignored_regions, suppressions, IgnoredRegion, Suppression};
+
 /// Filter rules for including/excluding files and functions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -155,6 +160,13 @@ pub struct FunctionMetrics {
     pub aicp: u32,
     pub external_calls: u32,
     pub state_coupling: u32,
+    /// Metric keys (e.g. `"cognitive"`, `"mccabe"`) suppressed for this
+    /// function via a `tools:suppress knots:<metric>` comment, or all keys
+    /// when an unqualified `tools:off` region covers it. Populated by
+    /// [`collect_function_metrics`] from `lang_parsing_substrate`'s inline
+    /// suppression scan; threshold checks consult this before flagging a
+    /// violation.
+    pub suppressed: std::collections::HashSet<String>,
 }
 
 impl FunctionMetrics {
@@ -683,6 +695,61 @@ fn should_process_function(
     true
 }
 
+/// Canonical metric keys used both in `tools:suppress knots:<key>` comments
+/// and as `FunctionMetrics::suppressed` entries. Mirrors the CLI's
+/// `--<key>-threshold` flag names.
+pub const METRIC_KEYS: &[&str] = &[
+    "mccabe",
+    "cognitive",
+    "nesting",
+    "sloc",
+    "abc",
+    "returns",
+    "aird",
+    "aicp",
+    "external_calls",
+];
+
+/// Resolves which metric keys are suppressed for the function spanning
+/// `start_line..=end_line`: every key if an unqualified (or `knots`-scoped)
+/// `tools:off` region overlaps the function, otherwise just the specific
+/// keys named by any `tools:suppress knots:<key>` comment whose target line
+/// falls inside the function.
+fn suppressed_metrics_for(
+    start_line: u32,
+    end_line: u32,
+    regions: &[IgnoredRegion],
+    inline_suppressions: &[Suppression],
+) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+
+    for region in regions {
+        if !region.applies_to("knots") {
+            continue;
+        }
+        let region_start = region.line_range.start as u32;
+        let region_end = region.line_range.end as u32;
+        if region_start <= end_line && region_end >= start_line {
+            out.extend(METRIC_KEYS.iter().map(|k| k.to_string()));
+            return out;
+        }
+    }
+
+    for s in inline_suppressions {
+        if !s.tool.eq_ignore_ascii_case("knots") {
+            continue;
+        }
+        if let Some(target) = s.target_line {
+            let target = target as u32;
+            if target >= start_line && target <= end_line {
+                out.insert(s.rule.clone());
+            }
+        }
+    }
+
+    out
+}
+
 pub fn collect_function_metrics(
     tree: &Tree,
     source_code: &str,
@@ -697,6 +764,8 @@ pub fn collect_function_metrics(
     let mut metrics = Vec::new();
 
     let sloc_mode = sloc_mode_for_file(Path::new(file_path)).unwrap_or(SlocMode::Default);
+    let ignore_regions = ignored_regions(source_code, sloc_mode);
+    let inline_suppressions = suppressions(source_code, sloc_mode);
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         let name_opt = get_function_name(node, src).or_else(|| {
             let is_anonymous_node = matches!(
@@ -745,6 +814,8 @@ pub fn collect_function_metrics(
             if should_process_function(&name, max_complexity, include_rules, exclude_rules) {
                 let start_line = (node.start_position().row as u32) + 1;
                 let end_line = (node.end_position().row as u32) + 1;
+                let suppressed =
+                    suppressed_metrics_for(start_line, end_line, &ignore_regions, &inline_suppressions);
                 metrics.push(FunctionMetrics {
                     name,
                     file_path: file_path.to_string(),
@@ -761,6 +832,7 @@ pub fn collect_function_metrics(
                     aicp,
                     external_calls,
                     state_coupling,
+                    suppressed,
                 });
             }
         }
@@ -772,3 +844,55 @@ pub fn collect_function_metrics(
 // The language-registry tests moved to lang-parsing-substrate along with the
 // registry itself (`every_registered_extension_maps_to_its_grammar`,
 // `fixed_form_fortran_sloc_mode`, etc.).
+
+#[cfg(test)]
+mod suppression_tests {
+    use super::*;
+
+    fn rust_metrics(source: &str) -> Vec<FunctionMetrics> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        collect_function_metrics(&tree, source, "f.rs", &None, &None, false)
+    }
+
+    #[test]
+    fn unqualified_block_suppresses_every_metric() {
+        let src = "// tools:off\nfn big() {\n    if true {}\n}\n// tools:on\n";
+        let metrics = rust_metrics(src);
+        assert_eq!(metrics.len(), 1);
+        for key in METRIC_KEYS {
+            assert!(
+                metrics[0].suppressed.contains(*key),
+                "{key} should be suppressed"
+            );
+        }
+    }
+
+    #[test]
+    fn single_line_suppress_covers_only_named_metric() {
+        let src = "// tools:suppress knots:cognitive JUSTIFICATION:\"legacy\"\nfn big() {\n    if true {}\n}\n";
+        let metrics = rust_metrics(src);
+        assert_eq!(metrics.len(), 1);
+        assert!(metrics[0].suppressed.contains("cognitive"));
+        assert!(!metrics[0].suppressed.contains("mccabe"));
+    }
+
+    #[test]
+    fn block_scoped_to_a_different_tool_does_not_suppress_knots() {
+        let src = "// tools:off funky\nfn big() {\n    if true {}\n}\n// tools:on\n";
+        let metrics = rust_metrics(src);
+        assert_eq!(metrics.len(), 1);
+        assert!(metrics[0].suppressed.is_empty());
+    }
+
+    #[test]
+    fn function_outside_any_marker_has_no_suppressions() {
+        let src = "fn big() {\n    if true {}\n}\n";
+        let metrics = rust_metrics(src);
+        assert_eq!(metrics.len(), 1);
+        assert!(metrics[0].suppressed.is_empty());
+    }
+}
