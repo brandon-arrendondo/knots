@@ -22,6 +22,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use crate::complexity::apply_aird_ce_multiplier;
+use crate::FunctionMetrics;
+
 /// Ce, Ca, and Instability for one file in the corpus.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileCoupling {
@@ -147,6 +150,31 @@ fn file_coupling(
         ca,
         instability,
     }
+}
+
+/// Folds each function's file-level Ce into its AIRD score via
+/// [`apply_aird_ce_multiplier`], and records the raw Ce on `file_ce` so
+/// violation output can show it as a distinct driver. Run as a post-pass
+/// after `collect_all_metrics`, once the corpus-wide import graph exists —
+/// AIRD itself is computed eagerly per-function, before any file outside the
+/// current one is known.
+pub fn apply_file_ce_to_aird(metrics: &mut [FunctionMetrics], coupling: &[FileCoupling]) {
+    let ce_by_file = index_ce_by_file(coupling);
+    for func in metrics.iter_mut() {
+        let ce = ce_by_file
+            .get(func.file_path.as_str())
+            .copied()
+            .unwrap_or(0);
+        func.file_ce = ce;
+        func.aird = apply_aird_ce_multiplier(func.aird, ce);
+    }
+}
+
+fn index_ce_by_file(coupling: &[FileCoupling]) -> HashMap<&str, u32> {
+    coupling
+        .iter()
+        .map(|c| (c.file_path.as_str(), c.ce))
+        .collect()
 }
 
 fn module_key(file_path: &str) -> String {
@@ -285,5 +313,61 @@ mod tests {
             .find(|c| c.file_path == "src/main.c")
             .unwrap();
         assert_eq!(main.ce, 1);
+    }
+
+    #[test]
+    fn apply_file_ce_to_aird_bumps_high_ce_file_and_records_ce() {
+        let coupling = vec![
+            FileCoupling {
+                file_path: "src/hub.rs".to_string(),
+                ce: 8,
+                ca: 0,
+                instability: 1.0,
+            },
+            FileCoupling {
+                file_path: "src/leaf.rs".to_string(),
+                ce: 0,
+                ca: 1,
+                instability: 0.0,
+            },
+        ];
+        let mut metrics = vec![
+            test_function_metrics("src/hub.rs", 50),
+            test_function_metrics("src/leaf.rs", 50),
+        ];
+        apply_file_ce_to_aird(&mut metrics, &coupling);
+        assert_eq!(metrics[0].file_ce, 8);
+        assert!(metrics[0].aird > 50);
+        assert_eq!(metrics[1].file_ce, 0);
+        assert_eq!(metrics[1].aird, 50);
+    }
+
+    fn test_function_metrics(file_path: &str, aird: u32) -> FunctionMetrics {
+        FunctionMetrics {
+            name: "f".to_string(),
+            file_path: file_path.to_string(),
+            start_line: 1,
+            end_line: 2,
+            mccabe: 0,
+            cognitive: 0,
+            nesting: 0,
+            sloc: 0,
+            abc_magnitude: 0.0,
+            return_count: 0,
+            test_scoring: crate::complexity::TestScoringMetric {
+                signature_score: 0,
+                dependency_score: 0,
+                observable_score: 0,
+                implementation_score: 0,
+                documentation_score: 0,
+                total_score: 0,
+            },
+            aird,
+            aicp: 0,
+            external_calls: 0,
+            state_coupling: 0,
+            file_ce: 0,
+            suppressed: HashSet::new(),
+        }
     }
 }

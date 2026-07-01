@@ -13,15 +13,15 @@ pub mod coupling;
 
 // Re-export complexity functions for use by workspace members and for internal use
 pub use complexity::{
-    calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_cognitive_complexity,
-    calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
-    calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_python, calculate_state_coupling,
-    calculate_test_scoring, TestScoringMetric,
+    apply_aird_ce_multiplier, calculate_abc_complexity, calculate_aicp, calculate_aird,
+    calculate_cognitive_complexity, calculate_mccabe_complexity, calculate_nesting_depth,
+    calculate_return_count, calculate_sloc, calculate_sloc_ada, calculate_sloc_fortran,
+    calculate_sloc_python, calculate_state_coupling, calculate_test_scoring, TestScoringMetric,
 };
 
 // File-level Ce/Ca/Instability coupling metrics, built on the substrate's
 // syntactic import extraction.
-pub use coupling::{build_import_graph, FileCoupling, ImportGraph};
+pub use coupling::{apply_file_ce_to_aird, build_import_graph, FileCoupling, ImportGraph};
 
 // Re-export tree-sitter core (a direct knots dep) plus every grammar. Grammars
 // now live behind the substrate, so knots carries no direct grammar deps; these
@@ -161,6 +161,12 @@ pub struct FunctionMetrics {
     pub aicp: u32,
     pub external_calls: u32,
     pub state_coupling: u32,
+    /// Efferent coupling (Ce) of this function's file, from the corpus-wide
+    /// import graph — `0` outside `--recursive` mode, where no corpus exists
+    /// to resolve imports against. Already folded into `aird` via
+    /// [`complexity::apply_aird_ce_multiplier`]; kept here so violation
+    /// output can show it as a distinct driver.
+    pub file_ce: u32,
     /// Metric keys (e.g. `"cognitive"`, `"mccabe"`) suppressed for this
     /// function via a `tools:suppress knots:<metric>` comment, or all keys
     /// when an unqualified `tools:off` region covers it. Populated by
@@ -863,6 +869,7 @@ pub fn collect_function_metrics(
                     aicp,
                     external_calls,
                     state_coupling,
+                    file_ce: 0,
                     suppressed,
                 });
             }

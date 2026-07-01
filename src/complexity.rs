@@ -1384,6 +1384,42 @@ pub fn calculate_aicp(external_calls: u32, sloc: u32, doc_score: i32) -> u32 {
     raw.round().clamp(0.0, 100.0) as u32
 }
 
+/// Normalization cap for file-level Ce (efferent coupling) in the AIRD
+/// multiplier below. 10 corpus-internal imports is already a wide-context
+/// file; beyond that the multiplier just stays maxed.
+const AIRD_FILE_CE_CAP: f64 = 10.0;
+
+/// Max proportional bump AIRD can receive from file-level Ce. Capped at 20%
+/// so file coupling — a one-abstraction-up, coarser signal than the
+/// function's own `state_coupling` — nudges the score rather than
+/// dominating a formula calibrated around function-level inputs.
+const AIRD_FILE_CE_MAX_BONUS: f64 = 0.20;
+
+/// Multiplier applied to a function's AIRD score based on the efferent
+/// coupling (Ce) of the file it lives in — from `knots::coupling`'s
+/// corpus-wide import graph, only available in `--recursive` mode.
+///
+/// AIRD's own `state_coupling` term measures a function's coupling to its
+/// *own* struct; this extends the "wide context requirement" signal one
+/// abstraction up. A function in a file that imports many other
+/// corpus-internal files needs an AI reasoning about it to hold more of the
+/// corpus in context, even when the function itself is simple.
+pub fn aird_file_ce_multiplier(file_ce: u32) -> f64 {
+    let ce_norm = (file_ce as f64 / AIRD_FILE_CE_CAP).min(1.0);
+    1.0 + (ce_norm * AIRD_FILE_CE_MAX_BONUS)
+}
+
+/// Re-scales an already-computed AIRD score by its file's Ce multiplier,
+/// re-clamping to the 0-100 ceiling. Called as a post-pass once the
+/// corpus-wide import graph exists (see `coupling::apply_file_ce_to_aird`) —
+/// `calculate_aird` itself can't take Ce as a direct input because it's
+/// computed eagerly per-function, before the corpus-wide graph is built.
+pub fn apply_aird_ce_multiplier(aird: u32, file_ce: u32) -> u32 {
+    ((aird as f64) * aird_file_ce_multiplier(file_ce))
+        .round()
+        .clamp(0.0, 100.0) as u32
+}
+
 /// Counts the explicit (non-self) parameters declared in a function signature.
 ///
 /// Language coverage:
@@ -1945,6 +1981,40 @@ mod state_coupling_tests {
             aird_before,
             aird_after
         );
+    }
+
+    #[test]
+    fn test_file_ce_multiplier_raises_aird() {
+        let base = calculate_aird(30, 60, 2, 5, 0, 0);
+        let bumped = apply_aird_ce_multiplier(base, 8);
+        assert!(
+            bumped > base,
+            "file-level Ce should raise AIRD: {} vs {}",
+            bumped,
+            base
+        );
+    }
+
+    #[test]
+    fn test_file_ce_multiplier_zero_ce_is_identity() {
+        let base = calculate_aird(30, 60, 2, 5, 0, 0);
+        assert_eq!(apply_aird_ce_multiplier(base, 0), base);
+    }
+
+    #[test]
+    fn test_file_ce_multiplier_caps_at_ten_ce() {
+        let base = calculate_aird(30, 60, 2, 5, 0, 0);
+        assert_eq!(
+            apply_aird_ce_multiplier(base, 10),
+            apply_aird_ce_multiplier(base, 1000),
+            "Ce above the normalization cap shouldn't push the multiplier further"
+        );
+    }
+
+    #[test]
+    fn test_file_ce_multiplier_does_not_exceed_100() {
+        let maxed = calculate_aird(1000, 1000, 1000, 1000, 0, 1000);
+        assert_eq!(apply_aird_ce_multiplier(maxed, 1000), 100);
     }
 }
 

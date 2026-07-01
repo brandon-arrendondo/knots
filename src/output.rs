@@ -5,7 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use knots::complexity::calculate_aird_raw;
+use knots::complexity::{aird_file_ce_multiplier, calculate_aird_raw};
 use knots::{FileCoupling, FunctionMetrics};
 
 pub(crate) fn get_complexity_emoji(complexity: u32) -> &'static str {
@@ -34,6 +34,10 @@ pub(crate) fn aird_term(label: &str, value: f64, max: f64, cap_label: &str) -> S
 }
 
 pub(crate) fn format_aird_breakdown(func: &FunctionMetrics) -> String {
+    aird_component_line(func) + &raw_aird_suffix(func) + &file_ce_suffix(func)
+}
+
+fn aird_component_line(func: &FunctionMetrics) -> String {
     let cognitive_contrib = (func.cognitive as f64 / 75.0).min(1.0) * 55.0;
     let sloc_contrib = (func.sloc as f64 / 200.0).min(1.0) * 15.0;
     let nesting_contrib = (func.nesting as f64 / 8.0).min(1.0) * 15.0;
@@ -48,26 +52,40 @@ pub(crate) fn format_aird_breakdown(func: &FunctionMetrics) -> String {
     let doc = format!("doc: -{:.1}/15", doc_contrib);
     let coup = format!("coupling: +{:.1}/10", coupling_contrib);
 
-    let base = format!(
+    format!(
         "    {}, {}, {}, {}, {}, {}",
         cog, sloc, nest, test, doc, coup
-    );
+    )
+}
 
-    let cognitive_capped = func.cognitive >= 75;
-    let sloc_capped = func.sloc >= 200;
-    if cognitive_capped || sloc_capped {
-        let raw = calculate_aird_raw(
-            func.cognitive,
-            func.sloc,
-            func.nesting,
-            func.test_scoring.total_score,
-            func.test_scoring.documentation_score,
-            func.state_coupling,
-        );
-        format!("{}\n    raw AIRD (uncapped): {:.0}", base, raw)
-    } else {
-        base
+/// `\n    raw AIRD (uncapped): N` once cognitive or sloc has hit its cap —
+/// the capped score alone can't show progress once it's pinned at 100.
+fn raw_aird_suffix(func: &FunctionMetrics) -> String {
+    if func.cognitive < 75 && func.sloc < 200 {
+        return String::new();
     }
+    let raw = calculate_aird_raw(
+        func.cognitive,
+        func.sloc,
+        func.nesting,
+        func.test_scoring.total_score,
+        func.test_scoring.documentation_score,
+        func.state_coupling,
+    );
+    format!("\n    raw AIRD (uncapped): {:.0}", raw)
+}
+
+/// `\n    file Ce: N corpus-internal imports (xM multiplier)` when the
+/// file-level Ce multiplier (`--recursive` only) affected this function's AIRD.
+fn file_ce_suffix(func: &FunctionMetrics) -> String {
+    if func.file_ce == 0 {
+        return String::new();
+    }
+    format!(
+        "\n    file Ce: {} corpus-internal imports (x{:.2} multiplier)",
+        func.file_ce,
+        aird_file_ce_multiplier(func.file_ce)
+    )
 }
 
 pub(crate) fn aird_drivers(func: &FunctionMetrics, top_n: usize) -> Vec<(&'static str, i64)> {
@@ -144,6 +162,17 @@ pub(crate) fn aird_tips(func: &FunctionMetrics) -> Vec<String> {
              the cognitive term will fall sharply and AIRD will follow."
                 .to_string(),
         );
+    }
+
+    if func.file_ce > 0 {
+        tips.push(format!(
+            "    Tip: this function's file imports {} other corpus-internal files, applying a \
+             x{:.2} AIRD multiplier — reducing the function's own complexity still helps, but \
+             splitting the file's imports across smaller modules lowers the multiplier for \
+             every function in it.",
+            func.file_ce,
+            aird_file_ce_multiplier(func.file_ce)
+        ));
     }
 
     tips
@@ -420,7 +449,8 @@ pub(crate) fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
                 "doc_score": f.test_scoring.documentation_score,
                 "aird": f.aird,
                 "aicp": f.aicp,
-                "external_calls": f.external_calls
+                "external_calls": f.external_calls,
+                "file_ce": f.file_ce
             })
         })
         .collect();
@@ -451,7 +481,8 @@ pub(crate) fn emit_ndjson(all_metrics: &[FunctionMetrics]) -> Result<()> {
             "doc_score": f.test_scoring.documentation_score,
             "aird": f.aird,
             "aicp": f.aicp,
-            "external_calls": f.external_calls
+            "external_calls": f.external_calls,
+            "file_ce": f.file_ce
         });
         serde_json::to_writer(&mut handle, &record).context("Failed to write NDJSON")?;
         writeln!(handle)?;
@@ -465,7 +496,7 @@ pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
 
     writeln!(
         handle,
-        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aird,aicp,external_calls"
+        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aird,aicp,external_calls,file_ce"
     )?;
 
     for f in all_metrics {
@@ -476,7 +507,7 @@ pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
         };
         writeln!(
             handle,
-            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{},{},{}",
             f.file_path,
             name,
             f.start_line,
@@ -491,7 +522,8 @@ pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
             f.test_scoring.documentation_score,
             f.aird,
             f.aicp,
-            f.external_calls
+            f.external_calls,
+            f.file_ce
         )?;
     }
     Ok(())
@@ -550,15 +582,23 @@ pub(crate) fn write_detailed_report(
             writeln!(file, "  AIRD Score: {}", func.aird)?;
             writeln!(file, "  AICP Score: {}", func.aicp)?;
             writeln!(file, "  External Calls: {}", func.external_calls)?;
+            if func.file_ce > 0 {
+                writeln!(file, "  File Ce: {}", func.file_ce)?;
+            }
             writeln!(file, "  Max Complexity: {}", func.max_complexity())?;
             writeln!(file)?;
         } else {
+            let file_ce_suffix = if func.file_ce > 0 {
+                format!(", FileCe: {}", func.file_ce)
+            } else {
+                String::new()
+            };
             writeln!(
                 file,
-                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {})",
+                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {}{})",
                 emoji, func_location(func), func.mccabe, func.cognitive, func.nesting,
                 func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score,
-                func.aird, func.aicp, func.external_calls
+                func.aird, func.aicp, func.external_calls, file_ce_suffix
             )?;
         }
     }

@@ -1061,13 +1061,14 @@ fn run_structured_output_mode(
     files: &[PathBuf],
     ctx: &RunContext,
 ) -> Result<()> {
-    let (all_metrics, _) = collect_all_metrics(
+    let (mut all_metrics, _) = collect_all_metrics(
         files,
         &ctx.include_rules,
         &ctx.exclude_rules,
         &ctx.toml_exclude,
         ctx.count_anonymous_closures,
     );
+    compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
     match format {
         OutputFormat::Sarif => emit_sarif(&all_metrics),
         OutputFormat::Json => emit_json(&all_metrics),
@@ -1078,7 +1079,7 @@ fn run_structured_output_mode(
 }
 
 fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
-    let (all_metrics, skipped_files) = collect_all_metrics(
+    let (mut all_metrics, skipped_files) = collect_all_metrics(
         files,
         &ctx.include_rules,
         &ctx.exclude_rules,
@@ -1092,6 +1093,7 @@ fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
             skipped_files
         );
     }
+    compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
     if !ctx.quiet {
         display_testability_matrix(&all_metrics, files.len(), skipped_files);
     }
@@ -1130,7 +1132,7 @@ fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
 }
 
 fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContext) -> Result<()> {
-    let (all_metrics, skipped_files) = collect_all_metrics(
+    let (mut all_metrics, skipped_files) = collect_all_metrics(
         files,
         &ctx.include_rules,
         &ctx.exclude_rules,
@@ -1144,6 +1146,9 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
             skipped_files
         );
     }
+
+    let coupling = compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
+
     if let Some(report_path) = report {
         write_detailed_report(&all_metrics, ctx.verbose, report_path)?;
     }
@@ -1153,7 +1158,7 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
             files.len(),
             skipped_files,
             report,
-            recursive_file_coupling(files, ctx).as_deref(),
+            coupling.as_deref(),
         );
     }
     check_thresholds(
@@ -1380,6 +1385,19 @@ fn recursive_file_coupling(
 ) -> Option<Vec<knots::FileCoupling>> {
     ctx.recursive
         .then(|| collect_import_graph(files).coupling())
+}
+
+/// Computes file-level Ce/Ca/Instability (when `--recursive`) and folds Ce
+/// into every function's AIRD score via `apply_file_ce_to_aird`, returning
+/// the coupling data so callers can also display it.
+fn compute_and_apply_file_coupling(
+    files: &[PathBuf],
+    ctx: &RunContext,
+    all_metrics: &mut [FunctionMetrics],
+) -> Option<Vec<knots::FileCoupling>> {
+    let coupling = recursive_file_coupling(files, ctx)?;
+    knots::apply_file_ce_to_aird(all_metrics, &coupling);
+    Some(coupling)
 }
 
 /// Phase 1 of the Ce/Ca/Instability pass: parse every file and extract its
@@ -2059,6 +2077,7 @@ mod tests {
             aicp: 0,
             external_calls: 0,
             state_coupling: coupling,
+            file_ce: 0,
             suppressed: HashSet::new(),
         }
     }
