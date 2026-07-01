@@ -36,12 +36,15 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // try_operator child text "try?" → Swift short-circuit; "try"/"try!" → no branch.
         "try_expression" => {
             let mut cur = node.walk();
-            let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
+            let try_op = node
+                .named_children(&mut cur)
+                .find(|c| c.kind() == "try_operator");
             match try_op {
                 None => {
                     let mut cur2 = node.walk();
-                    let is_try_block = node.named_children(&mut cur2)
-                        .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"));
+                    let is_try_block = node.named_children(&mut cur2).any(|c| {
+                        matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block")
+                    });
                     if !is_try_block {
                         *complexity += 1;
                     }
@@ -68,7 +71,10 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Ada: selective_accept `else` clause (unnamed keyword) adds one alternative path.
         "selective_accept" => {
             let mut cursor = node.walk();
-            if node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "else") {
+            if node
+                .children(&mut cursor)
+                .any(|c| !c.is_named() && c.kind() == "else")
+            {
                 *complexity += 1;
             }
         }
@@ -76,7 +82,10 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Ada: exit when Condition — conditional loop exit is a branch; bare exit is not.
         "exit_statement" => {
             let mut cursor = node.walk();
-            if node.children(&mut cursor).any(|c| !c.is_named() && c.kind() == "when") {
+            if node
+                .children(&mut cursor)
+                .any(|c| !c.is_named() && c.kind() == "when")
+            {
                 *complexity += 1;
             }
         }
@@ -114,27 +123,62 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Lua: elseif_statement, repeat_statement
         // Fortran: elseif_clause, select_case/rank/type, where_statement,
         //          elsewhere_clause, arithmetic_if_statement
-        "if_statement" | "while_statement" | "do_statement" | "for_statement" | "for_range_loop"
-        | "throw_statement" | "raise_statement" | "raise_expression" | "switch_statement"
-        | "if_expression" | "while_expression" | "for_expression" | "loop_expression"
-        | "do_while_expression" | "match_expression"
-        | "conditional_expression" | "ternary_expression"
+        "if_statement"
+        | "while_statement"
+        | "do_statement"
+        | "for_statement"
+        | "for_range_loop"
+        | "throw_statement"
+        | "raise_statement"
+        | "raise_expression"
+        | "switch_statement"
+        | "if_expression"
+        | "while_expression"
+        | "for_expression"
+        | "loop_expression"
+        | "do_while_expression"
+        | "match_expression"
+        | "conditional_expression"
+        | "ternary_expression"
         | "goto_statement"
-        | "elif_clause" | "except_clause" | "match_statement"
-        | "for_in_statement" | "optional_chain"
-        | "loop_statement" | "elsif_statement_item" | "case_statement_alternative"
-        | "exception_handler" | "select_alternative" | "guard"
-        | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select"
-        | "expression_switch_statement" | "type_switch_statement" | "select_statement"
-        | "enhanced_for_statement" | "switch_expression"
-        | "foreach_statement" | "conditional_access_expression"
-        | "do_while_statement" | "when_expression" | "catch_block"
-        | "guard_statement" | "repeat_while_statement"
-        | "else_if_clause" | "throw_expression" | "nullsafe_member_access_expression"
-        | "elseif_statement" | "repeat_statement"
+        | "elif_clause"
+        | "except_clause"
+        | "match_statement"
+        | "for_in_statement"
+        | "optional_chain"
+        | "loop_statement"
+        | "elsif_statement_item"
+        | "case_statement_alternative"
+        | "exception_handler"
+        | "select_alternative"
+        | "guard"
+        | "timed_entry_call"
+        | "conditional_entry_call"
+        | "asynchronous_select"
+        | "expression_switch_statement"
+        | "type_switch_statement"
+        | "select_statement"
+        | "enhanced_for_statement"
+        | "switch_expression"
+        | "foreach_statement"
+        | "conditional_access_expression"
+        | "do_while_statement"
+        | "when_expression"
+        | "catch_block"
+        | "guard_statement"
+        | "repeat_while_statement"
+        | "else_if_clause"
+        | "throw_expression"
+        | "nullsafe_member_access_expression"
+        | "elseif_statement"
+        | "repeat_statement"
         | "elseif_clause"
-        | "select_case_statement" | "select_rank_statement" | "select_type_statement"
-        | "where_statement" | "elsewhere_clause" | "arithmetic_if_statement" => *complexity += 1,
+        | "select_case_statement"
+        | "select_rank_statement"
+        | "select_type_statement"
+        | "where_statement"
+        | "elsewhere_clause"
+        | "arithmetic_if_statement" => *complexity += 1,
 
         _ => {}
     }
@@ -163,9 +207,15 @@ fn handle_logical_op(
     parent_binary_op: Option<&str>,
     valid_ops: &[&str],
 ) -> bool {
-    let Some(op) = node.child_by_field_name("operator") else { return false; };
-    let Ok(op_text) = op.utf8_text(source_code) else { return false; };
-    if !valid_ops.contains(&op_text) { return false; }
+    let Some(op) = node.child_by_field_name("operator") else {
+        return false;
+    };
+    let Ok(op_text) = op.utf8_text(source_code) else {
+        return false;
+    };
+    if !valid_ops.contains(&op_text) {
+        return false;
+    }
     if parent_binary_op != Some(op_text) {
         *complexity += 1;
     }
@@ -185,7 +235,10 @@ fn visit_node_cognitive(
         "if_statement" | "if_expression" => {
             *complexity += 1 + nesting_level;
             let mut cur = node.walk();
-            if node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "else") {
+            if node
+                .children(&mut cur)
+                .any(|c| !c.is_named() && c.kind() == "else")
+            {
                 *complexity += 1;
             }
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
@@ -213,9 +266,15 @@ fn visit_node_cognitive(
         // Closures/lambdas: nesting +1, no base cost.
         // Covers C++/Rust, Python, JS/TS arrow functions, C# delegates/local fns,
         // Kotlin lambdas, Go closures.
-        "lambda_expression" | "closure_expression" | "lambda" | "arrow_function"
-        | "anonymous_method_expression" | "local_function_statement"
-        | "lambda_literal" | "anonymous_function" | "annotated_lambda"
+        "lambda_expression"
+        | "closure_expression"
+        | "lambda"
+        | "arrow_function"
+        | "anonymous_method_expression"
+        | "local_function_statement"
+        | "lambda_literal"
+        | "anonymous_function"
+        | "annotated_lambda"
         | "func_literal" => {
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
             return;
@@ -223,19 +282,42 @@ fn visit_node_cognitive(
 
         // Nesting structures: +1 + nesting_level, children at nesting+1.
         // Covers loops, switch/match/select, catch/except across all supported languages.
-        "while_statement" | "do_statement" | "for_statement" | "for_range_loop"
+        "while_statement"
+        | "do_statement"
+        | "for_statement"
+        | "for_range_loop"
         | "for_in_statement"
-        | "while_expression" | "for_expression" | "loop_expression" | "do_while_expression"
-        | "switch_statement" | "match_expression" | "match_statement"
-        | "catch_clause" | "except_clause"
-        | "loop_statement" | "case_statement" | "exception_handler"
-        | "selective_accept" | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select"
-        | "expression_switch_statement" | "type_switch_statement" | "select_statement"
-        | "enhanced_for_statement" | "switch_expression"
+        | "while_expression"
+        | "for_expression"
+        | "loop_expression"
+        | "do_while_expression"
+        | "switch_statement"
+        | "match_expression"
+        | "match_statement"
+        | "catch_clause"
+        | "except_clause"
+        | "loop_statement"
+        | "case_statement"
+        | "exception_handler"
+        | "selective_accept"
+        | "timed_entry_call"
+        | "conditional_entry_call"
+        | "asynchronous_select"
+        | "expression_switch_statement"
+        | "type_switch_statement"
+        | "select_statement"
+        | "enhanced_for_statement"
+        | "switch_expression"
         | "foreach_statement"
-        | "do_while_statement" | "when_expression" | "catch_block"
-        | "guard_statement" | "repeat_while_statement" | "repeat_statement"
-        | "select_case_statement" | "select_rank_statement" | "select_type_statement"
+        | "do_while_statement"
+        | "when_expression"
+        | "catch_block"
+        | "guard_statement"
+        | "repeat_while_statement"
+        | "repeat_statement"
+        | "select_case_statement"
+        | "select_rank_statement"
+        | "select_type_statement"
         | "where_statement" => {
             *complexity += 1 + nesting_level;
             visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
@@ -244,8 +326,12 @@ fn visit_node_cognitive(
 
         // Flat branches: +1, children at same nesting.
         // elif/elsif/elseif/elsewhere across Python, Ada, PHP, Lua, Fortran.
-        "elif_clause" | "elsif_statement_item" | "else_if_clause"
-        | "elseif_statement" | "elseif_clause" | "elsewhere_clause" => {
+        "elif_clause"
+        | "elsif_statement_item"
+        | "else_if_clause"
+        | "elseif_statement"
+        | "elseif_clause"
+        | "elsewhere_clause" => {
             *complexity += 1;
             visit_children_cognitive(node, source_code, nesting_level, complexity, None);
             return;
@@ -253,8 +339,13 @@ fn visit_node_cognitive(
 
         // Flat jumps: +1, no recursion needed.
         // goto/throw/raise across C/C++, Rust, Python, PHP (throw_expression); Ada guard; Fortran arithmetic-if.
-        "goto_statement" | "throw_statement" | "raise_statement" | "raise_expression"
-        | "guard" | "throw_expression" | "arithmetic_if_statement" => {
+        "goto_statement"
+        | "throw_statement"
+        | "raise_statement"
+        | "raise_expression"
+        | "guard"
+        | "throw_expression"
+        | "arithmetic_if_statement" => {
             *complexity += 1;
         }
 
@@ -270,7 +361,14 @@ fn visit_node_cognitive(
                 "infix_expression" => &["&&", "||"],
                 _ => &[".and.", ".or.", ".AND.", ".OR."],
             };
-            if handle_logical_op(node, source_code, nesting_level, complexity, parent_binary_op, valid_ops) {
+            if handle_logical_op(
+                node,
+                source_code,
+                nesting_level,
+                complexity,
+                parent_binary_op,
+                valid_ops,
+            ) {
                 return;
             }
         }
@@ -294,7 +392,10 @@ fn visit_node_cognitive(
         // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
         "exit_statement" => {
             let mut cur = node.walk();
-            if node.children(&mut cur).any(|c| !c.is_named() && c.kind() == "when") {
+            if node
+                .children(&mut cur)
+                .any(|c| !c.is_named() && c.kind() == "when")
+            {
                 *complexity += 1;
             }
         }
@@ -302,7 +403,13 @@ fn visit_node_cognitive(
         _ => {}
     }
 
-    visit_children_cognitive(node, source_code, nesting_level, complexity, parent_binary_op);
+    visit_children_cognitive(
+        node,
+        source_code,
+        nesting_level,
+        complexity,
+        parent_binary_op,
+    );
 }
 
 fn visit_children_cognitive(
@@ -314,7 +421,13 @@ fn visit_children_cognitive(
 ) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_cognitive(child, source_code, nesting_level, complexity, parent_binary_op);
+        visit_node_cognitive(
+            child,
+            source_code,
+            nesting_level,
+            complexity,
+            parent_binary_op,
+        );
     }
 }
 
@@ -592,7 +705,9 @@ pub fn calculate_abc_complexity(node: Node, source_code: &[u8]) -> AbcComplexity
 
 fn abc_try_expression(node: Node, source_code: &[u8], conditions: &mut u32) {
     let mut cur = node.walk();
-    let try_op = node.named_children(&mut cur).find(|c| c.kind() == "try_operator");
+    let try_op = node
+        .named_children(&mut cur)
+        .find(|c| c.kind() == "try_operator");
     match try_op {
         None => {
             let mut cur2 = node.walk();
@@ -614,7 +729,7 @@ fn abc_try_expression(node: Node, source_code: &[u8], conditions: &mut u32) {
 fn abc_operator_is_condition(node: Node, source_code: &[u8], ops: &[&str]) -> bool {
     node.child_by_field_name("operator")
         .and_then(|op| op.utf8_text(source_code).ok())
-        .map(|text| ops.iter().any(|&o| o == text))
+        .map(|text| ops.contains(&text))
         .unwrap_or(false)
 }
 
@@ -668,8 +783,8 @@ fn visit_node_abc(
         "subroutine_call" => *branches += 1,
 
         // Branches: throw, new, delete create control flow paths (C/C++)
-        "throw_statement" | "new_expression" | "delete_expression"
-        | "raise_statement" | "raise_expression" => *branches += 1,
+        "throw_statement" | "new_expression" | "delete_expression" | "raise_statement"
+        | "raise_expression" => *branches += 1,
 
         // Conditions (C/C++)
         "if_statement"
@@ -684,8 +799,12 @@ fn visit_node_abc(
         "for_in_statement" | "ternary_expression" => *conditions += 1,
 
         // Conditions (Rust + Scala do-while)
-        "if_expression" | "while_expression" | "for_expression" | "loop_expression"
-        | "match_expression" | "do_while_expression" => *conditions += 1,
+        "if_expression"
+        | "while_expression"
+        | "for_expression"
+        | "loop_expression"
+        | "match_expression"
+        | "do_while_expression" => *conditions += 1,
         // Rust ? / Swift try? — same grammar-level discrimination as visit_node_mccabe.
         // Scala/Kotlin try-catch also uses try_expression; skip the try itself (catch adds conditions).
         "try_expression" => abc_try_expression(node, source_code, conditions),
@@ -698,10 +817,11 @@ fn visit_node_abc(
             *conditions += 1
         }
         // Ada tasking conditions
-        "select_alternative" | "guard"
-        | "timed_entry_call" | "conditional_entry_call" | "asynchronous_select" => {
-            *conditions += 1
-        }
+        "select_alternative"
+        | "guard"
+        | "timed_entry_call"
+        | "conditional_entry_call"
+        | "asynchronous_select" => *conditions += 1,
 
         // Assignments (Go): short variable declaration `:=`
         "short_var_declaration" => *assignments += 1,
@@ -716,9 +836,9 @@ fn visit_node_abc(
         "method_invocation" | "object_creation_expression" => *branches += 1,
 
         // Branches (PHP): function/method call expressions
-        "function_call_expression" | "member_call_expression" | "nullsafe_member_call_expression" => {
-            *branches += 1
-        }
+        "function_call_expression"
+        | "member_call_expression"
+        | "nullsafe_member_call_expression" => *branches += 1,
         // PHP 8: throw expression used as a value (rhs of ??, assignment, etc.)
         "throw_expression" => *branches += 1,
 
@@ -734,10 +854,8 @@ fn visit_node_abc(
         // Scala: assignments (val/var declarations)
         "val_definition" | "var_definition" => *assignments += 1,
         // Scala: logical operators in infix_expression
-        "infix_expression" => {
-            if abc_operator_is_condition(node, source_code, &["&&", "||"]) {
-                *conditions += 1;
-            }
+        "infix_expression" if abc_operator_is_condition(node, source_code, &["&&", "||"]) => {
+            *conditions += 1;
         }
 
         // Conditions (Swift)
@@ -750,28 +868,38 @@ fn visit_node_abc(
         "else_if_clause" | "nullsafe_member_access_expression" => *conditions += 1,
 
         // Fortran conditions
-        "elseif_clause" | "select_case_statement" | "select_rank_statement"
-        | "select_type_statement" | "where_statement" | "elsewhere_clause"
+        "elseif_clause"
+        | "select_case_statement"
+        | "select_rank_statement"
+        | "select_type_statement"
+        | "where_statement"
+        | "elsewhere_clause"
         | "arithmetic_if_statement" => *conditions += 1,
         // Fortran: logical operators .AND. / .OR. are condition branches
-        "logical_expression" => {
-            if abc_operator_is_condition(node, source_code, &[".and.", ".or.", ".AND.", ".OR."]) {
-                *conditions += 1;
-            }
+        "logical_expression"
+            if abc_operator_is_condition(
+                node,
+                source_code,
+                &[".and.", ".or.", ".AND.", ".OR."],
+            ) =>
+        {
+            *conditions += 1;
         }
 
         // Logical operators (C/C++/Rust: &&/||; JS/TS/C#: ??; Kotlin Elvis: ?:; PHP: and/or)
-        "binary_expression" => {
-            if abc_operator_is_condition(node, source_code, &["&&", "||", "??", "?:", "and", "or"]) {
-                *conditions += 1;
-            }
+        "binary_expression"
+            if abc_operator_is_condition(
+                node,
+                source_code,
+                &["&&", "||", "??", "?:", "and", "or"],
+            ) =>
+        {
+            *conditions += 1;
         }
 
         // Logical operators (Python: and/or)
-        "boolean_operator" => {
-            if abc_operator_is_condition(node, source_code, &["and", "or"]) {
-                *conditions += 1;
-            }
+        "boolean_operator" if abc_operator_is_condition(node, source_code, &["and", "or"]) => {
+            *conditions += 1;
         }
 
         // Logical operators (Ada: and then / or else / xor / and / or).
@@ -940,22 +1068,58 @@ fn calculate_dependency_score(node: Node, source_code: &[u8]) -> u32 {
     score.min(10)
 }
 
-fn dep_classify_call(func_name: &str, has_io: &mut bool, has_allocation: &mut bool, has_system_calls: &mut bool) {
+fn dep_classify_call(
+    func_name: &str,
+    has_io: &mut bool,
+    has_allocation: &mut bool,
+    has_system_calls: &mut bool,
+) {
     if matches!(
         func_name,
-        "fopen" | "fclose" | "fread" | "fwrite" | "fprintf" | "fscanf" | "fgets" | "fputs"
-        | "fseek" | "ftell" | "rewind" | "printf" | "scanf" | "puts" | "getc" | "putc"
-        | "open" | "print" | "input"
+        "fopen"
+            | "fclose"
+            | "fread"
+            | "fwrite"
+            | "fprintf"
+            | "fscanf"
+            | "fgets"
+            | "fputs"
+            | "fseek"
+            | "ftell"
+            | "rewind"
+            | "printf"
+            | "scanf"
+            | "puts"
+            | "getc"
+            | "putc"
+            | "open"
+            | "print"
+            | "input"
     ) {
         *has_io = true;
     }
-    if matches!(func_name, "malloc" | "calloc" | "realloc" | "free" | "aligned_alloc") {
+    if matches!(
+        func_name,
+        "malloc" | "calloc" | "realloc" | "free" | "aligned_alloc"
+    ) {
         *has_allocation = true;
     }
     if matches!(
         func_name,
-        "time" | "clock" | "rand" | "srand" | "getpid" | "fork" | "exec" | "system"
-        | "signal" | "kill" | "wait" | "pipe" | "exit" | "abort"
+        "time"
+            | "clock"
+            | "rand"
+            | "srand"
+            | "getpid"
+            | "fork"
+            | "exec"
+            | "system"
+            | "signal"
+            | "kill"
+            | "wait"
+            | "pipe"
+            | "exit"
+            | "abort"
     ) {
         *has_system_calls = true;
     }
@@ -1001,7 +1165,14 @@ fn visit_node_dependencies(
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_dependencies(child, source_code, has_io, has_allocation, has_system_calls, modifies_globals);
+        visit_node_dependencies(
+            child,
+            source_code,
+            has_io,
+            has_allocation,
+            has_system_calls,
+            modifies_globals,
+        );
     }
 }
 
@@ -1091,15 +1262,15 @@ fn visit_node_observability(
 
 /// Calculates documentation quality score (higher is better, reduces total difficulty)
 const DOC_TAGS: &[(&str, i32)] = &[
-    ("@intent",       5),
-    ("@param",        2),
-    ("@return",       2),
-    ("@requires",     2),
-    ("@ensures",      2),
+    ("@intent", 5),
+    ("@param", 2),
+    ("@return", 2),
+    ("@requires", 2),
+    ("@ensures", 2),
     ("@side_effects", 2),
-    ("@example",      3),
-    ("@edge_cases",   2),
-    ("@complexity",   2),
+    ("@example", 3),
+    ("@edge_cases", 2),
+    ("@complexity", 2),
 ];
 
 fn calculate_documentation_score(node: Node, source_code: &[u8]) -> i32 {
@@ -1158,12 +1329,10 @@ pub fn calculate_aird(
     // Weight 10 dampens mechanical splits without inverting genuine wins.
     let coupling_norm = (state_coupling as f64 / 12.0).min(1.0);
 
-    let raw = (cognitive_norm * 55.0)
-        + (sloc_norm * 15.0)
-        + (nesting_norm * 15.0)
-        + (test_norm * 15.0)
-        - (doc_norm * 15.0)
-        + (coupling_norm * 10.0);
+    let raw =
+        (cognitive_norm * 55.0) + (sloc_norm * 15.0) + (nesting_norm * 15.0) + (test_norm * 15.0)
+            - (doc_norm * 15.0)
+            + (coupling_norm * 10.0);
 
     raw.round().clamp(0.0, 100.0) as u32
 }
@@ -1188,10 +1357,7 @@ pub fn calculate_aird_raw(
     let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
     let coupling_norm = (state_coupling as f64 / 12.0).min(1.0);
 
-    ((cognitive_norm * 55.0)
-        + (sloc_norm * 15.0)
-        + (nesting_norm * 15.0)
-        + (test_norm * 15.0)
+    ((cognitive_norm * 55.0) + (sloc_norm * 15.0) + (nesting_norm * 15.0) + (test_norm * 15.0)
         - (doc_norm * 15.0)
         + (coupling_norm * 10.0))
         .max(0.0)
@@ -1307,9 +1473,12 @@ fn count_ada_param_spec(spec: Node, source_code: &[u8]) -> u32 {
 // finds formal_part, and sums counts across all parameter_specification children.
 fn count_ada_params(node: Node, source_code: &[u8]) -> u32 {
     let mut c1 = node.walk();
-    let Some(spec) = node.children(&mut c1)
-        .find(|c| matches!(c.kind(), "function_specification" | "procedure_specification"))
-    else {
+    let Some(spec) = node.children(&mut c1).find(|c| {
+        matches!(
+            c.kind(),
+            "function_specification" | "procedure_specification"
+        )
+    }) else {
         return 0;
     };
     let mut c2 = spec.walk();
@@ -1333,18 +1502,25 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             if let Some(params) = node.child_by_field_name("parameters") {
                 count_python_params(params, source_code)
             } else {
-                count_c_params_in_subtree(node, source_code)
+                count_c_params_in_subtree(node)
             }
         }
         // JS/TS/Go/Kotlin/Swift/C++: four layout variants tried in order.
         "function_declaration" => {
             // JS/TS/Go: direct 'parameters' field
             if let Some(params) = node.child_by_field_name("parameters") {
-                return count_param_children(params, &[
-                    "identifier", "required_parameter", "optional_parameter",
-                    "rest_pattern", "assignment_pattern",
-                    "parameter_declaration", "variadic_parameter_declaration",
-                ]);
+                return count_param_children(
+                    params,
+                    &[
+                        "identifier",
+                        "required_parameter",
+                        "optional_parameter",
+                        "rest_pattern",
+                        "assignment_pattern",
+                        "parameter_declaration",
+                        "variadic_parameter_declaration",
+                    ],
+                );
             }
             // Kotlin: wrapped in a 'function_value_parameters' child (no field name)
             let mut cursor = node.walk();
@@ -1356,27 +1532,40 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             // Swift: 'parameter' nodes are direct children (no wrapper)
             let swift_count = {
                 let mut cursor = node.walk();
-                node.children(&mut cursor).filter(|c| c.kind() == "parameter").count() as u32
+                node.children(&mut cursor)
+                    .filter(|c| c.kind() == "parameter")
+                    .count() as u32
             };
             if swift_count > 0 {
                 return swift_count;
             }
             // C/C++: no 'parameters' field; drill into the declarator chain
-            count_c_params_in_subtree(node, source_code)
+            count_c_params_in_subtree(node)
         }
         // Swift: init_declaration — same direct-children layout as function_declaration.
         "init_declaration" => {
             let mut cursor = node.walk();
-            node.children(&mut cursor).filter(|c| c.kind() == "parameter").count() as u32
+            node.children(&mut cursor)
+                .filter(|c| c.kind() == "parameter")
+                .count() as u32
         }
         // Go method/closure, Java method/constructor, C# method/constructor/local fn, PHP method.
-        "method_declaration" | "func_literal" | "constructor_declaration"
-        | "local_function_statement" => count_params_in_field(node, &[
-            "parameter_declaration", "variadic_parameter_declaration",
-            "formal_parameter", "spread_parameter",
-            "parameter",
-            "simple_parameter", "variadic_parameter", "property_promotion_parameter",
-        ]),
+        "method_declaration"
+        | "func_literal"
+        | "constructor_declaration"
+        | "local_function_statement" => count_params_in_field(
+            node,
+            &[
+                "parameter_declaration",
+                "variadic_parameter_declaration",
+                "formal_parameter",
+                "spread_parameter",
+                "parameter",
+                "simple_parameter",
+                "variadic_parameter",
+                "property_promotion_parameter",
+            ],
+        ),
         // JS/TS method/function/arrow/generator. PHP arrow `fn($x) => expr` uses arrow_function.
         "method_definition"
         | "function_expression"
@@ -1387,22 +1576,32 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
             if node.kind() == "arrow_function" && node.child_by_field_name("parameter").is_some() {
                 return 1;
             }
-            count_params_in_field(node, &[
-                "identifier", "required_parameter", "optional_parameter",
-                "rest_pattern", "assignment_pattern",
-                "simple_parameter", "variadic_parameter", "property_promotion_parameter",
-            ])
+            count_params_in_field(
+                node,
+                &[
+                    "identifier",
+                    "required_parameter",
+                    "optional_parameter",
+                    "rest_pattern",
+                    "assignment_pattern",
+                    "simple_parameter",
+                    "variadic_parameter",
+                    "property_promotion_parameter",
+                ],
+            )
         }
         // Fortran: each parameter is an identifier in the header statement's 'parameters' field.
         "function" => count_fortran_params(node, "function_statement"),
         "subroutine" => count_fortran_params(node, "subroutine_statement"),
         // Ada: walk specification → formal_part → parameter_specification.
-        "subprogram_body" | "expression_function_declaration" => count_ada_params(node, source_code),
+        "subprogram_body" | "expression_function_declaration" => {
+            count_ada_params(node, source_code)
+        }
         _ => 0,
     }
 }
 
-fn count_c_params_in_subtree(node: Node, source_code: &[u8]) -> u32 {
+fn count_c_params_in_subtree(node: Node) -> u32 {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "parameter_list" {
@@ -1413,7 +1612,7 @@ fn count_c_params_in_subtree(node: Node, source_code: &[u8]) -> u32 {
                 .count() as u32;
         }
         if child.kind().contains("declarator") {
-            let n = count_c_params_in_subtree(child, source_code);
+            let n = count_c_params_in_subtree(child);
             if n > 0 {
                 return n;
             }
@@ -1435,7 +1634,9 @@ fn try_extract_named_field<'a>(
     if obj.utf8_text(source_code).ok()? != self_kw {
         return None;
     }
-    node.child_by_field_name(name_field)?.utf8_text(source_code).ok()
+    node.child_by_field_name(name_field)?
+        .utf8_text(source_code)
+        .ok()
 }
 
 // Handles `navigation_expression` for both Kotlin (`this.field`) and Swift (`self.field`).
@@ -1461,7 +1662,9 @@ fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut Ha
     let extracted: Option<&str> = match node.kind() {
         "field_expression" => try_extract_named_field(node, source_code, "value", "self", "field"),
         "attribute" => try_extract_named_field(node, source_code, "object", "self", "attribute"),
-        "member_expression" => try_extract_named_field(node, source_code, "object", "this", "property"),
+        "member_expression" => {
+            try_extract_named_field(node, source_code, "object", "this", "property")
+        }
         "field_access" => try_extract_named_field(node, source_code, "object", "this", "field"),
         "member_access_expression" => {
             // C#: expression == "this"; PHP: object == "$this" (different field names, no ambiguity)
@@ -1552,7 +1755,12 @@ mod aird_tests {
         let capped = calculate_aird(150, 400, 0, 0, 0, 0);
         let raw = calculate_aird_raw(150, 400, 0, 0, 0, 0);
         assert_eq!(capped, 70, "capped AIRD should be 70 for these inputs");
-        assert!(raw > capped as f64, "raw AIRD ({}) must exceed capped ({}) when inputs are above caps", raw, capped);
+        assert!(
+            raw > capped as f64,
+            "raw AIRD ({}) must exceed capped ({}) when inputs are above caps",
+            raw,
+            capped
+        );
     }
 
     #[test]
@@ -1561,12 +1769,20 @@ mod aird_tests {
         // Both are still above the normalization caps so capped AIRD is identical,
         // but raw AIRD must decrease to prove progress is measurable.
         // cognitive 300→150 (both above 75), sloc 400→250 (both above 200).
-        let raw_before  = calculate_aird_raw(300, 400, 0, 0, 0, 0);
-        let raw_after   = calculate_aird_raw(150, 250, 0, 0, 0, 0);
+        let raw_before = calculate_aird_raw(300, 400, 0, 0, 0, 0);
+        let raw_after = calculate_aird_raw(150, 250, 0, 0, 0, 0);
         let gate_before = calculate_aird(300, 400, 0, 0, 0, 0);
-        let gate_after  = calculate_aird(150, 250, 0, 0, 0, 0);
-        assert_eq!(gate_before, gate_after, "capped AIRD should be identical when both inputs remain above caps");
-        assert!(raw_after < raw_before, "raw AIRD must decrease as inputs are reduced: {} -> {}", raw_before, raw_after);
+        let gate_after = calculate_aird(150, 250, 0, 0, 0, 0);
+        assert_eq!(
+            gate_before, gate_after,
+            "capped AIRD should be identical when both inputs remain above caps"
+        );
+        assert!(
+            raw_after < raw_before,
+            "raw AIRD must decrease as inputs are reduced: {} -> {}",
+            raw_before,
+            raw_after
+        );
     }
 
     #[test]
@@ -1574,11 +1790,12 @@ mod aird_tests {
         // When inputs are within the normalization denominators the raw and capped scores
         // must agree (within rounding) — raw only diverges above the caps.
         let capped = calculate_aird(30, 80, 2, 8, 3, 0) as f64;
-        let raw    = calculate_aird_raw(30, 80, 2, 8, 3, 0);
+        let raw = calculate_aird_raw(30, 80, 2, 8, 3, 0);
         assert!(
             (capped - raw).abs() < 1.0,
             "raw and capped AIRD should agree below normalization caps: {} vs {}",
-            capped, raw
+            capped,
+            raw
         );
     }
 }
@@ -1752,15 +1969,20 @@ mod signature_tests {
 
     fn c_sig(code: &str) -> u32 {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&crate::tree_sitter_c::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&crate::tree_sitter_c::LANGUAGE.into())
+            .unwrap();
         let tree = parser.parse(code, None).unwrap();
-        let node = find_node_kind(tree.root_node(), "function_definition").expect("no function_definition");
+        let node = find_node_kind(tree.root_node(), "function_definition")
+            .expect("no function_definition");
         calculate_test_scoring(node, code.as_bytes()).signature_score
     }
 
     fn rust_sig(code: &str) -> u32 {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&crate::tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&crate::tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let node = find_node_kind(tree.root_node(), "function_item").expect("no function_item");
         calculate_test_scoring(node, code.as_bytes()).signature_score
@@ -1768,9 +1990,12 @@ mod signature_tests {
 
     fn python_sig(code: &str) -> u32 {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&crate::tree_sitter_python::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&crate::tree_sitter_python::LANGUAGE.into())
+            .unwrap();
         let tree = parser.parse(code, None).unwrap();
-        let node = find_node_kind(tree.root_node(), "function_definition").expect("no function_definition");
+        let node = find_node_kind(tree.root_node(), "function_definition")
+            .expect("no function_definition");
         calculate_test_scoring(node, code.as_bytes()).signature_score
     }
 
@@ -1824,13 +2049,17 @@ mod tests {
 
     fn parse_c_function(code: &str) -> Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&crate::tree_sitter_c::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&crate::tree_sitter_c::LANGUAGE.into())
+            .unwrap();
         parser.parse(code, None).unwrap()
     }
 
     fn parse_cpp_function(code: &str) -> Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&crate::tree_sitter_cpp::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&crate::tree_sitter_cpp::LANGUAGE.into())
+            .unwrap();
         parser.parse(code, None).unwrap()
     }
 
@@ -2241,7 +2470,9 @@ mod tests {
 
     fn parse_rust(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&crate::tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&crate::tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
         parser.parse(code, None).unwrap()
     }
 
@@ -2931,13 +3162,18 @@ mod tests {
 
     fn parse_ada(code: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&crate::tree_sitter_ada::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&crate::tree_sitter_ada::LANGUAGE.into())
+            .unwrap();
         parser.parse(code, None).unwrap()
     }
 
     fn ada_subprogram_node(tree: &tree_sitter::Tree) -> tree_sitter::Node<'_> {
         fn find(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
-            if matches!(node.kind(), "subprogram_body" | "expression_function_declaration") {
+            if matches!(
+                node.kind(),
+                "subprogram_body" | "expression_function_declaration"
+            ) {
                 return Some(node);
             }
             let mut cursor = node.walk();
@@ -3046,7 +3282,8 @@ mod tests {
     #[test]
     fn test_ada_if_elsif_else_cognitive() {
         // if → +1; elsif → +1 flat; else → +1 flat; total = 3
-        let code = "procedure P is begin if A then null; elsif B then null; else null; end if; end P;";
+        let code =
+            "procedure P is begin if A then null; elsif B then null; else null; end if; end P;";
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 3);
@@ -3091,7 +3328,8 @@ mod tests {
     #[test]
     fn test_ada_selective_accept_mccabe() {
         // 2 select_alternatives → +2; else → +1; base = 1 → total 4
-        let code = "task body T is begin select accept A; or accept B; else null; end select; end T;";
+        let code =
+            "task body T is begin select accept A; or accept B; else null; end select; end T;";
         let tree = parse_ada(code);
         let node = tree.root_node();
         assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 4);
@@ -3122,7 +3360,10 @@ mod tests {
         // Each ? is a CFG branch: base 1 + 3 ? = 4
         let code = "fn f() -> Result<(), std::io::Error> { a()?; b()?; c()?; Ok(()) }";
         let tree = parse_rust(code);
-        assert_eq!(calculate_mccabe_complexity(tree.root_node(), code.as_bytes()), 4);
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            4
+        );
     }
 
     #[test]
@@ -3130,7 +3371,10 @@ mod tests {
         let code = "fn f() -> Result<i32, String> { let x = g()?; Ok(x) }";
         let tree = parse_rust(code);
         // base 1 + 1 ? = 2
-        assert_eq!(calculate_mccabe_complexity(tree.root_node(), code.as_bytes()), 2);
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            2
+        );
     }
 
     #[test]
@@ -3138,7 +3382,10 @@ mod tests {
         // ? does not add to cognitive complexity (linear error-propagation pipeline)
         let code = "fn f() -> Result<(), std::io::Error> { a()?; b()?; c()?; Ok(()) }";
         let tree = parse_rust(code);
-        assert_eq!(calculate_cognitive_complexity(tree.root_node(), code.as_bytes()), 0);
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            0
+        );
     }
 
     #[test]

@@ -5,8 +5,8 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use knots::FunctionMetrics;
 use knots::complexity::calculate_aird_raw;
+use knots::FunctionMetrics;
 
 pub(crate) fn get_complexity_emoji(complexity: u32) -> &'static str {
     match complexity {
@@ -35,20 +35,23 @@ pub(crate) fn aird_term(label: &str, value: f64, max: f64, cap_label: &str) -> S
 
 pub(crate) fn format_aird_breakdown(func: &FunctionMetrics) -> String {
     let cognitive_contrib = (func.cognitive as f64 / 75.0).min(1.0) * 55.0;
-    let sloc_contrib      = (func.sloc as f64 / 200.0).min(1.0) * 15.0;
-    let nesting_contrib   = (func.nesting as f64 / 8.0).min(1.0) * 15.0;
-    let test_contrib      = (func.test_scoring.total_score.max(0) as f64 / 20.0).min(1.0) * 15.0;
-    let doc_contrib       = (func.test_scoring.documentation_score.max(0) as f64 / 10.0).min(1.0) * 15.0;
-    let coupling_contrib  = (func.state_coupling as f64 / 12.0).min(1.0) * 10.0;
+    let sloc_contrib = (func.sloc as f64 / 200.0).min(1.0) * 15.0;
+    let nesting_contrib = (func.nesting as f64 / 8.0).min(1.0) * 15.0;
+    let test_contrib = (func.test_scoring.total_score.max(0) as f64 / 20.0).min(1.0) * 15.0;
+    let doc_contrib = (func.test_scoring.documentation_score.max(0) as f64 / 10.0).min(1.0) * 15.0;
+    let coupling_contrib = (func.state_coupling as f64 / 12.0).min(1.0) * 10.0;
 
-    let cog  = aird_term("cognitive", cognitive_contrib, 55.0, " [capped]");
-    let sloc = aird_term("sloc",      sloc_contrib,      15.0, " [capped]");
-    let nest = aird_term("nesting",   nesting_contrib,   15.0, " [capped]");
-    let test = aird_term("test",      test_contrib,      15.0, " [capped]");
-    let doc  = format!("doc: -{:.1}/15", doc_contrib);
+    let cog = aird_term("cognitive", cognitive_contrib, 55.0, " [capped]");
+    let sloc = aird_term("sloc", sloc_contrib, 15.0, " [capped]");
+    let nest = aird_term("nesting", nesting_contrib, 15.0, " [capped]");
+    let test = aird_term("test", test_contrib, 15.0, " [capped]");
+    let doc = format!("doc: -{:.1}/15", doc_contrib);
     let coup = format!("coupling: +{:.1}/10", coupling_contrib);
 
-    let base = format!("    {}, {}, {}, {}, {}, {}", cog, sloc, nest, test, doc, coup);
+    let base = format!(
+        "    {}, {}, {}, {}, {}, {}",
+        cog, sloc, nest, test, doc, coup
+    );
 
     let cognitive_capped = func.cognitive >= 75;
     let sloc_capped = func.sloc >= 200;
@@ -70,11 +73,31 @@ pub(crate) fn format_aird_breakdown(func: &FunctionMetrics) -> String {
 pub(crate) fn aird_drivers(func: &FunctionMetrics, top_n: usize) -> Vec<(&'static str, i64)> {
     let test_score = func.test_scoring.total_score.max(0);
     let mut comps: [(&'static str, i64, f64); 5] = [
-        ("cognitive", func.cognitive as i64, (func.cognitive as f64 / 75.0).min(1.0) * 55.0),
-        ("sloc",      func.sloc as i64,      (func.sloc as f64 / 200.0).min(1.0) * 15.0),
-        ("nesting",   func.nesting as i64,   (func.nesting as f64 / 8.0).min(1.0) * 15.0),
-        ("test",      test_score as i64,     (test_score as f64 / 20.0).min(1.0) * 15.0),
-        ("coupling",  func.state_coupling as i64, (func.state_coupling as f64 / 12.0).min(1.0) * 10.0),
+        (
+            "cognitive",
+            func.cognitive as i64,
+            (func.cognitive as f64 / 75.0).min(1.0) * 55.0,
+        ),
+        (
+            "sloc",
+            func.sloc as i64,
+            (func.sloc as f64 / 200.0).min(1.0) * 15.0,
+        ),
+        (
+            "nesting",
+            func.nesting as i64,
+            (func.nesting as f64 / 8.0).min(1.0) * 15.0,
+        ),
+        (
+            "test",
+            test_score as i64,
+            (test_score as f64 / 20.0).min(1.0) * 15.0,
+        ),
+        (
+            "coupling",
+            func.state_coupling as i64,
+            (func.state_coupling as f64 / 12.0).min(1.0) * 10.0,
+        ),
     ];
     comps.sort_by(|a, b| b.2.total_cmp(&a.2));
     comps
@@ -474,7 +497,11 @@ pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bool, path: &Path) -> Result<()> {
+pub(crate) fn write_detailed_report(
+    all_metrics: &[FunctionMetrics],
+    verbose: bool,
+    path: &Path,
+) -> Result<()> {
     let mut file = fs::File::create(path)
         .with_context(|| format!("Failed to create report file: {}", path.display()))?;
 
@@ -495,11 +522,31 @@ pub(crate) fn write_detailed_report(all_metrics: &[FunctionMetrics], verbose: bo
                 func.test_scoring.total_score,
                 func.test_scoring.classification()
             )?;
-            writeln!(file, "    - Signature: {}", func.test_scoring.signature_score)?;
-            writeln!(file, "    - Dependency: {}", func.test_scoring.dependency_score)?;
-            writeln!(file, "    - Observable: {}", func.test_scoring.observable_score)?;
-            writeln!(file, "    - Implementation: {}", func.test_scoring.implementation_score)?;
-            writeln!(file, "    - Documentation: {}", func.test_scoring.documentation_score)?;
+            writeln!(
+                file,
+                "    - Signature: {}",
+                func.test_scoring.signature_score
+            )?;
+            writeln!(
+                file,
+                "    - Dependency: {}",
+                func.test_scoring.dependency_score
+            )?;
+            writeln!(
+                file,
+                "    - Observable: {}",
+                func.test_scoring.observable_score
+            )?;
+            writeln!(
+                file,
+                "    - Implementation: {}",
+                func.test_scoring.implementation_score
+            )?;
+            writeln!(
+                file,
+                "    - Documentation: {}",
+                func.test_scoring.documentation_score
+            )?;
             writeln!(file, "  AIRD Score: {}", func.aird)?;
             writeln!(file, "  AICP Score: {}", func.aicp)?;
             writeln!(file, "  External Calls: {}", func.external_calls)?;
@@ -614,7 +661,10 @@ pub(crate) fn display_recursive_summary(
     }
 
     if let Some(path) = report_path {
-        println!("\nDetailed per-function output written to {}", path.display());
+        println!(
+            "\nDetailed per-function output written to {}",
+            path.display()
+        );
     }
     println!("\n=== FILES PROCESSED ===\n");
     println!("  Total files found: {}", total_files);

@@ -248,7 +248,7 @@ pub fn analyze_file(file_path: &str) -> Result<FileAnalysis> {
     let mut file_analysis = FileAnalysis::new(file_path.to_string());
 
     // Find all function definitions
-    visit_functions(&root_node, &source_code, &mut |node| {
+    visit_functions(&root_node, &mut |node| {
         let metrics = extract_function_metrics(&node, &source_code);
         file_analysis.add_function(metrics);
     });
@@ -256,7 +256,7 @@ pub fn analyze_file(file_path: &str) -> Result<FileAnalysis> {
     Ok(file_analysis)
 }
 
-fn visit_functions<F>(node: &Node, source_code: &[u8], callback: &mut F)
+fn visit_functions<F>(node: &Node, callback: &mut F)
 where
     F: FnMut(Node),
 {
@@ -266,7 +266,7 @@ where
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_functions(&child, source_code, callback);
+        visit_functions(&child, callback);
     }
 }
 

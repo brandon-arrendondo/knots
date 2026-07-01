@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
+use ignore::WalkBuilder;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -7,16 +8,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tree_sitter::Tree;
-use ignore::WalkBuilder;
 
 mod config;
 mod output;
 use config::KnotsToml;
-use output::*;
 use knots::{
-    is_parseable_extension, is_source_extension, language_for_file, language_info_for_file,
-    FilterRules, FunctionMetrics, collect_function_metrics, languages,
+    collect_function_metrics, is_parseable_extension, is_source_extension, language_for_file,
+    language_info_for_file, languages, FilterRules, FunctionMetrics,
 };
+use output::*;
 
 /// Compilation database entry from compile_commands.json
 #[derive(Debug, Clone, Deserialize)]
@@ -30,7 +30,6 @@ struct CompileCommand {
     #[serde(rename = "arguments")]
     _arguments: Vec<String>,
 }
-
 
 #[derive(Parser, Debug)]
 #[command(name = "knots")]
@@ -198,7 +197,8 @@ enum ExplainMetric {
 /// "AIRD 98 > 85" mid-commit doesn't have to leave the terminal.
 fn explain_metric(metric: ExplainMetric) -> &'static str {
     match metric {
-        ExplainMetric::Aird => "\
+        ExplainMetric::Aird => {
+            "\
 AIRD — AI Reasoning Difficulty (0–100)
 
 Predicts how much reasoning effort an AI model needs to safely modify a
@@ -211,9 +211,11 @@ Recommended CI threshold: 85 (validated against Sonnet 4.6 and Opus 4.8).
 
 Lower it by: reducing cognitive complexity first — it carries 55 of the 100
 points. Extract deeply nested branches into well-named helpers, then trim
-SLOC and nesting. Adding doc comments reduces the score.",
+SLOC and nesting. Adding doc comments reduces the score."
+        }
 
-        ExplainMetric::Aicp => "\
+        ExplainMetric::Aicp => {
+            "\
 AICP — AI Context Pressure (0–100)
 
 Predicts how much surrounding context an AI must load before it can act.
@@ -226,9 +228,11 @@ External-call breadth is the primary driver (p99 ceiling = 20 calls).
 
 Lower it by: reducing the number of distinct out-of-file functions/macros the
 function calls — consolidate dependencies and narrow its collaborators — then
-trimming SLOC.",
+trimming SLOC."
+        }
 
-        ExplainMetric::Mccabe => "\
+        ExplainMetric::Mccabe => {
+            "\
 McCabe — Cyclomatic Complexity
 
 Counts linearly independent paths through a function: decision points + 1
@@ -237,9 +241,11 @@ pmccabe across the validation corpus.
 
 Thresholds: ≤10 good, 11–20 moderate, 21+ consider refactoring.
 Lower it by collapsing conditionals, using early returns, and table-driving
-repetitive switches.",
+repetitive switches."
+        }
 
-        ExplainMetric::Cognitive => "\
+        ExplainMetric::Cognitive => {
+            "\
 Cognitive Complexity (Campbell / SonarSource)
 
 How hard code is to *understand*. Like McCabe, but nesting is penalized more,
@@ -247,9 +253,11 @@ else-if chains cost less than independent ifs, and a switch is a single
 increment regardless of arm count.
 
 This is the #1 driver of AIRD. Lower it by flattening nesting (guard clauses,
-early returns) and extracting deeply nested blocks into named helpers.",
+early returns) and extracting deeply nested blocks into named helpers."
+        }
 
-        ExplainMetric::Nesting => "\
+        ExplainMetric::Nesting => {
+            "\
 Nesting Depth
 
 Maximum depth of nested control structures (if / for / while / switch /
@@ -257,34 +265,42 @@ closures) within a function. Deeper than 4 levels strongly correlates with
 hard-to-maintain code.
 
 Lower it with guard clauses, early returns, and by extracting inner blocks
-into helpers.",
+into helpers."
+        }
 
-        ExplainMetric::Sloc => "\
+        ExplainMetric::Sloc => {
+            "\
 SLOC — Source Lines of Code
 
 Non-blank, non-comment lines within the function body. Functions over ~50
 SLOC often benefit from decomposition.
 
-Lower it by extracting cohesive sub-steps into named helpers.",
+Lower it by extracting cohesive sub-steps into named helpers."
+        }
 
-        ExplainMetric::Abc => "\
+        ExplainMetric::Abc => {
+            "\
 ABC Complexity
 
 Magnitude of the (Assignments, Branches/calls, Conditions) vector:
 √(A² + B² + C²) — a broad measure of how much a function does.
 
 Lower it by splitting multi-purpose functions and reducing assignment, call,
-and branch density.",
+and branch density."
+        }
 
-        ExplainMetric::Returns => "\
+        ExplainMetric::Returns => {
+            "\
 Return Count
 
 Number of return statements in a function. A high count can signal tangled
 control flow, though guard-clause early returns are often fine.
 
-Lower it by consolidating exit points where it improves clarity.",
+Lower it by consolidating exit points where it improves clarity."
+        }
 
-        ExplainMetric::ExternalCalls => "\
+        ExplainMetric::ExternalCalls => {
+            "\
 External Calls
 
 Count of distinct call targets not defined in the same file (out-of-file
@@ -292,7 +308,8 @@ functions and function-like macros) — a measure of dependency breadth and the
 primary driver of AICP. p99 across the validation corpus = 20.
 
 Lower it by consolidating dependencies and narrowing the function's
-collaborators.",
+collaborators."
+        }
     }
 }
 
@@ -377,7 +394,10 @@ struct EffectiveThresholds {
 
 impl EffectiveThresholds {
     fn new(cli: Thresholds, toml_config: &Option<KnotsToml>) -> Self {
-        let global = toml_config.as_ref().map(|c| c.thresholds).unwrap_or_default();
+        let global = toml_config
+            .as_ref()
+            .map(|c| c.thresholds)
+            .unwrap_or_default();
         let per_language = toml_config
             .as_ref()
             .map(|c| {
@@ -387,13 +407,20 @@ impl EffectiveThresholds {
                     .collect()
             })
             .unwrap_or_default();
-        Self { cli, global, per_language }
+        Self {
+            cli,
+            global,
+            per_language,
+        }
     }
 
     fn active(&self) -> bool {
         self.cli.active()
             || self.global.any_set()
-            || self.per_language.values().any(config::TomlThresholds::any_set)
+            || self
+                .per_language
+                .values()
+                .any(config::TomlThresholds::any_set)
     }
 
     fn for_file(&self, file_path: &str) -> Thresholds {
@@ -403,11 +430,23 @@ impl EffectiveThresholds {
             .unwrap_or_default();
         Thresholds {
             mccabe: self.cli.mccabe.or(lang_cfg.mccabe).or(self.global.mccabe),
-            cognitive: self.cli.cognitive.or(lang_cfg.cognitive).or(self.global.cognitive),
-            nesting: self.cli.nesting.or(lang_cfg.nesting).or(self.global.nesting),
+            cognitive: self
+                .cli
+                .cognitive
+                .or(lang_cfg.cognitive)
+                .or(self.global.cognitive),
+            nesting: self
+                .cli
+                .nesting
+                .or(lang_cfg.nesting)
+                .or(self.global.nesting),
             sloc: self.cli.sloc.or(lang_cfg.sloc).or(self.global.sloc),
             abc: self.cli.abc.or(lang_cfg.abc).or(self.global.abc),
-            returns: self.cli.returns.or(lang_cfg.returns).or(self.global.returns),
+            returns: self
+                .cli
+                .returns
+                .or(lang_cfg.returns)
+                .or(self.global.returns),
             aird: self.cli.aird.or(lang_cfg.aird).or(self.global.aird),
             aicp: self.cli.aicp.or(lang_cfg.aicp).or(self.global.aicp),
             external_calls: self
@@ -472,7 +511,6 @@ fn check_f64_threshold(
         }
     }
 }
-
 
 /// One function's snapshotted scores in a baseline file. Keyed on
 /// `file` + `function` (line numbers are deliberately omitted so the baseline
@@ -692,21 +730,85 @@ fn check_thresholds(
             }
         }
 
-        let base: Option<&BaselineEntry> = index
-            .as_ref()
-            .and_then(|idx| idx.get(&(func.file_path.as_str(), func.name.as_str())).copied());
+        let base: Option<&BaselineEntry> = index.as_ref().and_then(|idx| {
+            idx.get(&(func.file_path.as_str(), func.name.as_str()))
+                .copied()
+        });
 
         let ft = t.for_file(&func.file_path);
         let mut fv: Vec<String> = Vec::new();
-        check_u32_threshold(&mut fv, "McCabe",        ft.mccabe,         func.mccabe,         base.map(|b| b.mccabe),         func.suppressed.contains("mccabe"));
-        check_u32_threshold(&mut fv, "Cognitive",     ft.cognitive,      func.cognitive,      base.map(|b| b.cognitive),      func.suppressed.contains("cognitive"));
-        check_u32_threshold(&mut fv, "Nesting",       ft.nesting,        func.nesting,        base.map(|b| b.nesting),        func.suppressed.contains("nesting"));
-        check_u32_threshold(&mut fv, "SLOC",          ft.sloc,           func.sloc,           base.map(|b| b.sloc),           func.suppressed.contains("sloc"));
-        check_f64_threshold(&mut fv, "ABC",           ft.abc,            func.abc_magnitude,  base.map(|b| b.abc_magnitude),  func.suppressed.contains("abc"));
-        check_u32_threshold(&mut fv, "Returns",       ft.returns,        func.return_count,   base.map(|b| b.return_count),   func.suppressed.contains("returns"));
-        check_u32_threshold(&mut fv, "AIRD",          ft.aird,           func.aird,           base.map(|b| b.aird),           func.suppressed.contains("aird"));
-        check_u32_threshold(&mut fv, "AICP",          ft.aicp,           func.aicp,           base.map(|b| b.aicp),           func.suppressed.contains("aicp"));
-        check_u32_threshold(&mut fv, "ExternalCalls", ft.external_calls, func.external_calls, base.map(|b| b.external_calls), func.suppressed.contains("external_calls"));
+        check_u32_threshold(
+            &mut fv,
+            "McCabe",
+            ft.mccabe,
+            func.mccabe,
+            base.map(|b| b.mccabe),
+            func.suppressed.contains("mccabe"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "Cognitive",
+            ft.cognitive,
+            func.cognitive,
+            base.map(|b| b.cognitive),
+            func.suppressed.contains("cognitive"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "Nesting",
+            ft.nesting,
+            func.nesting,
+            base.map(|b| b.nesting),
+            func.suppressed.contains("nesting"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "SLOC",
+            ft.sloc,
+            func.sloc,
+            base.map(|b| b.sloc),
+            func.suppressed.contains("sloc"),
+        );
+        check_f64_threshold(
+            &mut fv,
+            "ABC",
+            ft.abc,
+            func.abc_magnitude,
+            base.map(|b| b.abc_magnitude),
+            func.suppressed.contains("abc"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "Returns",
+            ft.returns,
+            func.return_count,
+            base.map(|b| b.return_count),
+            func.suppressed.contains("returns"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "AIRD",
+            ft.aird,
+            func.aird,
+            base.map(|b| b.aird),
+            func.suppressed.contains("aird"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "AICP",
+            ft.aicp,
+            func.aicp,
+            base.map(|b| b.aicp),
+            func.suppressed.contains("aicp"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "ExternalCalls",
+            ft.external_calls,
+            func.external_calls,
+            base.map(|b| b.external_calls),
+            func.suppressed.contains("external_calls"),
+        );
 
         if !fv.is_empty() {
             violation_count += 1;
@@ -719,8 +821,10 @@ fn check_thresholds(
                 if drivers.is_empty() {
                     String::new()
                 } else {
-                    let parts: Vec<String> =
-                        drivers.iter().map(|(l, v)| format!("{} {}", l, v)).collect();
+                    let parts: Vec<String> = drivers
+                        .iter()
+                        .map(|(l, v)| format!("{} {}", l, v))
+                        .collect();
                     format!("  (drivers: {})", parts.join(", "))
                 }
             } else {
@@ -774,12 +878,15 @@ fn resolve_language_filter(names: &[String]) -> Result<Option<HashSet<&'static s
     for token in names {
         let lower = token.to_lowercase();
         // Try matching by language name first, then by extension.
-        let lang = languages().iter().find(|l| l.name.to_lowercase() == lower).or_else(|| {
-            languages().iter().find(|l| {
-                l.extensions.iter().any(|e| e.to_lowercase() == lower)
-                    || l.explicit_only.iter().any(|e| e.to_lowercase() == lower)
-            })
-        });
+        let lang = languages()
+            .iter()
+            .find(|l| l.name.to_lowercase() == lower)
+            .or_else(|| {
+                languages().iter().find(|l| {
+                    l.extensions.iter().any(|e| e.to_lowercase() == lower)
+                        || l.explicit_only.iter().any(|e| e.to_lowercase() == lower)
+                })
+            });
         match lang {
             Some(l) => {
                 allowed.extend(l.extensions.iter().copied());
@@ -796,11 +903,15 @@ fn resolve_language_filter(names: &[String]) -> Result<Option<HashSet<&'static s
 
 fn configure_thread_pool(jobs: usize) {
     let n = if jobs == 0 {
-        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
     } else {
         jobs
     };
-    let _ = rayon::ThreadPoolBuilder::new().num_threads(n).build_global();
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(n)
+        .build_global();
 }
 
 fn main() -> Result<()> {
@@ -817,8 +928,16 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let include_rules = args.include.as_ref().map(|p| FilterRules::from_file(p)).transpose()?;
-    let exclude_rules = args.exclude.as_ref().map(|p| FilterRules::from_file(p)).transpose()?;
+    let include_rules = args
+        .include
+        .as_ref()
+        .map(|p| FilterRules::from_file(p))
+        .transpose()?;
+    let exclude_rules = args
+        .exclude
+        .as_ref()
+        .map(|p| FilterRules::from_file(p))
+        .transpose()?;
     let exclude_path_patterns: Vec<regex::Regex> = args
         .exclude_path
         .iter()
@@ -896,13 +1015,21 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let changed_ref = if args.changed { Some("HEAD") } else { args.since.as_deref() };
+    let changed_ref = if args.changed {
+        Some("HEAD")
+    } else {
+        args.since.as_deref()
+    };
     let ctx = RunContext {
         thresholds,
         include_rules,
         exclude_rules,
         toml_exclude,
-        baseline: args.baseline.as_ref().map(|p| Baseline::from_file(p)).transpose()?,
+        baseline: args
+            .baseline
+            .as_ref()
+            .map(|p| Baseline::from_file(p))
+            .transpose()?,
         changed: changed_ref.map(collect_changed_lines).transpose()?,
         count_anonymous_closures: args.count_anonymous_closures,
         verbose: args.verbose,
@@ -955,12 +1082,20 @@ fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
     );
 
     if all_metrics.is_empty() {
-        anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
+        anyhow::bail!(
+            "No functions found in any files (skipped {} files)",
+            skipped_files
+        );
     }
     if !ctx.quiet {
         display_testability_matrix(&all_metrics, files.len(), skipped_files);
     }
-    check_thresholds(&all_metrics, &ctx.thresholds, ctx.baseline.as_ref(), ctx.changed.as_ref())
+    check_thresholds(
+        &all_metrics,
+        &ctx.thresholds,
+        ctx.baseline.as_ref(),
+        ctx.changed.as_ref(),
+    )
 }
 
 fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
@@ -981,7 +1116,12 @@ fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
     if !ctx.quiet {
         analyze_code(&metrics, ctx.verbose)?;
     }
-    check_thresholds(&metrics, &ctx.thresholds, ctx.baseline.as_ref(), ctx.changed.as_ref())
+    check_thresholds(
+        &metrics,
+        &ctx.thresholds,
+        ctx.baseline.as_ref(),
+        ctx.changed.as_ref(),
+    )
 }
 
 fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContext) -> Result<()> {
@@ -994,7 +1134,10 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
     );
 
     if all_metrics.is_empty() {
-        anyhow::bail!("No functions found in any files (skipped {} files)", skipped_files);
+        anyhow::bail!(
+            "No functions found in any files (skipped {} files)",
+            skipped_files
+        );
     }
     if let Some(report_path) = report {
         write_detailed_report(&all_metrics, ctx.verbose, report_path)?;
@@ -1002,7 +1145,12 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
     if !ctx.quiet {
         display_recursive_summary(&all_metrics, files.len(), skipped_files, report);
     }
-    check_thresholds(&all_metrics, &ctx.thresholds, ctx.baseline.as_ref(), ctx.changed.as_ref())
+    check_thresholds(
+        &all_metrics,
+        &ctx.thresholds,
+        ctx.baseline.as_ref(),
+        ctx.changed.as_ref(),
+    )
 }
 
 /// Load file paths from compile_commands.json
@@ -1076,16 +1224,16 @@ fn collect_files(
     let mut files = Vec::new();
 
     let ext_allowed = |ext: &std::ffi::OsStr| -> bool {
-        language_filter.as_ref().map_or(true, |set| {
-            ext.to_str().map(|e| set.contains(e)).unwrap_or(false)
-        })
+        language_filter
+            .as_ref()
+            .is_none_or(|set| ext.to_str().map(|e| set.contains(e)).unwrap_or(false))
     };
 
     if path.is_file() {
         // Single file mode — accepts explicit-only extensions (e.g. .f, .h) in addition to
         // recursive-discovery extensions. is_parseable_extension covers both sets.
         let ext = path.extension();
-        let supported = ext.map(|e| is_parseable_extension(e)).unwrap_or(false);
+        let supported = ext.map(is_parseable_extension).unwrap_or(false);
         if !supported || !ext.map(ext_allowed).unwrap_or(false) {
             return Ok(files);
         }
@@ -1164,9 +1312,6 @@ fn should_process_file(
     true
 }
 
-/// Collect function metrics from a file
-
-
 /// Collect FunctionMetrics across multiple files, skipping unreadable/unparseable ones.
 /// Returns (metrics, skipped_file_count). Used by SARIF mode.
 fn collect_all_metrics(
@@ -1216,16 +1361,14 @@ fn collect_all_metrics(
     (all_metrics, skipped.load(Ordering::Relaxed))
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use knots::{
-        visit_functions, get_function_name, collect_local_names, nested_fn_sloc,
-        collect_external_call_names, SlocMode,
-    };
     use knots::complexity::{calculate_sloc, calculate_sloc_python, TestScoringMetric};
+    use knots::{
+        collect_external_call_names, collect_local_names, get_function_name, nested_fn_sloc,
+        visit_functions, SlocMode,
+    };
 
     /// args_override_self: the pre-commit hook entry bakes default
     /// thresholds (e.g. --abc-threshold=10.0) and a consumer's `args:`
@@ -1253,7 +1396,9 @@ mod tests {
     /// Parse C++ code and collect discovered function names via visit_functions + get_function_name.
     fn discover_cpp_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&knots::tree_sitter_cpp::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&knots::tree_sitter_cpp::LANGUAGE.into())
+            .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -1378,7 +1523,11 @@ mod tests {
         let map = c_sloc_map(code);
         let outer = map.iter().find(|(n, _)| n == "outer").map(|(_, s)| *s);
         // All 8 lines belong to outer; the vmcase block must not be subtracted.
-        assert_eq!(outer, Some(8), "vmcase block SLOC must not be subtracted from outer: {map:?}");
+        assert_eq!(
+            outer,
+            Some(8),
+            "vmcase block SLOC must not be subtracted from outer: {map:?}"
+        );
     }
 
     #[test]
@@ -1399,7 +1548,10 @@ mod tests {
         assert_eq!(outer, Some(6), "outer SLOC should exclude inner's lines");
         assert_eq!(inner, Some(4), "inner SLOC should be unchanged");
         let total: u32 = map.iter().map(|(_, s)| s).sum();
-        assert_eq!(total, 10, "sum of function SLOCs should equal file line count");
+        assert_eq!(
+            total, 10,
+            "sum of function SLOCs should equal file line count"
+        );
     }
 
     #[test]
@@ -1422,7 +1574,9 @@ mod tests {
 
     fn discover_rust_functions(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&knots::tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&knots::tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -1461,7 +1615,9 @@ mod tests {
 
     fn rust_external_calls(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&knots::tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&knots::tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let root = tree.root_node();
         let local_names = collect_local_names(root, code);
@@ -1649,7 +1805,8 @@ mod tests {
 
     #[test]
     fn test_ts_discover_typed_function() {
-        let names = discover_ts_functions("function add(a: number, b: number): number { return a + b; }");
+        let names =
+            discover_ts_functions("function add(a: number, b: number): number { return a + b; }");
         assert_eq!(names, vec!["add"]);
     }
 
@@ -1767,7 +1924,8 @@ mod tests {
 
     #[test]
     fn test_ada_discover_function() {
-        let code = "function Add (X, Y : Integer) return Integer is\nbegin\n   return X + Y;\nend Add;";
+        let code =
+            "function Add (X, Y : Integer) return Integer is\nbegin\n   return X + Y;\nend Add;";
         let names = discover_ada_functions(code);
         assert_eq!(names, vec!["Add"]);
     }
@@ -1817,7 +1975,13 @@ mod tests {
 
     /// Build a FunctionMetrics fixture with the given AIRD-component raw values;
     /// fields not relevant to AIRD drivers are left at neutral defaults.
-    fn fixture(cognitive: u32, sloc: u32, nesting: u32, test: i32, coupling: u32) -> FunctionMetrics {
+    fn fixture(
+        cognitive: u32,
+        sloc: u32,
+        nesting: u32,
+        test: i32,
+        coupling: u32,
+    ) -> FunctionMetrics {
         FunctionMetrics {
             name: "f".into(),
             file_path: "src/x.rs".into(),
@@ -2051,7 +2215,10 @@ mod tests {
     /// `@@ -a,b +c,d @@` yields the new-file range `(c, d)`.
     #[test]
     fn test_parse_hunk_new_range_full() {
-        assert_eq!(parse_hunk_new_range("@@ -10,3 +12,5 @@ fn foo()"), Some((12, 5)));
+        assert_eq!(
+            parse_hunk_new_range("@@ -10,3 +12,5 @@ fn foo()"),
+            Some((12, 5))
+        );
     }
 
     /// A single-line hunk omits the count on the `+` side; it defaults to 1.
@@ -2123,7 +2290,15 @@ mod tests {
     fn test_explain_metric_nonempty() {
         use ExplainMetric::*;
         for m in [
-            Mccabe, Cognitive, Nesting, Sloc, Abc, Returns, Aird, Aicp, ExternalCalls,
+            Mccabe,
+            Cognitive,
+            Nesting,
+            Sloc,
+            Abc,
+            Returns,
+            Aird,
+            Aicp,
+            ExternalCalls,
         ] {
             let text = explain_metric(m);
             assert!(!text.is_empty());
@@ -2492,7 +2667,8 @@ mod tests {
 
     #[test]
     fn test_php_discover_constructor_and_method() {
-        let code = "<?php class Foo { public function __construct($x) {} public function greet() {} }";
+        let code =
+            "<?php class Foo { public function __construct($x) {} public function greet() {} }";
         let mut names = discover_php_functions(code);
         names.sort();
         assert_eq!(names, vec!["__construct", "greet"]);
@@ -2537,7 +2713,6 @@ mod tests {
         names.sort();
         assert_eq!(names, vec!["bar", "foo"]);
     }
-
 
     // ---- Scala function discovery tests ----
 
@@ -2642,7 +2817,9 @@ mod tests {
 
     fn discover_lua_functions_with_anon(code: &str) -> Vec<String> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&knots::tree_sitter_lua::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&knots::tree_sitter_lua::LANGUAGE.into())
+            .unwrap();
         let tree = parser.parse(code, None).unwrap();
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
@@ -2652,8 +2829,12 @@ mod tests {
             let name = get_function_name(node, src).or_else(|| {
                 let is_anon = matches!(
                     node.kind(),
-                    "func_literal" | "arrow_function" | "function_expression" | "generator_function"
-                ) || (sloc_mode == knots::SlocMode::Lua && node.kind() == "function_definition");
+                    "func_literal"
+                        | "arrow_function"
+                        | "function_expression"
+                        | "generator_function"
+                ) || (sloc_mode == knots::SlocMode::Lua
+                    && node.kind() == "function_definition");
                 if is_anon {
                     let pos = node.start_position();
                     Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
@@ -2661,7 +2842,9 @@ mod tests {
                     None
                 }
             });
-            if let Some(n) = name { names.push(n); }
+            if let Some(n) = name {
+                names.push(n);
+            }
         });
         names
     }
@@ -2736,7 +2919,12 @@ mod tests {
     fn test_local_rust_fn_not_counted_as_external() {
         let code = "fn helper() {}\nfn caller() { helper(); }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_rust::LANGUAGE.into(), code, "test.rs", "caller"),
+            external_calls_for(
+                knots::tree_sitter_rust::LANGUAGE.into(),
+                code,
+                "test.rs",
+                "caller"
+            ),
             0
         );
     }
@@ -2745,7 +2933,12 @@ mod tests {
     fn test_local_c_fn_not_counted_as_external() {
         let code = "void helper(void) {}\nvoid caller(void) { helper(); }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_c::LANGUAGE.into(), code, "test.c", "caller"),
+            external_calls_for(
+                knots::tree_sitter_c::LANGUAGE.into(),
+                code,
+                "test.c",
+                "caller"
+            ),
             0
         );
     }
@@ -2754,7 +2947,12 @@ mod tests {
     fn test_local_python_fn_not_counted_as_external() {
         let code = "def helper():\n    pass\n\ndef caller():\n    helper()\n";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_python::LANGUAGE.into(), code, "test.py", "caller"),
+            external_calls_for(
+                knots::tree_sitter_python::LANGUAGE.into(),
+                code,
+                "test.py",
+                "caller"
+            ),
             0
         );
     }
@@ -2763,7 +2961,12 @@ mod tests {
     fn test_local_go_fn_not_counted_as_external() {
         let code = "package main\nfunc helper() {}\nfunc caller() { helper() }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_go::LANGUAGE.into(), code, "test.go", "caller"),
+            external_calls_for(
+                knots::tree_sitter_go::LANGUAGE.into(),
+                code,
+                "test.go",
+                "caller"
+            ),
             0
         );
     }
@@ -2772,7 +2975,12 @@ mod tests {
     fn test_local_java_method_not_counted_as_external() {
         let code = "class Foo { void helper() {} void caller() { helper(); } }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_java::LANGUAGE.into(), code, "test.java", "caller"),
+            external_calls_for(
+                knots::tree_sitter_java::LANGUAGE.into(),
+                code,
+                "test.java",
+                "caller"
+            ),
             0
         );
     }
@@ -2781,7 +2989,12 @@ mod tests {
     fn test_local_js_arrow_fn_not_counted_as_external() {
         let code = "const helper = () => {};\nfunction caller() { helper(); }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_javascript::LANGUAGE.into(), code, "test.js", "caller"),
+            external_calls_for(
+                knots::tree_sitter_javascript::LANGUAGE.into(),
+                code,
+                "test.js",
+                "caller"
+            ),
             0
         );
     }
@@ -2790,7 +3003,12 @@ mod tests {
     fn test_local_js_function_expression_not_counted_as_external() {
         let code = "const helper = function() {};\nfunction caller() { helper(); }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_javascript::LANGUAGE.into(), code, "test.js", "caller"),
+            external_calls_for(
+                knots::tree_sitter_javascript::LANGUAGE.into(),
+                code,
+                "test.js",
+                "caller"
+            ),
             0
         );
     }
@@ -2799,7 +3017,12 @@ mod tests {
     fn test_local_js_generator_fn_not_counted_as_external() {
         let code = "function* helper() { yield 1; }\nfunction caller() { helper(); }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_javascript::LANGUAGE.into(), code, "test.js", "caller"),
+            external_calls_for(
+                knots::tree_sitter_javascript::LANGUAGE.into(),
+                code,
+                "test.js",
+                "caller"
+            ),
             0
         );
     }
@@ -2809,7 +3032,12 @@ mod tests {
         // Sanity-check: a call to a function not defined in the same file IS counted.
         let code = "fn caller() { external_call(); }";
         assert_eq!(
-            external_calls_for(knots::tree_sitter_rust::LANGUAGE.into(), code, "test.rs", "caller"),
+            external_calls_for(
+                knots::tree_sitter_rust::LANGUAGE.into(),
+                code,
+                "test.rs",
+                "caller"
+            ),
             1
         );
     }

@@ -1,43 +1,39 @@
 // knots library - shared complexity calculation functions
 
-use std::collections::HashSet;
-use std::fs;
-use std::path::Path;
 use anyhow::{Context, Result};
 use globset::Glob;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::fs;
+use std::path::Path;
 use tree_sitter::{Node, Tree, TreeCursor};
 pub mod complexity;
 
 // Re-export complexity functions for use by workspace members and for internal use
 pub use complexity::{
-    calculate_abc_complexity, calculate_aicp, calculate_aird,
-    calculate_cognitive_complexity, calculate_mccabe_complexity,
-    calculate_nesting_depth, calculate_return_count, calculate_sloc,
-    calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_python,
-    calculate_state_coupling, calculate_test_scoring,
-    TestScoringMetric,
+    calculate_abc_complexity, calculate_aicp, calculate_aird, calculate_cognitive_complexity,
+    calculate_mccabe_complexity, calculate_nesting_depth, calculate_return_count, calculate_sloc,
+    calculate_sloc_ada, calculate_sloc_fortran, calculate_sloc_python, calculate_state_coupling,
+    calculate_test_scoring, TestScoringMetric,
 };
 
 // Re-export tree-sitter core (a direct knots dep) plus every grammar. Grammars
 // now live behind the substrate, so knots carries no direct grammar deps; these
 // re-exports keep existing `knots::tree_sitter_*` paths working.
-pub use tree_sitter;
 pub use lang_parsing_substrate::{
-    tree_sitter_ada, tree_sitter_c, tree_sitter_c_sharp, tree_sitter_cpp,
-    tree_sitter_fortran, tree_sitter_go,
-    tree_sitter_java, tree_sitter_javascript, tree_sitter_kotlin_ng,
-    tree_sitter_lua, tree_sitter_php, tree_sitter_python, tree_sitter_rust,
-    tree_sitter_scala, tree_sitter_swift, tree_sitter_typescript,
+    tree_sitter_ada, tree_sitter_c, tree_sitter_c_sharp, tree_sitter_cpp, tree_sitter_fortran,
+    tree_sitter_go, tree_sitter_java, tree_sitter_javascript, tree_sitter_kotlin_ng,
+    tree_sitter_lua, tree_sitter_php, tree_sitter_python, tree_sitter_rust, tree_sitter_scala,
+    tree_sitter_swift, tree_sitter_typescript,
 };
+pub use tree_sitter;
 
 // Language registry, detection, and SLOC-mode lookup also live in the substrate
 // (they were extracted from knots). Re-export so existing `knots::` paths resolve.
 pub use lang_parsing_substrate::{
-    is_parseable_extension, is_source_extension, language_for_file,
-    language_info_for_file, languages, sloc_mode_for_file,
-    supported_languages_report, LanguageInfo, SlocMode,
+    is_parseable_extension, is_source_extension, language_for_file, language_info_for_file,
+    languages, sloc_mode_for_file, supported_languages_report, LanguageInfo, SlocMode,
 };
 
 // Inline suppression / ignore-region scanning (tools:off, tools:suppress)
@@ -225,7 +221,9 @@ fn get_lua_assignment_name(node: Node, source_code: &str) -> Option<String> {
     match parent.kind() {
         "field" => {
             let mut cur = parent.walk();
-            let found = parent.named_children(&mut cur).find(|c| c.kind() == "identifier");
+            let found = parent
+                .named_children(&mut cur)
+                .find(|c| c.kind() == "identifier");
             found
                 .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
                 .map(|s| s.to_string())
@@ -244,14 +242,18 @@ fn get_lua_assignment_name(node: Node, source_code: &str) -> Option<String> {
                 return None;
             }
             let mut cur = assign.walk();
-            let found = assign.children(&mut cur).find(|c| c.kind() == "variable_list");
+            let found = assign
+                .children(&mut cur)
+                .find(|c| c.kind() == "variable_list");
             let var_list = found?;
             let mut cur2 = var_list.walk();
             let var = var_list.named_children(&mut cur2).nth(idx)?;
             if var.kind() != "identifier" {
                 return None;
             }
-            var.utf8_text(source_code.as_bytes()).ok().map(|s| s.to_string())
+            var.utf8_text(source_code.as_bytes())
+                .ok()
+                .map(|s| s.to_string())
         }
         _ => None,
     }
@@ -290,7 +292,9 @@ fn name_field(node: Node, source_code: &str) -> Option<String> {
 
 fn name_in_child(node: Node, child_kind: &str, source_code: &str) -> Option<String> {
     let mut cursor = node.walk();
-    let child = node.children(&mut cursor).find(|c| c.kind() == child_kind)?;
+    let child = node
+        .children(&mut cursor)
+        .find(|c| c.kind() == child_kind)?;
     name_field(child, source_code)
 }
 
@@ -321,17 +325,20 @@ pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
 
         "function_declaration" => name_field(node, source_code).or_else(|| {
             let mut cursor = node.walk();
-            let found = node.children(&mut cursor).find(|c| c.kind() == "simple_identifier");
-            found.and_then(|c| c.utf8_text(source_code.as_bytes()).ok()).map(|s| s.to_string())
+            let found = node
+                .children(&mut cursor)
+                .find(|c| c.kind() == "simple_identifier");
+            found
+                .and_then(|c| c.utf8_text(source_code.as_bytes()).ok())
+                .map(|s| s.to_string())
         }),
 
         "function_definition" => name_field(node, source_code)
             .or_else(|| get_c_name(node, source_code))
             .or_else(|| get_lua_assignment_name(node, source_code)),
 
-        "function_expression" => {
-            name_field(node, source_code).or_else(|| get_name_from_assignment_context(node, source_code))
-        }
+        "function_expression" => name_field(node, source_code)
+            .or_else(|| get_name_from_assignment_context(node, source_code)),
 
         "arrow_function" => get_name_from_assignment_context(node, source_code),
 
@@ -341,16 +348,23 @@ pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
 
         "subprogram_body" | "expression_function_declaration" => {
             let mut cursor = node.walk();
-            let spec = node
-                .children(&mut cursor)
-                .find(|c| matches!(c.kind(), "function_specification" | "procedure_specification"))?;
+            let spec = node.children(&mut cursor).find(|c| {
+                matches!(
+                    c.kind(),
+                    "function_specification" | "procedure_specification"
+                )
+            })?;
             name_field(spec, source_code)
         }
 
         "task_body" => {
             let mut cursor = node.walk();
-            let found = node.children(&mut cursor).find(|c| c.kind() == "identifier");
-            found.and_then(|c| c.utf8_text(source_code.as_bytes()).ok()).map(|s| s.to_string())
+            let found = node
+                .children(&mut cursor)
+                .find(|c| c.kind() == "identifier");
+            found
+                .and_then(|c| c.utf8_text(source_code.as_bytes()).ok())
+                .map(|s| s.to_string())
         }
 
         "function" => name_in_child(node, "function_statement", source_code),
@@ -359,7 +373,9 @@ pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
 
         "program" => {
             let mut cursor = node.walk();
-            let stmt = node.children(&mut cursor).find(|c| c.kind() == "program_statement")?;
+            let stmt = node
+                .children(&mut cursor)
+                .find(|c| c.kind() == "program_statement")?;
             let mut inner = stmt.walk();
             let first_named = stmt.named_children(&mut inner).next();
             first_named
@@ -478,7 +494,10 @@ fn handle_call_node(
                 }
             }
         }
-        "scoped_identifier" | "attribute" | "member_expression" | "selector_expression"
+        "scoped_identifier"
+        | "attribute"
+        | "member_expression"
+        | "selector_expression"
         | "member_access_expression" => {
             if let Ok(name) = func_node.utf8_text(source_code.as_bytes()) {
                 external.insert(name.to_string());
@@ -503,7 +522,8 @@ fn collect_external_calls_recursive(
     local_names: &HashSet<String>,
     external: &mut HashSet<String>,
 ) {
-    if node.kind() == "call_expression" || node.kind() == "call"
+    if node.kind() == "call_expression"
+        || node.kind() == "call"
         || node.kind() == "invocation_expression"
     {
         handle_call_node(node, source_code, local_names, external);
@@ -539,10 +559,11 @@ fn collect_external_calls_recursive(
             ) {
                 continue;
             }
-            let text = child.utf8_text(source_code.as_bytes()).unwrap_or("").to_string();
-            if child.kind() == "navigation_expression" {
-                external.insert(text);
-            } else if !local_names.contains(&text) {
+            let text = child
+                .utf8_text(source_code.as_bytes())
+                .unwrap_or("")
+                .to_string();
+            if child.kind() == "navigation_expression" || !local_names.contains(&text) {
                 external.insert(text);
             }
             break;
@@ -639,11 +660,11 @@ pub fn nested_fn_sloc(outer: Node, source_code: &str, sloc_mode: SlocMode) -> u3
 fn accumulate_nested_sloc(node: Node, source_code: &str, sloc_mode: SlocMode, total: &mut u32) {
     if is_function_kind(node.kind()) && !is_macro_function_definition(node) {
         *total += match sloc_mode {
-            SlocMode::Python       => calculate_sloc_python(node, source_code.as_bytes()),
-            SlocMode::Ada          => calculate_sloc_ada(node, source_code.as_bytes()),
-            SlocMode::Fortran      => calculate_sloc_fortran(node, source_code.as_bytes()),
-            SlocMode::Lua          => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
-            SlocMode::Default      => calculate_sloc(node, source_code.as_bytes()),
+            SlocMode::Python => calculate_sloc_python(node, source_code.as_bytes()),
+            SlocMode::Ada => calculate_sloc_ada(node, source_code.as_bytes()),
+            SlocMode::Fortran => calculate_sloc_fortran(node, source_code.as_bytes()),
+            SlocMode::Lua => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
+            SlocMode::Default => calculate_sloc(node, source_code.as_bytes()),
         };
         return;
     }
@@ -771,7 +792,8 @@ pub fn collect_function_metrics(
             let is_anonymous_node = matches!(
                 node.kind(),
                 "func_literal" | "arrow_function" | "function_expression" | "generator_function"
-            ) || (sloc_mode == SlocMode::Lua && node.kind() == "function_definition");
+            ) || (sloc_mode == SlocMode::Lua
+                && node.kind() == "function_definition");
             if count_anonymous_closures && is_anonymous_node {
                 let pos = node.start_position();
                 Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
@@ -785,11 +807,11 @@ pub fn collect_function_metrics(
             let nesting = calculate_nesting_depth(node);
             let sloc = {
                 let raw = match sloc_mode {
-                    SlocMode::Python       => calculate_sloc_python(node, src.as_bytes()),
-                    SlocMode::Ada          => calculate_sloc_ada(node, src.as_bytes()),
-                    SlocMode::Fortran      => calculate_sloc_fortran(node, src.as_bytes()),
-                    SlocMode::Lua          => complexity::calculate_sloc_lua(node, src.as_bytes()),
-                    SlocMode::Default      => calculate_sloc(node, src.as_bytes()),
+                    SlocMode::Python => calculate_sloc_python(node, src.as_bytes()),
+                    SlocMode::Ada => calculate_sloc_ada(node, src.as_bytes()),
+                    SlocMode::Fortran => calculate_sloc_fortran(node, src.as_bytes()),
+                    SlocMode::Lua => complexity::calculate_sloc_lua(node, src.as_bytes()),
+                    SlocMode::Default => calculate_sloc(node, src.as_bytes()),
                 };
                 raw.saturating_sub(nested_fn_sloc(node, src, sloc_mode))
             };
@@ -814,8 +836,12 @@ pub fn collect_function_metrics(
             if should_process_function(&name, max_complexity, include_rules, exclude_rules) {
                 let start_line = (node.start_position().row as u32) + 1;
                 let end_line = (node.end_position().row as u32) + 1;
-                let suppressed =
-                    suppressed_metrics_for(start_line, end_line, &ignore_regions, &inline_suppressions);
+                let suppressed = suppressed_metrics_for(
+                    start_line,
+                    end_line,
+                    &ignore_regions,
+                    &inline_suppressions,
+                );
                 metrics.push(FunctionMetrics {
                     name,
                     file_path: file_path.to_string(),
