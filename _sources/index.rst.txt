@@ -20,6 +20,7 @@ assistance.
    ci-integration
    baseline
    filters
+   config
    test-complexity
    alternatives
    benchmarks

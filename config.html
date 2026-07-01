@@ -1,0 +1,219 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>knots.toml &amp; Inline Suppression &mdash; Knots  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Test Quality Analysis (knots-test-complexity)" href="test-complexity.html" />
+    <link rel="prev" title="Filter Rules" href="filters.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Knots
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-reference.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="metrics-reference.html">Metrics Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-integration.html">CI Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="baseline.html">Baseline / Ratchet Mode</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filters.html">Filter Rules</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">knots.toml &amp; Inline Suppression</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#knots-toml-discovery"><code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> discovery</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#thresholds">Thresholds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#file-function-exclusion">File/function exclusion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inline-suppression">Inline suppression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="test-complexity.html">Test Quality Analysis (knots-test-complexity)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alternatives.html">Alternatives Comparison</a></li>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmark Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="releasing.html">Releasing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Knots</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">knots.toml &amp; Inline Suppression</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/config.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="knots-toml-inline-suppression">
+<h1>knots.toml &amp; Inline Suppression<a class="headerlink" href="#knots-toml-inline-suppression" title="Link to this heading"></a></h1>
+<p>In addition to the JSON <a class="reference internal" href="filters.html"><span class="doc">filter rules</span></a>, knots reads an optional
+<code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> file for thresholds and exclusions, and recognizes inline
+<code class="docutils literal notranslate"><span class="pre">tools:off</span></code> / <code class="docutils literal notranslate"><span class="pre">tools:suppress</span></code> comments for per-function suppression. Both
+surfaces come from the shared <code class="docutils literal notranslate"><span class="pre">lang-parsing-substrate</span></code> crate, so the same
+syntax works identically across knots, moldy, and tools_sqc.</p>
+<p>CLI flags (<code class="docutils literal notranslate"><span class="pre">--mccabe-threshold</span></code>, etc.) and the JSON <code class="docutils literal notranslate"><span class="pre">--include</span></code>/<code class="docutils literal notranslate"><span class="pre">--exclude</span></code>
+sidecar always take precedence over <code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> — this is an additive,
+optional layer, not a replacement.</p>
+<section id="knots-toml-discovery">
+<h2><code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> discovery<a class="headerlink" href="#knots-toml-discovery" title="Link to this heading"></a></h2>
+<p>knots walks up from the current working directory looking for <code class="docutils literal notranslate"><span class="pre">knots.toml</span></code>,
+stopping at the first match. If none is found, knots behaves exactly as
+before (CLI flags and JSON filters only).</p>
+</section>
+<section id="thresholds">
+<h2>Thresholds<a class="headerlink" href="#thresholds" title="Link to this heading"></a></h2>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[thresholds]</span>
+<span class="n">mccabe</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span>
+<span class="n">cognitive</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span>
+<span class="n">nesting</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span>
+
+<span class="c1"># Per-language overrides — take precedence over [thresholds] for files</span>
+<span class="c1"># of that language, but are still overridden by a CLI flag.</span>
+<span class="k">[c.thresholds]</span>
+<span class="n">mccabe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span><span class="w">   </span><span class="c1"># C idioms inflate cyclomatic complexity vs higher-level languages</span>
+</pre></div>
+</div>
+<p>Resolution order for each metric, per function: <strong>CLI flag</strong> &gt; <strong>per-language
+config</strong> (<code class="docutils literal notranslate"><span class="pre">[&lt;lang&gt;.thresholds]</span></code>) &gt; <strong>global config</strong> (<code class="docutils literal notranslate"><span class="pre">[thresholds]</span></code>) &gt;
+off.</p>
+<p>Available keys: <code class="docutils literal notranslate"><span class="pre">mccabe</span></code>, <code class="docutils literal notranslate"><span class="pre">cognitive</span></code>, <code class="docutils literal notranslate"><span class="pre">nesting</span></code>, <code class="docutils literal notranslate"><span class="pre">sloc</span></code>, <code class="docutils literal notranslate"><span class="pre">abc</span></code>,
+<code class="docutils literal notranslate"><span class="pre">returns</span></code>, <code class="docutils literal notranslate"><span class="pre">aird</span></code>, <code class="docutils literal notranslate"><span class="pre">aicp</span></code>, <code class="docutils literal notranslate"><span class="pre">external_calls</span></code> — same names as the
+<code class="docutils literal notranslate"><span class="pre">--&lt;key&gt;-threshold</span></code> CLI flags.</p>
+</section>
+<section id="file-function-exclusion">
+<h2>File/function exclusion<a class="headerlink" href="#file-function-exclusion" title="Link to this heading"></a></h2>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[[filter.exclude]]</span>
+<span class="n">file_patterns</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;tests/**&quot;</span><span class="p">]</span>
+<span class="n">function_patterns</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;^test_&quot;</span><span class="p">]</span>
+
+<span class="k">[[filter.exclude]]</span>
+<span class="n">function_patterns</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;^HAL_&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Within one <code class="docutils literal notranslate"><span class="pre">[[filter.exclude]]</span></code> entry, <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> and
+<code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> are AND’d together; an omitted list matches everything
+for that field. A function is excluded if it matches <em>any</em> entry. This runs
+independently of (and in addition to) <code class="docutils literal notranslate"><span class="pre">--include</span></code>/<code class="docutils literal notranslate"><span class="pre">--exclude</span></code> JSON
+filters.</p>
+</section>
+<section id="inline-suppression">
+<h2>Inline suppression<a class="headerlink" href="#inline-suppression" title="Link to this heading"></a></h2>
+<p>Two comment forms, recognized in every supported language using that
+language’s own comment syntax (<code class="docutils literal notranslate"><span class="pre">//</span></code>, <code class="docutils literal notranslate"><span class="pre">#</span></code>, <code class="docutils literal notranslate"><span class="pre">--</span></code>, <code class="docutils literal notranslate"><span class="pre">!</span></code>):</p>
+<p><strong>Single-line</strong> — suppresses one metric for the function containing (or
+immediately following) the comment:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="c1">// tools:suppress knots:cognitive JUSTIFICATION:&quot;legacy, JIRA-123&quot;</span>
+<span class="k">fn</span> <span class="nf">big_function</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Block region</strong> — suppresses every knots metric for everything between the
+markers:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="cm">/* tools:off knots */</span>
+<span class="kt">int</span><span class="w"> </span><span class="nf">legacy_blob</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="p">}</span>
+<span class="cm">/* tools:on */</span>
+
+<span class="cm">/* tools:off */</span><span class="w">          </span><span class="cm">/* no tool qualifier — suppresses every tool, not just knots */</span>
+<span class="p">...</span>
+<span class="cm">/* tools:on */</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">tools:off</span> <span class="pre">[TOOL[,TOOL,...]]</span></code> accepts a comma-separated tool list
+(<code class="docutils literal notranslate"><span class="pre">knots</span></code>, <code class="docutils literal notranslate"><span class="pre">funky</span></code>/<code class="docutils literal notranslate"><span class="pre">moldy</span></code>, <code class="docutils literal notranslate"><span class="pre">sqc</span></code>); omitting it suppresses every tool
+for that region. An unclosed <code class="docutils literal notranslate"><span class="pre">tools:off</span></code> extends to end of file.</p>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> and inline suppression are both entirely optional — omit
+either (or both) and knots behaves as it always has.</p></li>
+<li><p>Suppression is resolved once per file during analysis and attached to each
+<code class="docutils literal notranslate"><span class="pre">FunctionMetrics</span></code> as <code class="docutils literal notranslate"><span class="pre">suppressed</span></code> — a suppressed metric never appears
+in threshold-violation output, baseline writes, or JSON/SARIF output
+filtering decisions.</p></li>
+<li><p>See <code class="docutils literal notranslate"><span class="pre">lang-parsing-substrate</span></code>’s <code class="docutils literal notranslate"><span class="pre">docs/unified-config-spec.md</span></code> for the
+full cross-tool spec (<code class="docutils literal notranslate"><span class="pre">suppress.toml</span></code>, per-tool config files, etc.) —
+this page documents only what knots currently implements.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="filters.html" class="btn btn-neutral float-left" title="Filter Rules" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="test-complexity.html" class="btn btn-neutral float-right" title="Test Quality Analysis (knots-test-complexity)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Brandon Arrendondo.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
