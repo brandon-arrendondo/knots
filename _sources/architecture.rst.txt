@@ -83,7 +83,8 @@ Each metric follows the same shape::
     }
 
 Metrics implemented: McCabe, Cognitive, Nesting, SLOC, ABC, Return count,
-TestScoring, ExternalCalls, StateCoupling, AIRD, AICP.
+TestScoring, ExternalCalls, StateCoupling, AIRD, AICP, UnreachableBlocks
+(C/C++/Rust only, built on the substrate's CFG rather than a direct AST walk).
 
 SLOC dispatch
 ~~~~~~~~~~~~~

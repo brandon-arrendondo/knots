@@ -57,6 +57,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#abc-complexity">ABC Complexity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#test-scoring">Test Scoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#external-calls">External Calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#unreachable-blocks">Unreachable Blocks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#aird-ai-reasoning-difficulty">AIRD — AI Reasoning Difficulty</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#aicp-ai-context-pressure">AICP — AI Context Pressure</a></li>
 </ul>
@@ -263,6 +264,25 @@ and function-like macros. Measures external dependency breadth.</p>
 via <code class="docutils literal notranslate"><span class="pre">field_expression</span></code> nodes. Method names defined locally are excluded;
 external method names (e.g. standard library, third-party crate methods)
 are counted as external references.</p>
+</div>
+</section>
+<section id="unreachable-blocks">
+<h2>Unreachable Blocks<a class="headerlink" href="#unreachable-blocks" title="Link to this heading"></a></h2>
+<p>Count of dead-code basic blocks: statements written directly after a
+<code class="docutils literal notranslate"><span class="pre">return</span></code> in the same block, which can never execute. Built on
+<code class="docutils literal notranslate"><span class="pre">lang_parsing_substrate</span></code>’s control-flow-graph construction, which only
+models <code class="docutils literal notranslate"><span class="pre">c</span></code>/<code class="docutils literal notranslate"><span class="pre">cpp</span></code>/<code class="docutils literal notranslate"><span class="pre">rust</span></code> — this metric is always <code class="docutils literal notranslate"><span class="pre">0</span></code> for every other
+supported language.</p>
+<ul class="simple">
+<li><p>Threshold flag: <code class="docutils literal notranslate"><span class="pre">--unreachable-blocks-threshold</span></code></p></li>
+<li><p>No violation-count baseline yet; start at <code class="docutils literal notranslate"><span class="pre">0</span></code> (any dead code flags).</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Only a block reached <em>exclusively</em> via a <code class="docutils literal notranslate"><span class="pre">Return</span></code> control-flow edge is
+flagged. A block reached via <code class="docutils literal notranslate"><span class="pre">Break</span></code>/<code class="docutils literal notranslate"><span class="pre">Continue</span></code> (a loop’s after-block
+or header) is genuinely reachable when that jump fires and is never
+flagged, even though the loop itself has no implicit exit test.</p>
 </div>
 </section>
 <section id="aird-ai-reasoning-difficulty">

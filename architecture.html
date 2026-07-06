@@ -212,7 +212,8 @@ function regexes, complexity bounds) loaded from a JSON sidecar.</p></li>
 </pre></div>
 </div>
 <p>Metrics implemented: McCabe, Cognitive, Nesting, SLOC, ABC, Return count,
-TestScoring, ExternalCalls, StateCoupling, AIRD, AICP.</p>
+TestScoring, ExternalCalls, StateCoupling, AIRD, AICP, UnreachableBlocks
+(C/C++/Rust only, built on the substrate’s CFG rather than a direct AST walk).</p>
 <section id="sloc-dispatch">
 <h3><a class="toc-backref" href="#id4" role="doc-backlink">SLOC dispatch</a><a class="headerlink" href="#sloc-dispatch" title="Link to this heading"></a></h3>
 <p>There are five SLOC variants, selected by comment style:</p>

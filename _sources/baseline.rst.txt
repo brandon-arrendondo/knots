@@ -87,7 +87,8 @@ numbers are **deliberately omitted** so the file does not churn when code moves.
           "return_count": 3,
           "aird": 98,
           "aicp": 40,
-          "external_calls": 12
+          "external_calls": 12,
+          "unreachable_blocks": 0
         }
       ]
     }

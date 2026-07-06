@@ -125,8 +125,9 @@ before (CLI flags and JSON filters only).</p>
 config</strong> (<code class="docutils literal notranslate"><span class="pre">[&lt;lang&gt;.thresholds]</span></code>) &gt; <strong>global config</strong> (<code class="docutils literal notranslate"><span class="pre">[thresholds]</span></code>) &gt;
 off.</p>
 <p>Available keys: <code class="docutils literal notranslate"><span class="pre">mccabe</span></code>, <code class="docutils literal notranslate"><span class="pre">cognitive</span></code>, <code class="docutils literal notranslate"><span class="pre">nesting</span></code>, <code class="docutils literal notranslate"><span class="pre">sloc</span></code>, <code class="docutils literal notranslate"><span class="pre">abc</span></code>,
-<code class="docutils literal notranslate"><span class="pre">returns</span></code>, <code class="docutils literal notranslate"><span class="pre">aird</span></code>, <code class="docutils literal notranslate"><span class="pre">aicp</span></code>, <code class="docutils literal notranslate"><span class="pre">external_calls</span></code> — same names as the
-<code class="docutils literal notranslate"><span class="pre">--&lt;key&gt;-threshold</span></code> CLI flags.</p>
+<code class="docutils literal notranslate"><span class="pre">returns</span></code>, <code class="docutils literal notranslate"><span class="pre">aird</span></code>, <code class="docutils literal notranslate"><span class="pre">aicp</span></code>, <code class="docutils literal notranslate"><span class="pre">external_calls</span></code>, <code class="docutils literal notranslate"><span class="pre">unreachable_blocks</span></code>
+— same names as the <code class="docutils literal notranslate"><span class="pre">--&lt;key&gt;-threshold</span></code> CLI flags. <code class="docutils literal notranslate"><span class="pre">unreachable_blocks</span></code>
+is only ever nonzero for C/C++/Rust files.</p>
 </section>
 <section id="file-function-exclusion">
 <h2>File/function exclusion<a class="headerlink" href="#file-function-exclusion" title="Link to this heading"></a></h2>
