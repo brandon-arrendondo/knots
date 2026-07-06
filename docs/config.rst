@@ -39,8 +39,9 @@ config** (``[<lang>.thresholds]``) > **global config** (``[thresholds]``) >
 off.
 
 Available keys: ``mccabe``, ``cognitive``, ``nesting``, ``sloc``, ``abc``,
-``returns``, ``aird``, ``aicp``, ``external_calls`` — same names as the
-``--<key>-threshold`` CLI flags.
+``returns``, ``aird``, ``aicp``, ``external_calls``, ``unreachable_blocks``
+— same names as the ``--<key>-threshold`` CLI flags. ``unreachable_blocks``
+is only ever nonzero for C/C++/Rust files.
 
 File/function exclusion
 ------------------------

@@ -44,6 +44,7 @@ pub struct TomlThresholds {
     pub aird: Option<u32>,
     pub aicp: Option<u32>,
     pub external_calls: Option<u32>,
+    pub unreachable_blocks: Option<u32>,
 }
 
 impl TomlThresholds {
@@ -57,6 +58,7 @@ impl TomlThresholds {
             || self.aird.is_some()
             || self.aicp.is_some()
             || self.external_calls.is_some()
+            || self.unreachable_blocks.is_some()
     }
 }
 

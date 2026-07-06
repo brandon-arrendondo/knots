@@ -16,7 +16,8 @@ pub use complexity::{
     apply_aird_ce_multiplier, calculate_abc_complexity, calculate_aicp, calculate_aird,
     calculate_cognitive_complexity, calculate_mccabe_complexity, calculate_nesting_depth,
     calculate_return_count, calculate_sloc, calculate_sloc_ada, calculate_sloc_fortran,
-    calculate_sloc_python, calculate_state_coupling, calculate_test_scoring, TestScoringMetric,
+    calculate_sloc_python, calculate_state_coupling, calculate_test_scoring,
+    calculate_unreachable_blocks, TestScoringMetric,
 };
 
 // File-level Ce/Ca/Instability coupling metrics, built on the substrate's
@@ -167,6 +168,11 @@ pub struct FunctionMetrics {
     /// [`complexity::apply_aird_ce_multiplier`]; kept here so violation
     /// output can show it as a distinct driver.
     pub file_ce: u32,
+    /// Count of dead-code basic blocks (statements written directly after a
+    /// `return` in the same block) from [`complexity::calculate_unreachable_blocks`].
+    /// Always `0` outside `c`/`cpp`/`rust`, since the substrate's CFG builder
+    /// doesn't model other languages yet.
+    pub unreachable_blocks: u32,
     /// Metric keys (e.g. `"cognitive"`, `"mccabe"`) suppressed for this
     /// function via a `tools:suppress knots:<metric>` comment, or all keys
     /// when an unqualified `tools:off` region covers it. Populated by
@@ -798,6 +804,7 @@ pub fn collect_function_metrics(
     let sloc_mode = sloc_mode_for_file(Path::new(file_path)).unwrap_or(SlocMode::Default);
     let ignore_regions = ignored_regions(source_code, sloc_mode);
     let inline_suppressions = suppressions(source_code, sloc_mode);
+    let cfg_language_key = language_info_for_file(Path::new(file_path)).map(|info| info.key);
     visit_functions(&mut cursor, source_code, &mut |node, src| {
         let name_opt = get_function_name(node, src).or_else(|| {
             let is_anonymous_node = matches!(
@@ -841,6 +848,9 @@ pub fn collect_function_metrics(
                 state_coupling,
             );
             let aicp = calculate_aicp(external_calls, sloc, test_scoring.documentation_score);
+            let unreachable_blocks = cfg_language_key
+                .map(|key| calculate_unreachable_blocks(node, src.as_bytes(), key))
+                .unwrap_or(0);
 
             let max_complexity = std::cmp::max(mccabe, cognitive);
 
@@ -870,6 +880,7 @@ pub fn collect_function_metrics(
                     external_calls,
                     state_coupling,
                     file_ce: 0,
+                    unreachable_blocks,
                     suppressed,
                 });
             }

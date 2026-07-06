@@ -367,6 +367,7 @@ mod tests {
             external_calls: 0,
             state_coupling: 0,
             file_ce: 0,
+            unreachable_blocks: 0,
             suppressed: HashSet::new(),
         }
     }

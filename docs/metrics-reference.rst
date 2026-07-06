@@ -161,6 +161,25 @@ and function-like macros. Measures external dependency breadth.
    external method names (e.g. standard library, third-party crate methods)
    are counted as external references.
 
+Unreachable Blocks
+-------------------
+
+Count of dead-code basic blocks: statements written directly after a
+``return`` in the same block, which can never execute. Built on
+``lang_parsing_substrate``'s control-flow-graph construction, which only
+models ``c``/``cpp``/``rust`` — this metric is always ``0`` for every other
+supported language.
+
+- Threshold flag: ``--unreachable-blocks-threshold``
+- No violation-count baseline yet; start at ``0`` (any dead code flags).
+
+.. note::
+
+   Only a block reached *exclusively* via a ``Return`` control-flow edge is
+   flagged. A block reached via ``Break``/``Continue`` (a loop's after-block
+   or header) is genuinely reachable when that jump fires and is never
+   flagged, even though the loop itself has no implicit exit test.
+
 AIRD — AI Reasoning Difficulty
 --------------------------------
 

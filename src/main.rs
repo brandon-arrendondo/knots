@@ -122,6 +122,11 @@ struct Args {
     #[arg(long, value_name = "N")]
     external_calls_threshold: Option<u32>,
 
+    /// Exit 1 if any function has more than this many unreachable (dead-code)
+    /// basic blocks (default: off). C/C++/Rust only — 0 elsewhere.
+    #[arg(long, value_name = "N")]
+    unreachable_blocks_threshold: Option<u32>,
+
     /// Write detailed per-function report to this file (opt-in; omit to suppress the file)
     #[arg(long, value_name = "FILE")]
     report: Option<PathBuf>,
@@ -354,6 +359,7 @@ struct Thresholds {
     aird: Option<u32>,
     aicp: Option<u32>,
     external_calls: Option<u32>,
+    unreachable_blocks: Option<u32>,
 }
 
 struct RunContext {
@@ -383,6 +389,7 @@ impl Thresholds {
             || self.aird.is_some()
             || self.aicp.is_some()
             || self.external_calls.is_some()
+            || self.unreachable_blocks.is_some()
     }
 }
 
@@ -418,7 +425,7 @@ impl EffectiveThresholds {
         }
     }
 
-    fn active(&self) -> bool {
+    fn has_active_threshold(&self) -> bool {
         self.cli.active()
             || self.global.any_set()
             || self
@@ -458,6 +465,11 @@ impl EffectiveThresholds {
                 .external_calls
                 .or(lang_cfg.external_calls)
                 .or(self.global.external_calls),
+            unreachable_blocks: self
+                .cli
+                .unreachable_blocks
+                .or(lang_cfg.unreachable_blocks)
+                .or(self.global.unreachable_blocks),
         }
     }
 }
@@ -534,6 +546,10 @@ struct BaselineEntry {
     aird: u32,
     aicp: u32,
     external_calls: u32,
+    /// Absent from baselines written before this metric existed; defaults to
+    /// `0` so old baseline files keep loading without a version bump.
+    #[serde(default)]
+    unreachable_blocks: u32,
 }
 
 /// A baseline snapshot: the set of per-function scores at the time the gate was
@@ -582,6 +598,7 @@ fn baseline_from_metrics(metrics: &[FunctionMetrics]) -> Baseline {
             aird: f.aird,
             aicp: f.aicp,
             external_calls: f.external_calls,
+            unreachable_blocks: f.unreachable_blocks,
         })
         .collect();
     functions.sort_by(|a, b| (&a.file, &a.function).cmp(&(&b.file, &b.function)));
@@ -709,7 +726,7 @@ fn check_thresholds(
     baseline: Option<&Baseline>,
     changed: Option<&ChangedLines>,
 ) -> Result<()> {
-    if !t.active() {
+    if !t.has_active_threshold() {
         return Ok(());
     }
 
@@ -812,6 +829,14 @@ fn check_thresholds(
             func.external_calls,
             base.map(|b| b.external_calls),
             func.suppressed.contains("external_calls"),
+        );
+        check_u32_threshold(
+            &mut fv,
+            "UnreachableBlocks",
+            ft.unreachable_blocks,
+            func.unreachable_blocks,
+            base.map(|b| b.unreachable_blocks),
+            func.suppressed.contains("unreachable_blocks"),
         );
 
         if !fv.is_empty() {
@@ -985,6 +1010,7 @@ fn main() -> Result<()> {
         aird: args.aird_threshold,
         aicp: args.aicp_threshold,
         external_calls: args.external_calls_threshold,
+        unreachable_blocks: args.unreachable_blocks_threshold,
     };
     // Optional knots.toml — walked up from cwd. All fields optional; CLI
     // flags above always win over anything loaded here.
@@ -2078,6 +2104,7 @@ mod tests {
             external_calls: 0,
             state_coupling: coupling,
             file_ce: 0,
+            unreachable_blocks: 0,
             suppressed: HashSet::new(),
         }
     }
@@ -2151,6 +2178,7 @@ mod tests {
             aird: Some(n),
             aicp: None,
             external_calls: None,
+            unreachable_blocks: None,
         };
         EffectiveThresholds::new(cli, &None)
     }
@@ -2196,6 +2224,7 @@ mod tests {
             aird: None,
             aicp: None,
             external_calls: None,
+            unreachable_blocks: None,
         };
         let toml_src = "[thresholds]\nmccabe = 20\n";
         let cfg: KnotsToml = toml::from_str(toml_src).unwrap();
@@ -2217,6 +2246,7 @@ mod tests {
             aird: None,
             aicp: None,
             external_calls: None,
+            unreachable_blocks: None,
         };
         let toml_src = "[thresholds]\nmccabe = 10\n\n[c.thresholds]\nmccabe = 15\n";
         let cfg: KnotsToml = toml::from_str(toml_src).unwrap();

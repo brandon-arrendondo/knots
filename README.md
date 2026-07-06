@@ -104,6 +104,7 @@ Options:
   --aird-threshold <N>              Exit 1 if any function exceeds this AIRD (AI Reasoning Difficulty) score (recommended: 85)
   --aicp-threshold <N>              Exit 1 if any function exceeds this AICP (AI Context Pressure) score
   --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
+  --unreachable-blocks-threshold <N> Exit 1 if any function has more than this many unreachable (dead-code) basic blocks (C/C++/Rust only)
   --report <FILE>                   Write a detailed per-function report to this file (opt-in)
   --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see docs/baseline.rst)
   --write-baseline                  Snapshot current scores to --baseline and exit without gating

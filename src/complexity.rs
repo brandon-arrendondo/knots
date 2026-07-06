@@ -1736,6 +1736,122 @@ pub fn calculate_state_coupling(node: Node, source_code: &[u8]) -> u32 {
     explicit_params + self_fields.len() as u32
 }
 
+/// Counts statement-bearing basic blocks that can never execute: code
+/// written directly after a `return` in the same block, which the CFG
+/// builder still appends to a freshly-created successor block (needed to
+/// keep parsing the rest of the source) even though that block's only
+/// incoming edge says the function has already exited.
+///
+/// Only `Return` is treated this way — `Break`/`Continue` targets (a loop's
+/// after-block, its header) are genuinely reachable when the jump fires, so
+/// a block reached solely via those edge kinds is not dead code.
+///
+/// `key` is the substrate registry language key (`language_info_for_file`);
+/// CFG construction only models `c`/`cpp`/`rust`, so this returns `0` for
+/// every other language rather than guessing.
+pub fn calculate_unreachable_blocks(node: Node, source_code: &[u8], key: &str) -> u32 {
+    let Some(cfg) = lang_parsing_substrate::build_function_cfg(node, source_code, key) else {
+        return 0;
+    };
+    cfg.blocks
+        .iter()
+        .filter(|block| block.id != cfg.entry && !block.statements.is_empty())
+        .filter(|block| is_return_only_reachable(&cfg, block.id))
+        .count() as u32
+}
+
+/// True when every path into `block_id` is a `Return` edge — i.e. the block
+/// only exists because the CFG builder had to keep appending trailing
+/// statements after a `return`, not because normal control flow reaches it.
+fn is_return_only_reachable(cfg: &lang_parsing_substrate::FunctionCfg, block_id: usize) -> bool {
+    let preds = cfg.predecessors(block_id);
+    !preds.is_empty()
+        && preds
+            .iter()
+            .all(|(_, edge)| *edge == lang_parsing_substrate::CfgEdge::Return)
+}
+
+#[cfg(test)]
+mod unreachable_blocks_tests {
+    use super::*;
+
+    fn unreachable_for(
+        code: &str,
+        language: tree_sitter::Language,
+        fn_kind: &str,
+        key: &str,
+    ) -> u32 {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let func = lang_parsing_substrate::find_first_descendant(tree.root_node(), |n| {
+            n.kind() == fn_kind
+        })
+        .unwrap();
+        calculate_unreachable_blocks(func, code.as_bytes(), key)
+    }
+
+    fn c_unreachable(code: &str) -> u32 {
+        unreachable_for(
+            code,
+            crate::tree_sitter_c::LANGUAGE.into(),
+            "function_definition",
+            "c",
+        )
+    }
+
+    fn rust_unreachable(code: &str) -> u32 {
+        unreachable_for(
+            code,
+            crate::tree_sitter_rust::LANGUAGE.into(),
+            "function_item",
+            "rust",
+        )
+    }
+
+    #[test]
+    fn test_straight_line_has_no_unreachable_blocks() {
+        assert_eq!(c_unreachable("int f(void) { int x = 1; return x; }"), 0);
+    }
+
+    #[test]
+    fn test_dead_code_after_return_is_flagged() {
+        assert_eq!(c_unreachable("int f(void) { return 1; int x = 2; }"), 1);
+    }
+
+    #[test]
+    fn test_dead_code_after_return_in_branch_is_flagged() {
+        assert_eq!(
+            c_unreachable("int f(int x) { if (x) { return 1; int y = 2; } return 0; }"),
+            1
+        );
+    }
+
+    #[test]
+    fn test_break_target_is_not_flagged_as_unreachable() {
+        // `x = 1;` after the loop is genuinely reachable via the break, even
+        // though the loop itself has no implicit exit test.
+        assert_eq!(
+            rust_unreachable("fn f() { loop { break; } let x = 1; let _ = x; }"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_unmodeled_language_returns_zero() {
+        let code = "def f():\n    return 1\n    x = 2\n";
+        assert_eq!(
+            unreachable_for(
+                code,
+                crate::tree_sitter_python::LANGUAGE.into(),
+                "function_definition",
+                "python"
+            ),
+            0
+        );
+    }
+}
+
 #[cfg(test)]
 mod aird_tests {
     use super::*;

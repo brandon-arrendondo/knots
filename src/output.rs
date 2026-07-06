@@ -450,7 +450,8 @@ pub(crate) fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
                 "aird": f.aird,
                 "aicp": f.aicp,
                 "external_calls": f.external_calls,
-                "file_ce": f.file_ce
+                "file_ce": f.file_ce,
+                "unreachable_blocks": f.unreachable_blocks
             })
         })
         .collect();
@@ -482,7 +483,8 @@ pub(crate) fn emit_ndjson(all_metrics: &[FunctionMetrics]) -> Result<()> {
             "aird": f.aird,
             "aicp": f.aicp,
             "external_calls": f.external_calls,
-            "file_ce": f.file_ce
+            "file_ce": f.file_ce,
+            "unreachable_blocks": f.unreachable_blocks
         });
         serde_json::to_writer(&mut handle, &record).context("Failed to write NDJSON")?;
         writeln!(handle)?;
@@ -496,7 +498,7 @@ pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
 
     writeln!(
         handle,
-        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aird,aicp,external_calls,file_ce"
+        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aird,aicp,external_calls,file_ce,unreachable_blocks"
     )?;
 
     for f in all_metrics {
@@ -507,7 +509,7 @@ pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
         };
         writeln!(
             handle,
-            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{},{},{},{}",
             f.file_path,
             name,
             f.start_line,
@@ -523,7 +525,8 @@ pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
             f.aird,
             f.aicp,
             f.external_calls,
-            f.file_ce
+            f.file_ce,
+            f.unreachable_blocks
         )?;
     }
     Ok(())
@@ -585,6 +588,9 @@ pub(crate) fn write_detailed_report(
             if func.file_ce > 0 {
                 writeln!(file, "  File Ce: {}", func.file_ce)?;
             }
+            if func.unreachable_blocks > 0 {
+                writeln!(file, "  Unreachable Blocks: {}", func.unreachable_blocks)?;
+            }
             writeln!(file, "  Max Complexity: {}", func.max_complexity())?;
             writeln!(file)?;
         } else {
@@ -593,12 +599,17 @@ pub(crate) fn write_detailed_report(
             } else {
                 String::new()
             };
+            let unreachable_suffix = if func.unreachable_blocks > 0 {
+                format!(", Unreachable: {}", func.unreachable_blocks)
+            } else {
+                String::new()
+            };
             writeln!(
                 file,
-                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {}{})",
+                "{} {} (McCabe: {}, Cognitive: {}, Nesting: {}, SLOC: {}, ABC: {:.2}, Returns: {}, TestScore: {}, AIRD: {}, AICP: {}, ExtCalls: {}{}{})",
                 emoji, func_location(func), func.mccabe, func.cognitive, func.nesting,
                 func.sloc, func.abc_magnitude, func.return_count, func.test_scoring.total_score,
-                func.aird, func.aicp, func.external_calls, file_ce_suffix
+                func.aird, func.aicp, func.external_calls, file_ce_suffix, unreachable_suffix
             )?;
         }
     }

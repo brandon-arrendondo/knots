@@ -44,7 +44,8 @@ Each record contains all 15 fields:
       "doc_score": 0,
       "aird": 87,
       "aicp": 72,
-      "external_calls": 14
+      "external_calls": 14,
+      "unreachable_blocks": 0
     }
 
 NDJSON (newline-delimited JSON)
