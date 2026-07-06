@@ -282,9 +282,9 @@ dependencies = [
 
 [[package]]
 name = "lang-parsing-substrate"
-version = "0.1.4"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "462d27bf19f777a832e01efcffcdb74675fd8d27ea8f6e50dffd7337754549ba"
+checksum = "8e856ded86d86a5440efe110d4065b335b50c7362fff31f6fd86f8bab02cd995"
 dependencies = [
  "globset",
  "tree-sitter",
