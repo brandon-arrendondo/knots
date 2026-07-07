@@ -192,43 +192,62 @@ pub fn visit_functions<F>(cursor: &mut TreeCursor, source_code: &str, callback: 
 where
     F: FnMut(Node, &str),
 {
-    let node = cursor.node();
+    // Iterative pre-order walk driven entirely by the cursor's own
+    // navigation (no explicit stack needed) — a real-world file with a
+    // multi-thousand-deep nested control structure overflowed the call
+    // stack under the naive recursive version this replaces (the same
+    // failure mode `lang_parsing_substrate::query`'s traversal helpers
+    // guard against). `depth` tracks how many `goto_parent` calls are
+    // needed to get back to the node the caller handed us, so this never
+    // wanders into that node's own siblings — matching the old recursive
+    // function, which only ever recursed into children, never siblings,
+    // of its `node` argument.
+    let mut depth: u32 = 0;
+    loop {
+        let node = cursor.node();
 
-    if matches!(
-        node.kind(),
-        "function_definition"
-            | "function_item"
-            | "function_declaration"
-            | "function_expression"
-            | "arrow_function"
-            | "method_definition"
-            | "generator_function_declaration"
-            | "generator_function"
-            | "subprogram_body"
-            | "expression_function_declaration"
-            | "task_body"
-            | "method_declaration"
-            | "func_literal"
-            | "constructor_declaration"
-            | "local_function_statement"
-            | "init_declaration"
-            // Fortran: function subprogram, subroutine subprogram, module procedure, main program
-            | "function"
-            | "subroutine"
-            | "module_procedure"
-            | "program"
-    ) {
-        callback(node, source_code);
-    }
+        if matches!(
+            node.kind(),
+            "function_definition"
+                | "function_item"
+                | "function_declaration"
+                | "function_expression"
+                | "arrow_function"
+                | "method_definition"
+                | "generator_function_declaration"
+                | "generator_function"
+                | "subprogram_body"
+                | "expression_function_declaration"
+                | "task_body"
+                | "method_declaration"
+                | "func_literal"
+                | "constructor_declaration"
+                | "local_function_statement"
+                | "init_declaration"
+                // Fortran: function subprogram, subroutine subprogram, module procedure, main program
+                | "function"
+                | "subroutine"
+                | "module_procedure"
+                | "program"
+        ) {
+            callback(node, source_code);
+        }
 
-    if cursor.goto_first_child() {
+        if cursor.goto_first_child() {
+            depth += 1;
+            continue;
+        }
+
         loop {
-            visit_functions(cursor, source_code, callback);
-            if !cursor.goto_next_sibling() {
+            if depth == 0 {
+                return;
+            }
+            if cursor.goto_next_sibling() {
                 break;
             }
+            cursor.goto_parent();
+            depth -= 1;
         }
-        cursor.goto_parent();
     }
 }
 
@@ -405,44 +424,51 @@ pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
     }
 }
 
-fn get_function_name_from_declarator(node: Node, source_code: &str) -> Option<String> {
-    let mut cursor = node.walk();
-
-    for child in node.children(&mut cursor) {
-        if child.kind() == "function_declarator" {
-            return get_declarator_name(child, source_code);
-        } else if child.kind() == "pointer_declarator" {
-            if let Some(name) = get_function_name_from_declarator(child, source_code) {
-                return Some(name);
+// Iterative, not recursive: C's declarator grammar wraps at most one
+// meaningful inner declarator per pointer_declarator/function_declarator
+// node, so this only ever walks a single chain — but that chain's depth is
+// attacker-controlled (`int ****...****f(void)`), so it must not grow the
+// call stack the way the naive recursive version did.
+fn get_function_name_from_declarator(root: Node, source_code: &str) -> Option<String> {
+    let mut current = root;
+    loop {
+        let mut cursor = current.walk();
+        let mut next_pointer = None;
+        for child in current.children(&mut cursor) {
+            if child.kind() == "function_declarator" {
+                return get_declarator_name(child, source_code);
+            }
+            if child.kind() == "pointer_declarator" {
+                next_pointer = Some(child);
             }
         }
+        current = next_pointer?;
     }
-
-    None
 }
 
-fn get_declarator_name(node: Node, source_code: &str) -> Option<String> {
-    let mut cursor = node.walk();
-
-    for child in node.children(&mut cursor) {
-        match child.kind() {
-            "identifier"
-            | "qualified_identifier"
-            | "destructor_name"
-            | "operator_name"
-            | "field_identifier" => {
-                return Some(child.utf8_text(source_code.as_bytes()).ok()?.to_string());
-            }
-            "pointer_declarator" | "function_declarator" => {
-                if let Some(name) = get_declarator_name(child, source_code) {
-                    return Some(name);
+// Iterative, not recursive: see get_function_name_from_declarator's comment.
+fn get_declarator_name(root: Node, source_code: &str) -> Option<String> {
+    let mut current = root;
+    loop {
+        let mut cursor = current.walk();
+        let mut next = None;
+        for child in current.children(&mut cursor) {
+            match child.kind() {
+                "identifier"
+                | "qualified_identifier"
+                | "destructor_name"
+                | "operator_name"
+                | "field_identifier" => {
+                    return Some(child.utf8_text(source_code.as_bytes()).ok()?.to_string());
                 }
+                "pointer_declarator" | "function_declarator" => {
+                    next = Some(child);
+                }
+                _ => {}
             }
-            _ => {}
         }
+        current = next?;
     }
-
-    None
 }
 
 /// Collects all function and macro names defined in this translation unit.
@@ -453,44 +479,48 @@ pub fn collect_local_names(root: Node, source_code: &str) -> HashSet<String> {
     names
 }
 
-fn collect_local_names_recursive(node: Node, source_code: &str, names: &mut HashSet<String>) {
-    match node.kind() {
-        "function_definition"
-        | "function_item"
-        | "function_declaration"
-        | "function_expression"
-        | "arrow_function"
-        | "method_definition"
-        | "generator_function_declaration"
-        | "generator_function"
-        | "subprogram_body"
-        | "expression_function_declaration"
-        | "task_body"
-        | "method_declaration"
-        | "func_literal"
-        | "constructor_declaration"
-        | "local_function_statement"
-        | "init_declaration"
-        | "function"
-        | "subroutine"
-        | "module_procedure"
-        | "program" => {
-            if let Some(name) = get_function_name(node, source_code) {
-                names.insert(name);
-            }
-        }
-        "preproc_def" | "preproc_function_def" => {
-            if let Some(name_node) = node.child_by_field_name("name") {
-                if let Ok(name) = name_node.utf8_text(source_code.as_bytes()) {
-                    names.insert(name.to_string());
+// Iterative (explicit stack), not recursive: a real-world file with a
+// multi-thousand-deep nested control structure overflowed the call stack
+// under a naive recursive walk of this exact shape.
+fn collect_local_names_recursive(root: Node, source_code: &str, names: &mut HashSet<String>) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        match node.kind() {
+            "function_definition"
+            | "function_item"
+            | "function_declaration"
+            | "function_expression"
+            | "arrow_function"
+            | "method_definition"
+            | "generator_function_declaration"
+            | "generator_function"
+            | "subprogram_body"
+            | "expression_function_declaration"
+            | "task_body"
+            | "method_declaration"
+            | "func_literal"
+            | "constructor_declaration"
+            | "local_function_statement"
+            | "init_declaration"
+            | "function"
+            | "subroutine"
+            | "module_procedure"
+            | "program" => {
+                if let Some(name) = get_function_name(node, source_code) {
+                    names.insert(name);
                 }
             }
+            "preproc_def" | "preproc_function_def" => {
+                if let Some(name_node) = node.child_by_field_name("name") {
+                    if let Ok(name) = name_node.utf8_text(source_code.as_bytes()) {
+                        names.insert(name.to_string());
+                    }
+                }
+            }
+            _ => {}
         }
-        _ => {}
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_local_names_recursive(child, source_code, names);
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
     }
 }
 
@@ -533,7 +563,22 @@ fn handle_call_node(
     }
 }
 
+// Iterative (explicit stack): see collect_local_names_recursive's comment.
 fn collect_external_calls_recursive(
+    root: Node,
+    source_code: &str,
+    local_names: &HashSet<String>,
+    external: &mut HashSet<String>,
+) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        collect_external_calls_one(node, source_code, local_names, external);
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
+    }
+}
+
+fn collect_external_calls_one(
     node: Node,
     source_code: &str,
     local_names: &HashSet<String>,
@@ -592,10 +637,6 @@ fn collect_external_calls_recursive(
                 external.insert(name.to_string());
             }
         }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_external_calls_recursive(child, source_code, local_names, external);
     }
 }
 
@@ -674,20 +715,22 @@ pub fn nested_fn_sloc(outer: Node, source_code: &str, sloc_mode: SlocMode) -> u3
     total
 }
 
-fn accumulate_nested_sloc(node: Node, source_code: &str, sloc_mode: SlocMode, total: &mut u32) {
-    if is_function_kind(node.kind()) && !is_macro_function_definition(node) {
-        *total += match sloc_mode {
-            SlocMode::Python => calculate_sloc_python(node, source_code.as_bytes()),
-            SlocMode::Ada => calculate_sloc_ada(node, source_code.as_bytes()),
-            SlocMode::Fortran => calculate_sloc_fortran(node, source_code.as_bytes()),
-            SlocMode::Lua => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
-            SlocMode::Default => calculate_sloc(node, source_code.as_bytes()),
-        };
-        return;
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        accumulate_nested_sloc(child, source_code, sloc_mode, total);
+// Iterative (explicit stack): see collect_local_names_recursive's comment.
+fn accumulate_nested_sloc(root: Node, source_code: &str, sloc_mode: SlocMode, total: &mut u32) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if is_function_kind(node.kind()) && !is_macro_function_definition(node) {
+            *total += match sloc_mode {
+                SlocMode::Python => calculate_sloc_python(node, source_code.as_bytes()),
+                SlocMode::Ada => calculate_sloc_ada(node, source_code.as_bytes()),
+                SlocMode::Fortran => calculate_sloc_fortran(node, source_code.as_bytes()),
+                SlocMode::Lua => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
+                SlocMode::Default => calculate_sloc(node, source_code.as_bytes()),
+            };
+            continue;
+        }
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
     }
 }
 

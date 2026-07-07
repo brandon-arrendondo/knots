@@ -23,13 +23,28 @@ fn mccabe_logical_op(node: Node, source_code: &[u8], valid_ops: &[&str], complex
     }
 }
 
-fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
-    // Skip unnamed tokens (punctuation, keyword literals). Without this guard, Ada's named
-    // `guard` rule would fire on Swift's unnamed `guard` keyword token, and similar cross-
-    // grammar collisions would produce false positives.
-    if !node.is_named() {
-        return;
+// Iterative (explicit stack), not recursive: a real-world file with a
+// multi-thousand-deep nested control structure overflowed the call stack
+// under a naive recursive walk of this exact shape. Order doesn't matter —
+// every match arm below only increments `complexity` — so children are
+// pushed in whatever order `Node::children` yields them.
+fn visit_node_mccabe(root: Node, source_code: &[u8], complexity: &mut u32) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        // Skip unnamed tokens (punctuation, keyword literals) and their subtree.
+        // Without this guard, Ada's named `guard` rule would fire on Swift's
+        // unnamed `guard` keyword token, and similar cross-grammar collisions
+        // would produce false positives.
+        if !node.is_named() {
+            continue;
+        }
+        visit_node_mccabe_one(node, source_code, complexity);
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
     }
+}
+
+fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
     match node.kind() {
         // Rust ? operator / Swift try? — both use "try_expression".
         // No try_operator child → Rust ? (always a branch) or Scala/Kotlin try-block (skip).
@@ -182,11 +197,6 @@ fn visit_node_mccabe(node: Node, source_code: &[u8], complexity: &mut u32) {
 
         _ => {}
     }
-
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        visit_node_mccabe(child, source_code, complexity);
-    }
 }
 
 /// Calculates cognitive complexity for a function
@@ -198,236 +208,226 @@ pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
 }
 
 // Handles binary/boolean/logical operator chain-counting for cognitive complexity.
-// Returns true if the node was a logical op of a recognized kind (caller should return early).
-fn handle_logical_op(
+// Returns the matched operator text (to thread as the new `parent_binary_op`) if
+// `node` is a logical op of a recognized kind, or `None` if the caller should fall
+// through to the default per-node handling.
+fn handle_logical_op<'a>(
     node: Node,
-    source_code: &[u8],
-    nesting_level: u32,
+    source_code: &'a [u8],
     complexity: &mut u32,
     parent_binary_op: Option<&str>,
     valid_ops: &[&str],
-) -> bool {
-    let Some(op) = node.child_by_field_name("operator") else {
-        return false;
-    };
-    let Ok(op_text) = op.utf8_text(source_code) else {
-        return false;
-    };
+) -> Option<&'a str> {
+    let op = node.child_by_field_name("operator")?;
+    let op_text = op.utf8_text(source_code).ok()?;
     if !valid_ops.contains(&op_text) {
-        return false;
+        return None;
     }
     if parent_binary_op != Some(op_text) {
         *complexity += 1;
     }
-    visit_children_cognitive(node, source_code, nesting_level, complexity, Some(op_text));
-    true
+    Some(op_text)
 }
 
-fn visit_node_cognitive(
-    node: Node,
-    source_code: &[u8],
+// Iterative (explicit stack), not recursive: see visit_node_mccabe's comment. The
+// stack carries the per-node state (`nesting_level`, `parent_binary_op`) that used
+// to be threaded through recursive call arguments. Each match arm below either
+// pushes its own choice of node/state and `continue`s (mirroring the original
+// function's early `return` after a specialized `visit_children_cognitive` call),
+// or falls through to the shared push at the bottom (mirroring the original
+// function's fallthrough to its own trailing `visit_children_cognitive` call).
+fn visit_node_cognitive<'a>(
+    root: Node<'a>,
+    source_code: &'a [u8],
     nesting_level: u32,
     complexity: &mut u32,
-    parent_binary_op: Option<&str>,
+    parent_binary_op: Option<&'a str>,
 ) {
-    match node.kind() {
-        // if/else — special: Ada bare `else` keyword adds a flat +1.
-        "if_statement" | "if_expression" => {
-            *complexity += 1 + nesting_level;
-            let mut cur = node.walk();
-            if node
-                .children(&mut cur)
-                .any(|c| !c.is_named() && c.kind() == "else")
-            {
+    let mut stack = vec![(root, nesting_level, parent_binary_op)];
+    while let Some((node, nesting_level, parent_binary_op)) = stack.pop() {
+        match node.kind() {
+            // if/else — special: Ada bare `else` keyword adds a flat +1.
+            "if_statement" | "if_expression" => {
+                *complexity += 1 + nesting_level;
+                let mut cur = node.walk();
+                if node
+                    .children(&mut cur)
+                    .any(|c| !c.is_named() && c.kind() == "else")
+                {
+                    *complexity += 1;
+                }
+                push_children_cognitive(&mut stack, node, nesting_level + 1, None);
+                continue;
+            }
+
+            // else clause — flat +1; if it contains an else-if, recurse into that child directly.
+            "else_clause" => {
+                *complexity += 1;
+                let mut cursor = node.walk();
+                let target = node
+                    .children(&mut cursor)
+                    .find(|c| matches!(c.kind(), "if_statement" | "if_expression"))
+                    .unwrap_or(node);
+                push_children_cognitive(&mut stack, target, nesting_level, None);
+                continue;
+            }
+
+            // try has NO cost and NO nesting increment; only catch/except gets the penalty.
+            "try_statement" => {
+                push_children_cognitive(&mut stack, node, nesting_level, None);
+                continue;
+            }
+
+            // Closures/lambdas: nesting +1, no base cost.
+            // Covers C++/Rust, Python, JS/TS arrow functions, C# delegates/local fns,
+            // Kotlin lambdas, Go closures.
+            "lambda_expression"
+            | "closure_expression"
+            | "lambda"
+            | "arrow_function"
+            | "anonymous_method_expression"
+            | "local_function_statement"
+            | "lambda_literal"
+            | "anonymous_function"
+            | "annotated_lambda"
+            | "func_literal" => {
+                push_children_cognitive(&mut stack, node, nesting_level + 1, None);
+                continue;
+            }
+
+            // Nesting structures: +1 + nesting_level, children at nesting+1.
+            // Covers loops, switch/match/select, catch/except across all supported languages.
+            "while_statement"
+            | "do_statement"
+            | "for_statement"
+            | "for_range_loop"
+            | "for_in_statement"
+            | "while_expression"
+            | "for_expression"
+            | "loop_expression"
+            | "do_while_expression"
+            | "switch_statement"
+            | "match_expression"
+            | "match_statement"
+            | "catch_clause"
+            | "except_clause"
+            | "loop_statement"
+            | "case_statement"
+            | "exception_handler"
+            | "selective_accept"
+            | "timed_entry_call"
+            | "conditional_entry_call"
+            | "asynchronous_select"
+            | "expression_switch_statement"
+            | "type_switch_statement"
+            | "select_statement"
+            | "enhanced_for_statement"
+            | "switch_expression"
+            | "foreach_statement"
+            | "do_while_statement"
+            | "when_expression"
+            | "catch_block"
+            | "guard_statement"
+            | "repeat_while_statement"
+            | "repeat_statement"
+            | "select_case_statement"
+            | "select_rank_statement"
+            | "select_type_statement"
+            | "where_statement" => {
+                *complexity += 1 + nesting_level;
+                push_children_cognitive(&mut stack, node, nesting_level + 1, None);
+                continue;
+            }
+
+            // Flat branches: +1, children at same nesting.
+            // elif/elsif/elseif/elsewhere across Python, Ada, PHP, Lua, Fortran.
+            "elif_clause"
+            | "elsif_statement_item"
+            | "else_if_clause"
+            | "elseif_statement"
+            | "elseif_clause"
+            | "elsewhere_clause" => {
+                *complexity += 1;
+                push_children_cognitive(&mut stack, node, nesting_level, None);
+                continue;
+            }
+
+            // Flat jumps: +1, no recursion needed.
+            // goto/throw/raise across C/C++, Rust, Python, PHP (throw_expression); Ada guard; Fortran arithmetic-if.
+            "goto_statement"
+            | "throw_statement"
+            | "raise_statement"
+            | "raise_expression"
+            | "guard"
+            | "throw_expression"
+            | "arithmetic_if_statement" => {
                 *complexity += 1;
             }
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
 
-        // else clause — flat +1; if it contains an else-if, recurse into that child directly.
-        "else_clause" => {
-            *complexity += 1;
-            let mut cursor = node.walk();
-            let target = node
-                .children(&mut cursor)
-                .find(|c| matches!(c.kind(), "if_statement" | "if_expression"))
-                .unwrap_or(node);
-            visit_children_cognitive(target, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // try has NO cost and NO nesting increment; only catch/except gets the penalty.
-        "try_statement" => {
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // Closures/lambdas: nesting +1, no base cost.
-        // Covers C++/Rust, Python, JS/TS arrow functions, C# delegates/local fns,
-        // Kotlin lambdas, Go closures.
-        "lambda_expression"
-        | "closure_expression"
-        | "lambda"
-        | "arrow_function"
-        | "anonymous_method_expression"
-        | "local_function_statement"
-        | "lambda_literal"
-        | "anonymous_function"
-        | "annotated_lambda"
-        | "func_literal" => {
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Nesting structures: +1 + nesting_level, children at nesting+1.
-        // Covers loops, switch/match/select, catch/except across all supported languages.
-        "while_statement"
-        | "do_statement"
-        | "for_statement"
-        | "for_range_loop"
-        | "for_in_statement"
-        | "while_expression"
-        | "for_expression"
-        | "loop_expression"
-        | "do_while_expression"
-        | "switch_statement"
-        | "match_expression"
-        | "match_statement"
-        | "catch_clause"
-        | "except_clause"
-        | "loop_statement"
-        | "case_statement"
-        | "exception_handler"
-        | "selective_accept"
-        | "timed_entry_call"
-        | "conditional_entry_call"
-        | "asynchronous_select"
-        | "expression_switch_statement"
-        | "type_switch_statement"
-        | "select_statement"
-        | "enhanced_for_statement"
-        | "switch_expression"
-        | "foreach_statement"
-        | "do_while_statement"
-        | "when_expression"
-        | "catch_block"
-        | "guard_statement"
-        | "repeat_while_statement"
-        | "repeat_statement"
-        | "select_case_statement"
-        | "select_rank_statement"
-        | "select_type_statement"
-        | "where_statement" => {
-            *complexity += 1 + nesting_level;
-            visit_children_cognitive(node, source_code, nesting_level + 1, complexity, None);
-            return;
-        }
-
-        // Flat branches: +1, children at same nesting.
-        // elif/elsif/elseif/elsewhere across Python, Ada, PHP, Lua, Fortran.
-        "elif_clause"
-        | "elsif_statement_item"
-        | "else_if_clause"
-        | "elseif_statement"
-        | "elseif_clause"
-        | "elsewhere_clause" => {
-            *complexity += 1;
-            visit_children_cognitive(node, source_code, nesting_level, complexity, None);
-            return;
-        }
-
-        // Flat jumps: +1, no recursion needed.
-        // goto/throw/raise across C/C++, Rust, Python, PHP (throw_expression); Ada guard; Fortran arithmetic-if.
-        "goto_statement"
-        | "throw_statement"
-        | "raise_statement"
-        | "raise_expression"
-        | "guard"
-        | "throw_expression"
-        | "arithmetic_if_statement" => {
-            *complexity += 1;
-        }
-
-        // Logical operator chains: +1 per distinct operator kind, not per operator in a sequence.
-        // binary_expression: C/C++/Rust/PHP (&&, ||, ??, and, or)
-        // boolean_operator: Python (and, or)
-        // infix_expression: Scala (&&, ||)
-        // logical_expression: Fortran (.and., .or., .AND., .OR.)
-        "binary_expression" | "boolean_operator" | "infix_expression" | "logical_expression" => {
-            let valid_ops: &[&str] = match node.kind() {
-                "binary_expression" => &["&&", "||", "??", "and", "or"],
-                "boolean_operator" => &["and", "or"],
-                "infix_expression" => &["&&", "||"],
-                _ => &[".and.", ".or.", ".AND.", ".OR."],
-            };
-            if handle_logical_op(
-                node,
-                source_code,
-                nesting_level,
-                complexity,
-                parent_binary_op,
-                valid_ops,
-            ) {
-                return;
+            // Logical operator chains: +1 per distinct operator kind, not per operator in a sequence.
+            // binary_expression: C/C++/Rust/PHP (&&, ||, ??, and, or)
+            // boolean_operator: Python (and, or)
+            // infix_expression: Scala (&&, ||)
+            // logical_expression: Fortran (.and., .or., .AND., .OR.)
+            "binary_expression" | "boolean_operator" | "infix_expression"
+            | "logical_expression" => {
+                let valid_ops: &[&str] = match node.kind() {
+                    "binary_expression" => &["&&", "||", "??", "and", "or"],
+                    "boolean_operator" => &["and", "or"],
+                    "infix_expression" => &["&&", "||"],
+                    _ => &[".and.", ".or.", ".AND.", ".OR."],
+                };
+                if let Some(op_text) =
+                    handle_logical_op(node, source_code, complexity, parent_binary_op, valid_ops)
+                {
+                    push_children_cognitive(&mut stack, node, nesting_level, Some(op_text));
+                    continue;
+                }
             }
-        }
 
-        // Ada: logical operators (and / or / xor) as unnamed keyword children of expression.
-        // Count each new operator sequence, not each occurrence.
-        "expression" => {
-            let mut last_op: Option<&str> = None;
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
-                    let op = child.kind();
-                    if last_op != Some(op) {
-                        *complexity += 1;
-                        last_op = Some(op);
+            // Ada: logical operators (and / or / xor) as unnamed keyword children of expression.
+            // Count each new operator sequence, not each occurrence.
+            "expression" => {
+                let mut last_op: Option<&str> = None;
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                        let op = child.kind();
+                        if last_op != Some(op) {
+                            *complexity += 1;
+                            last_op = Some(op);
+                        }
                     }
                 }
             }
-        }
 
-        // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
-        "exit_statement" => {
-            let mut cur = node.walk();
-            if node
-                .children(&mut cur)
-                .any(|c| !c.is_named() && c.kind() == "when")
-            {
-                *complexity += 1;
+            // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
+            "exit_statement" => {
+                let mut cur = node.walk();
+                if node
+                    .children(&mut cur)
+                    .any(|c| !c.is_named() && c.kind() == "when")
+                {
+                    *complexity += 1;
+                }
             }
+
+            _ => {}
         }
 
-        _ => {}
+        push_children_cognitive(&mut stack, node, nesting_level, parent_binary_op);
     }
-
-    visit_children_cognitive(
-        node,
-        source_code,
-        nesting_level,
-        complexity,
-        parent_binary_op,
-    );
 }
 
-fn visit_children_cognitive(
-    node: Node,
-    source_code: &[u8],
+fn push_children_cognitive<'a>(
+    stack: &mut Vec<(Node<'a>, u32, Option<&'a str>)>,
+    node: Node<'a>,
     nesting_level: u32,
-    complexity: &mut u32,
-    parent_binary_op: Option<&str>,
+    parent_binary_op: Option<&'a str>,
 ) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        visit_node_cognitive(
-            child,
-            source_code,
-            nesting_level,
-            complexity,
-            parent_binary_op,
-        );
+        stack.push((child, nesting_level, parent_binary_op));
     }
 }
 
@@ -438,15 +438,30 @@ pub fn calculate_nesting_depth(node: Node) -> u32 {
     max_depth
 }
 
-fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
-    // Skip anonymous/terminal nodes (e.g. keyword tokens). In Python, the `lambda` keyword
-    // token and the `lambda` expression node share the same kind string; without this guard
-    // nesting depth would be double-counted for lambda expressions.
-    if !node.is_named() {
-        return;
-    }
+// Iterative (explicit stack carrying each node's depth): see visit_node_mccabe's
+// comment on why this can't be recursive.
+fn visit_node_nesting(root: Node, current_depth: u32, max_depth: &mut u32) {
+    let mut stack = vec![(root, current_depth)];
+    while let Some((node, current_depth)) = stack.pop() {
+        // Skip anonymous/terminal nodes (e.g. keyword tokens) and their subtree.
+        // In Python, the `lambda` keyword token and the `lambda` expression node
+        // share the same kind string; without this guard nesting depth would be
+        // double-counted for lambda expressions.
+        if !node.is_named() {
+            continue;
+        }
 
-    let new_depth = match node.kind() {
+        let new_depth = visit_node_nesting_depth(node, current_depth, max_depth);
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            stack.push((child, new_depth));
+        }
+    }
+}
+
+fn visit_node_nesting_depth(node: Node, current_depth: u32, max_depth: &mut u32) -> u32 {
+    match node.kind() {
         // C/C++ control structures
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
         | "for_range_loop" | "switch_statement" | "catch_clause" | "lambda_expression"
@@ -485,11 +500,6 @@ fn visit_node_nesting(node: Node, current_depth: u32, max_depth: &mut u32) {
             depth
         }
         _ => current_depth,
-    };
-
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        visit_node_nesting(child, new_depth, max_depth);
     }
 }
 
@@ -752,7 +762,23 @@ fn abc_exit_statement_ada(node: Node, conditions: &mut u32) {
     }
 }
 
+// Iterative (explicit stack): see visit_node_mccabe's comment.
 fn visit_node_abc(
+    root: Node,
+    source_code: &[u8],
+    assignments: &mut u32,
+    branches: &mut u32,
+    conditions: &mut u32,
+) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        visit_node_abc_one(node, source_code, assignments, branches, conditions);
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
+    }
+}
+
+fn visit_node_abc_one(
     node: Node,
     source_code: &[u8],
     assignments: &mut u32,
@@ -911,11 +937,6 @@ fn visit_node_abc(
 
         _ => {}
     }
-
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        visit_node_abc(child, source_code, assignments, branches, conditions);
-    }
 }
 
 /// Calculates the number of return statements in a function
@@ -925,19 +946,21 @@ pub fn calculate_return_count(node: Node) -> u32 {
     count
 }
 
-fn visit_node_returns(node: Node, count: &mut u32) {
-    if matches!(
-        node.kind(),
-        "return_statement" | "return_expression"
-        // Ada uses split names for simple and extended returns
-        | "simple_return_statement" | "extended_return_statement"
-    ) {
-        *count += 1;
-    }
+// Iterative (explicit stack): see visit_node_mccabe's comment.
+fn visit_node_returns(root: Node, count: &mut u32) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if matches!(
+            node.kind(),
+            "return_statement" | "return_expression"
+            // Ada uses split names for simple and extended returns
+            | "simple_return_statement" | "extended_return_statement"
+        ) {
+            *count += 1;
+        }
 
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        visit_node_returns(child, count);
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
     }
 }
 
@@ -1138,41 +1161,36 @@ fn dep_check_global_assignment(node: Node, source_code: &[u8], modifies_globals:
     }
 }
 
+// Iterative (explicit stack): see visit_node_mccabe's comment.
 fn visit_node_dependencies(
-    node: Node,
+    root: Node,
     source_code: &[u8],
     has_io: &mut bool,
     has_allocation: &mut bool,
     has_system_calls: &mut bool,
     modifies_globals: &mut bool,
 ) {
-    if matches!(node.kind(), "call_expression" | "call") {
-        if let Some(name) = node
-            .child_by_field_name("function")
-            .and_then(|f| f.utf8_text(source_code).ok())
-        {
-            dep_classify_call(name, has_io, has_allocation, has_system_calls);
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if matches!(node.kind(), "call_expression" | "call") {
+            if let Some(name) = node
+                .child_by_field_name("function")
+                .and_then(|f| f.utf8_text(source_code).ok())
+            {
+                dep_classify_call(name, has_io, has_allocation, has_system_calls);
+            }
         }
-    }
 
-    if matches!(node.kind(), "new_expression" | "delete_expression") {
-        *has_allocation = true;
-    }
+        if matches!(node.kind(), "new_expression" | "delete_expression") {
+            *has_allocation = true;
+        }
 
-    if node.kind() == "assignment_expression" {
-        dep_check_global_assignment(node, source_code, modifies_globals);
-    }
+        if node.kind() == "assignment_expression" {
+            dep_check_global_assignment(node, source_code, modifies_globals);
+        }
 
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        visit_node_dependencies(
-            child,
-            source_code,
-            has_io,
-            has_allocation,
-            has_system_calls,
-            modifies_globals,
-        );
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
     }
 }
 
@@ -1218,45 +1236,47 @@ fn calculate_observable_behavior_score(node: Node, source_code: &[u8]) -> u32 {
     score.min(10)
 }
 
+// Iterative (explicit stack): see visit_node_mccabe's comment.
 fn visit_node_observability(
-    node: Node,
+    root: Node,
     source_code: &[u8],
     has_io: &mut bool,
     has_random: &mut bool,
     has_time: &mut bool,
 ) {
-    if node.kind() == "call_expression" || node.kind() == "call" {
-        if let Some(function) = node.child_by_field_name("function") {
-            if let Ok(func_name) = function.utf8_text(source_code) {
-                if matches!(
-                    func_name,
-                    "fopen"
-                        | "fclose"
-                        | "fread"
-                        | "fwrite"
-                        | "fprintf"
-                        | "printf"
-                        | "scanf"
-                        | "puts"
-                        | "open"   // Python
-                        | "print"  // Python
-                        | "input" // Python
-                ) {
-                    *has_io = true;
-                }
-                if matches!(func_name, "rand" | "srand" | "random") {
-                    *has_random = true;
-                }
-                if matches!(func_name, "time" | "clock" | "gettimeofday") {
-                    *has_time = true;
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if node.kind() == "call_expression" || node.kind() == "call" {
+            if let Some(function) = node.child_by_field_name("function") {
+                if let Ok(func_name) = function.utf8_text(source_code) {
+                    if matches!(
+                        func_name,
+                        "fopen"
+                            | "fclose"
+                            | "fread"
+                            | "fwrite"
+                            | "fprintf"
+                            | "printf"
+                            | "scanf"
+                            | "puts"
+                            | "open"   // Python
+                            | "print"  // Python
+                            | "input" // Python
+                    ) {
+                        *has_io = true;
+                    }
+                    if matches!(func_name, "rand" | "srand" | "random") {
+                        *has_random = true;
+                    }
+                    if matches!(func_name, "time" | "clock" | "gettimeofday") {
+                        *has_time = true;
+                    }
                 }
             }
         }
-    }
 
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        visit_node_observability(child, source_code, has_io, has_random, has_time);
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
     }
 }
 
@@ -1637,24 +1657,30 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
     }
 }
 
-fn count_c_params_in_subtree(node: Node) -> u32 {
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "parameter_list" {
-            let mut inner = child.walk();
-            return child
-                .children(&mut inner)
-                .filter(|c| c.kind() == "parameter_declaration")
-                .count() as u32;
-        }
-        if child.kind().contains("declarator") {
-            let n = count_c_params_in_subtree(child);
-            if n > 0 {
-                return n;
+// Iterative, not recursive: see get_function_name_from_declarator's comment
+// in lib.rs — declarator chains are attacker-controlled in depth.
+fn count_c_params_in_subtree(root: Node) -> u32 {
+    let mut current = root;
+    loop {
+        let mut cursor = current.walk();
+        let mut next_declarator = None;
+        for child in current.children(&mut cursor) {
+            if child.kind() == "parameter_list" {
+                let mut inner = child.walk();
+                return child
+                    .children(&mut inner)
+                    .filter(|c| c.kind() == "parameter_declaration")
+                    .count() as u32;
+            }
+            if child.kind().contains("declarator") {
+                next_declarator = Some(child);
             }
         }
+        match next_declarator {
+            Some(next) => current = next,
+            None => return 0,
+        }
     }
-    0
 }
 
 // Returns the name from `node.child_by_field_name(name_field)` when
@@ -1694,28 +1720,35 @@ fn extract_navigation_self_field<'a>(node: Node, source_code: &'a [u8]) -> Optio
     }
 }
 
-fn collect_self_fields_recursive(node: Node, source_code: &[u8], fields: &mut HashSet<String>) {
-    let extracted: Option<&str> = match node.kind() {
-        "field_expression" => try_extract_named_field(node, source_code, "value", "self", "field"),
-        "attribute" => try_extract_named_field(node, source_code, "object", "self", "attribute"),
-        "member_expression" => {
-            try_extract_named_field(node, source_code, "object", "this", "property")
+// Iterative (explicit stack): see visit_node_mccabe's comment.
+fn collect_self_fields_recursive(root: Node, source_code: &[u8], fields: &mut HashSet<String>) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        let extracted: Option<&str> = match node.kind() {
+            "field_expression" => {
+                try_extract_named_field(node, source_code, "value", "self", "field")
+            }
+            "attribute" => {
+                try_extract_named_field(node, source_code, "object", "self", "attribute")
+            }
+            "member_expression" => {
+                try_extract_named_field(node, source_code, "object", "this", "property")
+            }
+            "field_access" => try_extract_named_field(node, source_code, "object", "this", "field"),
+            "member_access_expression" => {
+                // C#: expression == "this"; PHP: object == "$this" (different field names, no ambiguity)
+                try_extract_named_field(node, source_code, "expression", "this", "name").or_else(
+                    || try_extract_named_field(node, source_code, "object", "$this", "name"),
+                )
+            }
+            "navigation_expression" => extract_navigation_self_field(node, source_code),
+            _ => None,
+        };
+        if let Some(name) = extracted {
+            fields.insert(name.to_string());
         }
-        "field_access" => try_extract_named_field(node, source_code, "object", "this", "field"),
-        "member_access_expression" => {
-            // C#: expression == "this"; PHP: object == "$this" (different field names, no ambiguity)
-            try_extract_named_field(node, source_code, "expression", "this", "name")
-                .or_else(|| try_extract_named_field(node, source_code, "object", "$this", "name"))
-        }
-        "navigation_expression" => extract_navigation_self_field(node, source_code),
-        _ => None,
-    };
-    if let Some(name) = extracted {
-        fields.insert(name.to_string());
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_self_fields_recursive(child, source_code, fields);
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
     }
 }
 
@@ -2137,16 +2170,7 @@ mod state_coupling_tests {
 /// Find the first node whose kind matches `target` in a depth-first search.
 #[cfg(test)]
 fn find_node_kind<'a>(node: tree_sitter::Node<'a>, target: &str) -> Option<tree_sitter::Node<'a>> {
-    if node.kind() == target {
-        return Some(node);
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if let Some(found) = find_node_kind(child, target) {
-            return Some(found);
-        }
-    }
-    None
+    lang_parsing_substrate::find_first_descendant(node, |n| n.kind() == target)
 }
 
 #[cfg(test)]
