@@ -623,6 +623,7 @@ pub(crate) fn display_recursive_summary(
     skipped_files: usize,
     report_path: Option<&Path>,
     coupling: Option<&[FileCoupling]>,
+    duplicate_groups: Option<&[Vec<crate::duplicates::DuplicateMember>]>,
 ) {
     let mut sorted = all_metrics.to_vec();
     sorted.sort_by_key(|b| Reverse(b.max_complexity()));
@@ -721,6 +722,9 @@ pub(crate) fn display_recursive_summary(
     if let Some(coupling) = coupling {
         display_file_coupling(coupling);
     }
+    if let Some(groups) = duplicate_groups {
+        display_duplicate_groups(groups);
+    }
     println!("\n=== FILES PROCESSED ===\n");
     println!("  Total files found: {}", total_files);
     println!("  Successfully processed: {}", total_files - skipped_files);
@@ -754,6 +758,37 @@ pub(crate) fn display_file_coupling(coupling: &[FileCoupling]) {
 
     let by_ca = sorted_by_ca(&coupled);
     print_coupling_list("Most depended-upon (high Ca — risky to change)", &by_ca);
+}
+
+/// Prints structurally duplicated functions found by `--find-duplicates`.
+/// Groups are already sorted largest-first by `find_duplicate_groups`.
+pub(crate) fn display_duplicate_groups(groups: &[Vec<crate::duplicates::DuplicateMember>]) {
+    if groups.is_empty() {
+        return;
+    }
+
+    println!("\n=== DUPLICATE CODE (structural clones) ===\n");
+    println!(
+        "  {} group(s) of structurally identical functions found.",
+        groups.len()
+    );
+
+    for (i, group) in groups.iter().enumerate() {
+        let node_count = group[0].node_count;
+        println!(
+            "\n  {}. {} matches (~{} AST nodes each):",
+            i + 1,
+            group.len(),
+            node_count
+        );
+        for member in group {
+            let name = member.name.as_deref().unwrap_or("<anonymous>");
+            println!(
+                "    {}:{}-{} {}",
+                member.file_path, member.start_line, member.end_line, name
+            );
+        }
+    }
 }
 
 fn sorted_by_instability<'a>(coupled: &[&'a FileCoupling]) -> Vec<&'a FileCoupling> {

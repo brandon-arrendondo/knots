@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tree_sitter::Tree;
 
 mod config;
+mod duplicates;
 mod output;
 use config::KnotsToml;
 use knots::{
@@ -181,6 +182,14 @@ struct Args {
     /// Mostly useful with --recursive.
     #[arg(short = 'l', long = "language", value_name = "LANG", action = clap::ArgAction::Append)]
     languages: Vec<String>,
+
+    /// Report structurally duplicated functions across the corpus (Type-1/
+    /// Type-2 clones: identical shape, regardless of renamed identifiers or
+    /// literals). Only meaningful with --recursive; ignored otherwise. Adds
+    /// a second parse pass over the corpus, so it's opt-in rather than
+    /// always-on. Text output only.
+    #[arg(long)]
+    find_duplicates: bool,
 }
 
 /// Metrics that `--explain` can describe at the command line.
@@ -376,6 +385,8 @@ struct RunContext {
     /// resolution is only meaningful once `--recursive` has established
     /// "the corpus" as a real project tree, not an arbitrary file list.
     recursive: bool,
+    /// Gates the duplicate-function-detection pass (see `--find-duplicates`).
+    find_duplicates: bool,
 }
 
 impl Thresholds {
@@ -1065,6 +1076,7 @@ fn main() -> Result<()> {
         verbose: args.verbose,
         quiet: args.quiet,
         recursive: args.recursive,
+        find_duplicates: args.find_duplicates,
     };
 
     if args.format != OutputFormat::Text {
@@ -1174,6 +1186,7 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
     }
 
     let coupling = compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
+    let duplicate_groups = recursive_duplicate_groups(files, ctx);
 
     if let Some(report_path) = report {
         write_detailed_report(&all_metrics, ctx.verbose, report_path)?;
@@ -1185,6 +1198,7 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
             skipped_files,
             report,
             coupling.as_deref(),
+            duplicate_groups.as_deref(),
         );
     }
     check_thresholds(
@@ -1457,6 +1471,60 @@ fn extract_file_imports(file: &Path) -> Option<(String, Vec<String>)> {
         path,
         lang_parsing_substrate::import_sources(&tree, source_code.as_bytes(), key),
     ))
+}
+
+/// Gates the duplicate-function-detection pass behind `--find-duplicates`
+/// (and `--recursive`, since a single file has no corpus to compare
+/// against) and runs both its phases: fingerprinting every file, then
+/// grouping the results.
+fn recursive_duplicate_groups(
+    files: &[PathBuf],
+    ctx: &RunContext,
+) -> Option<Vec<Vec<duplicates::DuplicateMember>>> {
+    (ctx.recursive && ctx.find_duplicates).then(|| {
+        let fingerprints = collect_corpus_fingerprints(files);
+        duplicates::find_duplicate_groups(&fingerprints)
+    })
+}
+
+/// Phase 1 of the duplicate-detection pass: parse every file and fingerprint
+/// each function-like subtree, skipping unreadable/unparseable files
+/// silently — `collect_all_metrics` already warns about the same files.
+fn collect_corpus_fingerprints(
+    files: &[PathBuf],
+) -> Vec<lang_parsing_substrate::CorpusFingerprint<String>> {
+    files
+        .par_iter()
+        .filter_map(|file| extract_file_fingerprints(file))
+        .flatten()
+        .collect()
+}
+
+fn extract_file_fingerprints(
+    file: &Path,
+) -> Option<Vec<lang_parsing_substrate::CorpusFingerprint<String>>> {
+    let source_code = fs::read_to_string(file).ok()?;
+    let tree = parse_file(file, &source_code).ok()?;
+    let path = file.to_str().unwrap_or("").to_string();
+    let fingerprints = lang_parsing_substrate::function_fingerprints(
+        tree.root_node(),
+        &source_code,
+        duplicates::MIN_DUPLICATE_NODES,
+    );
+    Some(tag_with_source(fingerprints, path))
+}
+
+fn tag_with_source(
+    fingerprints: Vec<lang_parsing_substrate::Fingerprint>,
+    path: String,
+) -> Vec<lang_parsing_substrate::CorpusFingerprint<String>> {
+    fingerprints
+        .into_iter()
+        .map(|fingerprint| lang_parsing_substrate::CorpusFingerprint {
+            source: path.clone(),
+            fingerprint,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -3143,5 +3211,22 @@ mod tests {
             ),
             1
         );
+    }
+}
+
+#[cfg(test)]
+mod baseline_float_precision_tests {
+    /// Without serde_json's `float_roundtrip` feature, its fast float parser
+    /// can be off by 1 ULP on certain literals (e.g. it parses
+    /// "11.180339887498949" back as 11.180339887498947) — which made the
+    /// baseline gate flag unchanged ABC scores as "regressed" purely from
+    /// write→read precision loss. `float_roundtrip` (enabled in Cargo.toml)
+    /// guarantees exact round-tripping; this test pins that literal so a
+    /// future removal of the feature is caught immediately.
+    #[test]
+    fn abc_magnitude_literal_round_trips_exactly() {
+        let literal = "11.180339887498949";
+        let parsed: f64 = serde_json::from_str(literal).unwrap();
+        assert_eq!(parsed, literal.parse::<f64>().unwrap());
     }
 }
