@@ -283,6 +283,18 @@ first-class per-file metrics.  The two-phase execution model this requires
 including Ce/Ca) is a natural extension of the existing ``collect_all_metrics``
 pipeline under ``--recursive``.
 
+Duplicate code detection (``--find-duplicates``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The substrate's ``fingerprint`` module hashes each function-like subtree's
+shape (node kinds, ignoring identifier/literal text) so renamed or
+re-parameterized copies of the same code still match — Type-1 and Type-2
+clone detection.  Unlike Ce/Ca, this doesn't feed any per-function metric; it
+runs as its own opt-in corpus pass (a second parse of every file) gated
+behind ``--find-duplicates``, only meaningful alongside ``--recursive``, and
+surfaced as a standalone ``DUPLICATE CODE`` section in the text report rather
+than folded into per-function output.
+
 Substrate — Ecosystem Research (June 2026)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
