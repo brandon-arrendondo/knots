@@ -833,6 +833,49 @@ fn diff_suffix(diff_from_first: Option<u32>) -> String {
     }
 }
 
+/// Prints the summary for `--diff-duplicates BEFORE AFTER`: groups matched
+/// by stable ID and classified as resolved, new, changed, or unchanged.
+pub(crate) fn display_duplicate_diff(diff: &crate::duplicate_diff::DuplicateDiff) {
+    println!("\n=== DUPLICATE DIFF ===\n");
+    println!(
+        "  {} resolved, {} new, {} changed, {} unchanged.",
+        diff.resolved.len(),
+        diff.new_groups.len(),
+        diff.changed.len(),
+        diff.unchanged_count
+    );
+    print_group_list("\nResolved", &diff.resolved);
+    print_group_list("\nNew", &diff.new_groups);
+    print_changed_list(&diff.changed);
+}
+
+fn print_group_list(title: &str, groups: &[crate::duplicate_diff::GroupSnapshot]) {
+    if groups.is_empty() {
+        return;
+    }
+    println!("{title} ({}):", groups.len());
+    for group in groups {
+        println!(
+            "  [{}] {} matches (~{} AST nodes each)",
+            group.id, group.member_count, group.node_count
+        );
+    }
+}
+
+fn print_changed_list(changes: &[crate::duplicate_diff::GroupChange]) {
+    if changes.is_empty() {
+        return;
+    }
+    println!("\nChanged ({}):", changes.len());
+    for change in changes {
+        let arrow = if change.shrank() { "shrank" } else { "grew" };
+        println!(
+            "  [{}] {} {} -> {} matches",
+            change.before.id, arrow, change.before.member_count, change.after.member_count
+        );
+    }
+}
+
 fn sorted_by_instability<'a>(coupled: &[&'a FileCoupling]) -> Vec<&'a FileCoupling> {
     let mut sorted = coupled.to_vec();
     sorted.sort_by(|a, b| {

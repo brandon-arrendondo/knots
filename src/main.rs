@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tree_sitter::Tree;
 
 mod config;
+mod duplicate_diff;
 mod duplicates;
 mod output;
 use config::KnotsToml;
@@ -44,7 +45,7 @@ struct Args {
     /// Path(s) to source files or directories to analyze
     #[arg(
         value_name = "FILE",
-        required_unless_present_any = ["compile_commands", "explain", "supported_languages"],
+        required_unless_present_any = ["compile_commands", "explain", "supported_languages", "diff_duplicates"],
         num_args = 1..
     )]
     files: Vec<PathBuf>,
@@ -207,6 +208,22 @@ struct Args {
     /// by default. Has no effect without --find-duplicates.
     #[arg(long)]
     include_trivial_duplicates: bool,
+
+    /// With --find-duplicates, additionally write a JSON snapshot of the
+    /// reported groups to this path (keyed by the stable group ID from
+    /// --find-duplicates' output) for later comparison via
+    /// --diff-duplicates. Has no effect without --find-duplicates.
+    #[arg(long, value_name = "FILE")]
+    dump_duplicates: Option<PathBuf>,
+
+    /// Compare two --dump-duplicates snapshots and summarize what changed
+    /// between them (resolved / new / shrank / grew groups), matched by
+    /// stable group ID rather than position. No corpus files needed; exits
+    /// after printing the summary. Example: after fixing a duplication
+    /// group, dump before and after and diff them to confirm it shrank or
+    /// vanished instead of grepping two full reports by hand.
+    #[arg(long, value_names = ["BEFORE", "AFTER"], num_args = 2)]
+    diff_duplicates: Option<Vec<PathBuf>>,
 }
 
 /// Metrics that `--explain` can describe at the command line.
@@ -406,6 +423,8 @@ struct RunContext {
     find_duplicates: bool,
     /// See `--include-fixture-pairs` / `--include-trivial-duplicates`.
     duplicate_filters: duplicates::DuplicateFilters,
+    /// See `--dump-duplicates`.
+    dump_duplicates: Option<PathBuf>,
 }
 
 impl Thresholds {
@@ -973,18 +992,31 @@ fn configure_thread_pool(jobs: usize) {
         .build_global();
 }
 
+/// Modes that need no file discovery and exit immediately: `--explain`,
+/// `--supported-languages`, and `--diff-duplicates` all answer from their
+/// own inputs (a metric name, the static language table, two snapshot
+/// files) rather than the corpus `main` otherwise goes on to collect.
+fn early_exit_mode(args: &Args) -> Option<Result<()>> {
+    if let Some(metric) = args.explain {
+        println!("{}", explain_metric(metric));
+        return Some(Ok(()));
+    }
+    if args.supported_languages {
+        print!("{}", knots::supported_languages_report());
+        return Some(Ok(()));
+    }
+    if let Some(paths) = &args.diff_duplicates {
+        return Some(run_diff_duplicates(&paths[0], &paths[1]));
+    }
+    None
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     configure_thread_pool(args.jobs);
 
-    if let Some(metric) = args.explain {
-        println!("{}", explain_metric(metric));
-        return Ok(());
-    }
-
-    if args.supported_languages {
-        print!("{}", knots::supported_languages_report());
-        return Ok(());
+    if let Some(result) = early_exit_mode(&args) {
+        return result;
     }
 
     let include_rules = args
@@ -1191,10 +1223,8 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
 
     let coupling = compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
     let duplicate_groups = recursive_duplicate_groups(files, ctx);
+    write_side_outputs(report, ctx, &all_metrics, &duplicate_groups)?;
 
-    if let Some(report_path) = report {
-        write_detailed_report(&all_metrics, ctx.verbose, report_path)?;
-    }
     if !ctx.quiet {
         display_recursive_summary(
             &all_metrics,
@@ -1493,6 +1523,61 @@ fn recursive_duplicate_groups(
     })
 }
 
+/// Writes every optional file output `run_multi_file_mode` can produce
+/// (`--report`, `--dump-duplicates`) — bundled into one call so that
+/// function only needs a single `?` for both, instead of one per output.
+fn write_side_outputs(
+    report: Option<&Path>,
+    ctx: &RunContext,
+    all_metrics: &[FunctionMetrics],
+    duplicate_groups: &Option<duplicates::DuplicateGroupsResult>,
+) -> Result<()> {
+    if let Some(report_path) = report {
+        write_detailed_report(all_metrics, ctx.verbose, report_path)?;
+    }
+    maybe_dump_duplicates(duplicate_groups, ctx)
+}
+
+/// Writes the `--dump-duplicates` snapshot, if both a duplicate-detection
+/// result and an output path are present. A no-op otherwise (feature
+/// disabled, or `--dump-duplicates` wasn't passed).
+fn maybe_dump_duplicates(
+    result: &Option<duplicates::DuplicateGroupsResult>,
+    ctx: &RunContext,
+) -> Result<()> {
+    let (Some(result), Some(path)) = (result, &ctx.dump_duplicates) else {
+        return Ok(());
+    };
+    write_duplicate_snapshot(result, path)
+}
+
+/// Writes a `--dump-duplicates` snapshot of the current run for later
+/// comparison via `--diff-duplicates`.
+fn write_duplicate_snapshot(result: &duplicates::DuplicateGroupsResult, path: &Path) -> Result<()> {
+    let snapshot = duplicate_diff::snapshot(result);
+    let json = serde_json::to_string_pretty(&snapshot)?;
+    fs::write(path, json)
+        .with_context(|| format!("Failed to write duplicate snapshot to {}", path.display()))
+}
+
+/// Handles `--diff-duplicates BEFORE AFTER`: reads two snapshots written by
+/// `--dump-duplicates` and prints what changed between them, matched by
+/// stable group ID. No corpus files needed.
+fn run_diff_duplicates(before: &Path, after: &Path) -> Result<()> {
+    let before = read_duplicate_snapshot(before)?;
+    let after = read_duplicate_snapshot(after)?;
+    let diff = duplicate_diff::diff_snapshots(&before, &after);
+    display_duplicate_diff(&diff);
+    Ok(())
+}
+
+fn read_duplicate_snapshot(path: &Path) -> Result<duplicate_diff::DuplicateSnapshot> {
+    let json = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read duplicate snapshot: {}", path.display()))?;
+    serde_json::from_str(&json)
+        .with_context(|| format!("Failed to parse duplicate snapshot: {}", path.display()))
+}
+
 /// Fills in each non-first member's `diff_from_first` by re-reading source
 /// files and comparing bytes against the group's first member. Cheap
 /// relative to the fingerprinting pass since it only touches files that
@@ -1564,6 +1649,7 @@ fn build_run_context(
         recursive: args.recursive,
         find_duplicates: args.find_duplicates,
         duplicate_filters: duplicate_filters_from(args),
+        dump_duplicates: args.dump_duplicates.clone(),
     })
 }
 

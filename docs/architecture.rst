@@ -340,6 +340,25 @@ how many currently exhibit it. That makes two reports diffable directly: the
 same ID reappearing with fewer members confirms a group shrank after a
 refactor, and an ID that vanishes entirely confirms it was fully resolved.
 
+That comparison doesn't have to be done by hand. ``--dump-duplicates <FILE>``
+(alongside ``--find-duplicates``) writes a JSON snapshot of the current
+groups — their stable IDs, member counts, node counts, and member labels —
+in addition to the normal text report. ``--diff-duplicates BEFORE AFTER``
+takes two such snapshots (no corpus files needed; it exits after printing
+the summary) and reports each group as resolved (present before, gone
+after), new (absent before, present after), changed (same ID, different
+member count — shrank or grew), or unchanged. This turns the "run, extract
+N members, refactor, re-run, confirm it shrank or vanished" workflow into
+two dumps and one diff instead of two full text reports and a manual grep
+for a size marker:
+
+.. code-block:: shell
+
+    knots -r src --find-duplicates --dump-duplicates before.json
+    # ... refactor ...
+    knots -r src --find-duplicates --dump-duplicates after.json
+    knots --diff-duplicates before.json after.json
+
 Interpreting results
 ^^^^^^^^^^^^^^^^^^^^
 

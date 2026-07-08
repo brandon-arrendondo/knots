@@ -114,6 +114,8 @@ Options:
   --find-duplicates                 Report structurally duplicated functions across the corpus (--recursive only)
   --include-fixture-pairs           Keep tests/pass vs tests/fail fixture pairs in --find-duplicates output (excluded by default)
   --include-trivial-duplicates      Keep small-body, low-repeat groups (getters, one-assert tests) in --find-duplicates output (excluded by default)
+  --dump-duplicates <FILE>          Write a JSON snapshot of --find-duplicates results, for later comparison via --diff-duplicates
+  --diff-duplicates <BEFORE> <AFTER>  Compare two --dump-duplicates snapshots and summarize resolved/new/shrank/grew groups; exits without needing corpus files
   -j, --jobs <N>                    Parallel analysis threads (0 = auto-detect, 1 = sequential, default: 0)
   -h, --help                        Print help
   -V, --version                     Print version
