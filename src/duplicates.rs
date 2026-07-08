@@ -49,12 +49,28 @@ pub struct DuplicateMember {
     pub start_byte: usize,
     pub end_byte: usize,
     pub node_count: usize,
+    /// The structural-shape hash every member of a group shares — it's the
+    /// key `duplicate_groups` grouped on, so it's already a stable,
+    /// content-derived identity for the group as a whole. See
+    /// [`group_id`].
+    pub content_hash: u64,
     /// Byte-diff percentage against the group's first member (0 = identical
     /// bytes, higher = more textual divergence past shape). `None` for the
     /// first member itself, or when the body was too large to diff cheaply.
     /// Populated by the caller after re-reading source files — see
     /// `byte_diff_percent`; this module has no file I/O of its own.
     pub diff_from_first: Option<u32>,
+}
+
+/// A short, content-derived group identifier stable across runs — unlike
+/// positional numbering (1, 2, 3...), which reshuffles as files change and
+/// group sizes shrink/grow, this hex tag stays the same for "the same
+/// duplicated shape" run to run, so two reports can be diffed directly to
+/// confirm a group shrank or vanished after a refactor. Every member of a
+/// group shares the same `content_hash` by construction (it's the grouping
+/// key), so any member works as the source.
+pub fn group_id(group: &[DuplicateMember]) -> String {
+    format!("{:08x}", group[0].content_hash as u32)
 }
 
 /// Which low-value group categories to drop from a duplicate-detection pass.
@@ -132,6 +148,7 @@ fn to_duplicate_member(m: &CorpusFingerprint<String>) -> DuplicateMember {
         start_byte: m.fingerprint.start_byte,
         end_byte: m.fingerprint.end_byte,
         node_count: m.fingerprint.node_count,
+        content_hash: m.fingerprint.hash,
         diff_from_first: None,
     }
 }
@@ -533,5 +550,52 @@ mod tests {
         // (e.g. two copies of a generated file) still short-circuit to 0.
         let a = "x".repeat(MAX_DIFF_CHARS + 1);
         assert_eq!(byte_diff_percent(&a, &a), Some(0));
+    }
+
+    /// `(source, hash, node_count, name)` tuples, for tests that only care
+    /// about a handful of varying fields.
+    fn fingerprints_for(entries: &[(&str, u64, usize, &str)]) -> Vec<CorpusFingerprint<String>> {
+        entries.iter().map(|&e| fingerprint_from(e)).collect()
+    }
+
+    fn fingerprint_from(entry: (&str, u64, usize, &str)) -> CorpusFingerprint<String> {
+        let (source, hash, node_count, name) = entry;
+        CorpusFingerprint {
+            source: source.to_string(),
+            fingerprint: fp(hash, node_count, name),
+        }
+    }
+
+    #[test]
+    fn group_id_is_stable_across_runs_with_the_same_shape() {
+        // Same shape hash, but a different corpus (member count/order/names
+        // changed) — as would happen between a before/after refactor run.
+        let before = find_duplicate_groups(
+            &fingerprints_for(&[
+                ("a.c", 42, 30, "f"),
+                ("b.c", 42, 30, "g"),
+                ("c.c", 42, 30, "h"),
+            ]),
+            NO_FILTERS,
+        );
+        let after = find_duplicate_groups(
+            &fingerprints_for(&[("b.c", 42, 30, "g"), ("c.c", 42, 30, "h")]),
+            NO_FILTERS,
+        );
+        assert_eq!(group_id(&before.groups[0]), group_id(&after.groups[0]));
+    }
+
+    #[test]
+    fn group_id_differs_for_a_different_shape() {
+        let result = find_duplicate_groups(
+            &fingerprints_for(&[
+                ("a.c", 1, 10, "f"),
+                ("b.c", 1, 10, "g"),
+                ("c.c", 2, 10, "h"),
+                ("d.c", 2, 10, "i"),
+            ]),
+            NO_FILTERS,
+        );
+        assert_ne!(group_id(&result.groups[0]), group_id(&result.groups[1]));
     }
 }

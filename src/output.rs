@@ -798,8 +798,9 @@ fn print_duplicate_summary(result: &crate::duplicates::DuplicateGroupsResult) {
 
 fn print_duplicate_group(index: usize, group: &[crate::duplicates::DuplicateMember]) {
     println!(
-        "\n  {}. {} matches (~{} AST nodes each):",
+        "\n  {}. [{}] {} matches (~{} AST nodes each):",
         index + 1,
+        crate::duplicates::group_id(group),
         group.len(),
         group[0].node_count
     );

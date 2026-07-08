@@ -331,6 +331,15 @@ re-reading each member's exact byte range from disk and running a
 Levenshtein edit-distance pass — separate from, and a finer-grained signal
 than, the AST-shape hash that grouped them in the first place.
 
+Each group is also tagged with a short hex ID (e.g. ``[a1b2c3d4]``) derived
+from the structural-shape hash every member already shares — the same key
+``duplicate_groups`` grouped on. Positional numbering (1, 2, 3...) reshuffles
+between runs as files change and group sizes shrink or grow; the hex ID
+doesn't, since it depends only on the duplicated shape, not which files or
+how many currently exhibit it. That makes two reports diffable directly: the
+same ID reappearing with fewer members confirms a group shrank after a
+refactor, and an ID that vanishes entirely confirms it was fully resolved.
+
 Substrate — Ecosystem Research (June 2026)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
