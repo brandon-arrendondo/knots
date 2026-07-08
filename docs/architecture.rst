@@ -340,6 +340,54 @@ how many currently exhibit it. That makes two reports diffable directly: the
 same ID reappearing with fewer members confirms a group shrank after a
 refactor, and an ID that vanishes entirely confirms it was fully resolved.
 
+Interpreting results
+^^^^^^^^^^^^^^^^^^^^
+
+The filters and annotations above cut the obvious noise, but the output
+still needs a human in the loop. What follows is guidance distilled from
+actually acting on a real report end to end (see ``MOLDY_DUP_FEEDBACK.md``
+in the repo root) — a 5.9k-line, 4-file Rust codebase where 16 reported
+groups broke down as 3 genuinely worth fixing, several trivial-boilerplate
+groups, and 2 that looked identical but were a trap to merge.
+
+**Shape equality is not behavioral equality.** The hash matches AST node
+kinds, not identifiers, literals, or intent. A 3-line test function that's
+just one ``assert_eq!`` and a 3-line dispatch stub that forwards to a
+differently-named per-language handler can hash identically to each other
+purely because tree-sitter sees the same shape — read the matched bodies
+before trusting a group, especially a small one that survived the trivial
+filter by repeating 4+ times.
+
+**Group size is the strongest triage signal.** A group with a handful of
+members and tens of AST nodes is usually either fixture noise or a
+coincidence; a group with a large ``~N AST nodes each`` figure or many
+members (especially 3+ files) is the highest-signal finding and the one
+most likely to represent real, worth-extracting duplication.
+
+**"Identical AST across files" does not imply "safe to merge into one
+type."** Two byte-identical groups can still be unsafe to unify: if merging
+requires the matched functions' *enclosing types* to become a single type,
+that breaks the moment those types have same-named-but-different-bodied
+sibling methods elsewhere in their ``impl`` surface (e.g. two formatters
+that both define ``emit_node``/``ws_before`` with the same name and
+different bodies — fine as separate types, a collision if merged into one).
+This isn't visible from the matched function alone. Before proposing a type
+merge, check the rest of each type's inherent-impl surface for
+same-named-but-different-bodied methods; when in doubt, the safe default
+suggestion is delegation (a shared trait or helper the types each call),
+not unification into one concrete type.
+
+**The tool doesn't know whether an extraction will typecheck.** Grouping is
+pure AST-shape hashing; it has no notion of ownership, generics, or trait
+bounds, so it can't tell you whether the fix you have in mind — composing a
+shared sub-struct vs. extracting a default trait method vs. a free function
+— will actually compile. A duplicated method whose parameters include a
+closure or trait-object bound by ``Self``, for instance, only works as a
+default trait method, not as a delegated sub-struct field, and nothing in
+this tool's output signals that distinction. Treat every group as "these
+bodies are shaped the same" and nothing more; the extraction design itself
+is a human (or a separate, Rust-generics-aware analysis) call.
+
 Substrate — Ecosystem Research (June 2026)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
