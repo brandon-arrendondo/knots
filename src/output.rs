@@ -782,6 +782,11 @@ fn print_duplicate_summary(result: &crate::duplicates::DuplicateGroupsResult) {
         "  {} group(s) of structurally identical functions found.",
         result.groups.len()
     );
+    println!(
+        "  Note: identical shape does not imply safe to merge into one type — \
+         check each type's impl surface for same-named-but-different-bodied \
+         siblings before proposing anything beyond delegation."
+    );
     if result.excluded_fixture_pairs > 0 {
         println!(
             "  {} group(s) excluded as pass/fail fixture pairs (use --include-fixture-pairs to show them).",

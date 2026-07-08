@@ -188,7 +188,9 @@ struct Args {
     /// Type-2 clones: identical shape, regardless of renamed identifiers or
     /// literals). Only meaningful with --recursive; ignored otherwise. Adds
     /// a second parse pass over the corpus, so it's opt-in rather than
-    /// always-on. Text output only.
+    /// always-on. Text output only. Identical shape does not imply safe to
+    /// merge into one type — see the CLI reference / architecture docs
+    /// before proposing an extraction.
     #[arg(long)]
     find_duplicates: bool,
 
