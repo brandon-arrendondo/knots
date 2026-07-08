@@ -763,46 +763,72 @@ pub(crate) fn display_file_coupling(coupling: &[FileCoupling]) {
 /// Prints structurally duplicated functions found by `--find-duplicates`.
 /// Groups are already sorted largest-first by `find_duplicate_groups`.
 pub(crate) fn display_duplicate_groups(result: &crate::duplicates::DuplicateGroupsResult) {
-    let groups = &result.groups;
-    let excluded_fixture_pairs = result.excluded_fixture_pairs;
-    let excluded_trivial = result.excluded_trivial;
-    if groups.is_empty() && excluded_fixture_pairs == 0 && excluded_trivial == 0 {
+    if is_empty_duplicate_result(result) {
         return;
     }
+    print_duplicate_summary(result);
+    for (i, group) in result.groups.iter().enumerate() {
+        print_duplicate_group(i, group);
+    }
+}
 
+fn is_empty_duplicate_result(result: &crate::duplicates::DuplicateGroupsResult) -> bool {
+    result.groups.is_empty() && result.excluded_fixture_pairs == 0 && result.excluded_trivial == 0
+}
+
+fn print_duplicate_summary(result: &crate::duplicates::DuplicateGroupsResult) {
     println!("\n=== DUPLICATE CODE (structural clones) ===\n");
     println!(
         "  {} group(s) of structurally identical functions found.",
-        groups.len()
+        result.groups.len()
     );
-    if excluded_fixture_pairs > 0 {
+    if result.excluded_fixture_pairs > 0 {
         println!(
             "  {} group(s) excluded as pass/fail fixture pairs (use --include-fixture-pairs to show them).",
-            excluded_fixture_pairs
+            result.excluded_fixture_pairs
         );
     }
-    if excluded_trivial > 0 {
+    if result.excluded_trivial > 0 {
         println!(
             "  {} group(s) excluded as trivial (small-body, low-repeat noise; use --include-trivial-duplicates to show them).",
-            excluded_trivial
+            result.excluded_trivial
         );
     }
+}
 
-    for (i, group) in groups.iter().enumerate() {
-        let node_count = group[0].node_count;
-        println!(
-            "\n  {}. {} matches (~{} AST nodes each):",
-            i + 1,
-            group.len(),
-            node_count
-        );
-        for member in group {
-            let name = member.name.as_deref().unwrap_or("<anonymous>");
-            println!(
-                "    {}:{}-{} {}",
-                member.file_path, member.start_line, member.end_line, name
-            );
-        }
+fn print_duplicate_group(index: usize, group: &[crate::duplicates::DuplicateMember]) {
+    println!(
+        "\n  {}. {} matches (~{} AST nodes each):",
+        index + 1,
+        group.len(),
+        group[0].node_count
+    );
+    for (j, member) in group.iter().enumerate() {
+        print_duplicate_member(j, member);
+    }
+}
+
+fn print_duplicate_member(index_in_group: usize, member: &crate::duplicates::DuplicateMember) {
+    let name = member.name.as_deref().unwrap_or("<anonymous>");
+    let suffix = if index_in_group == 0 {
+        String::new()
+    } else {
+        diff_suffix(member.diff_from_first)
+    };
+    println!(
+        "    {}:{}-{} {}{}",
+        member.file_path, member.start_line, member.end_line, name, suffix
+    );
+}
+
+/// `" [byte-identical]"` / `" [42% diff from #1]"` / `" [diff not computed —
+/// body too large or unreadable]"` annotation for a non-first duplicate-group
+/// member.
+fn diff_suffix(diff_from_first: Option<u32>) -> String {
+    match diff_from_first {
+        None => " [diff not computed — body too large or unreadable]".to_string(),
+        Some(0) => " [byte-identical]".to_string(),
+        Some(pct) => format!(" [{pct}% diff from #1]"),
     }
 }
 

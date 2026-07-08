@@ -46,7 +46,15 @@ pub struct DuplicateMember {
     pub name: Option<String>,
     pub start_line: usize,
     pub end_line: usize,
+    pub start_byte: usize,
+    pub end_byte: usize,
     pub node_count: usize,
+    /// Byte-diff percentage against the group's first member (0 = identical
+    /// bytes, higher = more textual divergence past shape). `None` for the
+    /// first member itself, or when the body was too large to diff cheaply.
+    /// Populated by the caller after re-reading source files — see
+    /// `byte_diff_percent`; this module has no file I/O of its own.
+    pub diff_from_first: Option<u32>,
 }
 
 /// Which low-value group categories to drop from a duplicate-detection pass.
@@ -121,7 +129,10 @@ fn to_duplicate_member(m: &CorpusFingerprint<String>) -> DuplicateMember {
         name: m.fingerprint.name.clone(),
         start_line: m.fingerprint.start_line,
         end_line: m.fingerprint.end_line,
+        start_byte: m.fingerprint.start_byte,
+        end_byte: m.fingerprint.end_byte,
         node_count: m.fingerprint.node_count,
+        diff_from_first: None,
     }
 }
 
@@ -225,6 +236,72 @@ fn line_span(member: &DuplicateMember) -> usize {
 /// reading as unresolved debt if not filtered.
 fn is_trivial_noise_group(group: &[DuplicateMember]) -> bool {
     group.len() < TRIVIAL_MIN_REPEAT && group.iter().all(|m| line_span(m) <= TRIVIAL_BODY_LINE_SPAN)
+}
+
+/// Bodies longer than this (in characters) skip the Levenshtein pass —
+/// O(n*m) edit distance on two multi-page functions isn't worth the wait,
+/// and shape-hash matches on bodies this large are rare anyway.
+pub const MAX_DIFF_CHARS: usize = 20_000;
+
+/// Percentage textual difference between two function bodies: 0 means
+/// byte-for-byte identical (a true Type-1 clone); higher values mean more
+/// divergence past the shared AST shape (renamed identifiers, changed
+/// literals, small edits — Type-2 or a shape coincidence). `None` when
+/// either body exceeds `MAX_DIFF_CHARS` — known non-identical (the caller
+/// already checked equality first) but not worth computing an exact number
+/// for.
+pub fn byte_diff_percent(a: &str, b: &str) -> Option<u32> {
+    if a == b {
+        // Two empty strings are also caught here, so the size check below
+        // never needs to special-case a zero max length.
+        return Some(0);
+    }
+    let max_len = char_count(a).max(char_count(b));
+    (max_len <= MAX_DIFF_CHARS).then(|| diff_percent(levenshtein_distance(a, b), max_len))
+}
+
+fn char_count(s: &str) -> usize {
+    s.chars().count()
+}
+
+fn diff_percent(distance: usize, max_len: usize) -> u32 {
+    ((distance as f64 / max_len as f64) * 100.0).round() as u32
+}
+
+/// Classic two-row edit-distance DP, O(n*m) time and O(min(n,m)) space.
+fn levenshtein_distance(a: &str, b: &str) -> usize {
+    let a = to_chars(a);
+    let b = to_chars(b);
+    let mut prev = identity_row(b.len());
+    let mut curr = vec![0usize; b.len() + 1];
+    for (i, &ca) in a.iter().enumerate() {
+        curr[0] = i + 1;
+        fill_edit_row(&prev, &mut curr, ca, &b);
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b.len()]
+}
+
+fn to_chars(s: &str) -> Vec<char> {
+    s.chars().collect()
+}
+
+fn identity_row(len: usize) -> Vec<usize> {
+    (0..=len).collect()
+}
+
+fn fill_edit_row(prev: &[usize], curr: &mut [usize], ca: char, b: &[char]) {
+    for (j, &cb) in b.iter().enumerate() {
+        let cost = edit_cost(prev, curr, j, ca, cb);
+        curr[j + 1] = cost;
+    }
+}
+
+fn edit_cost(prev: &[usize], curr: &[usize], j: usize, ca: char, cb: char) -> usize {
+    let substitution = usize::from(ca != cb);
+    (prev[j + 1] + 1)
+        .min(curr[j] + 1)
+        .min(prev[j] + substitution)
 }
 
 #[cfg(test)]
@@ -423,5 +500,38 @@ mod tests {
         let result = find_duplicate_groups(&fingerprints, TRIVIAL_ONLY);
         assert_eq!(result.groups.len(), 1);
         assert_eq!(result.excluded_trivial, 0);
+    }
+
+    #[test]
+    fn byte_diff_percent_is_zero_for_identical_bodies() {
+        assert_eq!(byte_diff_percent("fn f() {}", "fn f() {}"), Some(0));
+    }
+
+    #[test]
+    fn byte_diff_percent_is_nonzero_for_renamed_identifiers() {
+        let pct = byte_diff_percent("fn f(x: i32) -> i32 { x }", "fn g(y: i32) -> i32 { y }")
+            .expect("small bodies always diff");
+        assert!(pct > 0 && pct < 100, "expected a partial diff, got {pct}");
+    }
+
+    #[test]
+    fn byte_diff_percent_is_high_for_wholly_different_bodies() {
+        let pct = byte_diff_percent("a", "completely different text").unwrap();
+        assert!(pct > 50, "expected a large diff, got {pct}");
+    }
+
+    #[test]
+    fn byte_diff_percent_skips_oversized_bodies() {
+        let a = "x".repeat(MAX_DIFF_CHARS + 1);
+        let b = "y".repeat(MAX_DIFF_CHARS + 1);
+        assert_eq!(byte_diff_percent(&a, &b), None);
+    }
+
+    #[test]
+    fn byte_diff_percent_still_reports_zero_for_oversized_identical_bodies() {
+        // Equality is checked before the size cap, so identical huge bodies
+        // (e.g. two copies of a generated file) still short-circuit to 0.
+        let a = "x".repeat(MAX_DIFF_CHARS + 1);
+        assert_eq!(byte_diff_percent(&a, &a), Some(0));
     }
 }

@@ -1487,8 +1487,49 @@ fn recursive_duplicate_groups(
 ) -> Option<duplicates::DuplicateGroupsResult> {
     (ctx.recursive && ctx.find_duplicates).then(|| {
         let fingerprints = collect_corpus_fingerprints(files);
-        duplicates::find_duplicate_groups(&fingerprints, ctx.duplicate_filters)
+        let mut result = duplicates::find_duplicate_groups(&fingerprints, ctx.duplicate_filters);
+        annotate_diffs(&mut result.groups);
+        result
     })
+}
+
+/// Fills in each non-first member's `diff_from_first` by re-reading source
+/// files and comparing bytes against the group's first member. Cheap
+/// relative to the fingerprinting pass since it only touches files that
+/// ended up in a *reported* group, not the whole corpus.
+fn annotate_diffs(groups: &mut [Vec<duplicates::DuplicateMember>]) {
+    let mut file_cache: HashMap<String, String> = HashMap::new();
+    for group in groups {
+        let Some((first, rest)) = group.split_first_mut() else {
+            continue;
+        };
+        let Some(first_body) = member_body(first, &mut file_cache) else {
+            continue;
+        };
+        for member in rest {
+            member.diff_from_first = member_body(member, &mut file_cache)
+                .and_then(|body| duplicates::byte_diff_percent(&first_body, &body));
+        }
+    }
+}
+
+/// The exact source text a member's fingerprint spans, read (and cached) by
+/// file path so a corpus containing many members from the same file doesn't
+/// re-read it once per member.
+fn member_body(
+    member: &duplicates::DuplicateMember,
+    cache: &mut HashMap<String, String>,
+) -> Option<String> {
+    if !cache.contains_key(&member.file_path) {
+        cache.insert(
+            member.file_path.clone(),
+            fs::read_to_string(&member.file_path).ok()?,
+        );
+    }
+    cache
+        .get(&member.file_path)?
+        .get(member.start_byte..member.end_byte)
+        .map(str::to_string)
 }
 
 /// See `--include-fixture-pairs` / `--include-trivial-duplicates`: both

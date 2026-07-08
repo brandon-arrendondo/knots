@@ -319,6 +319,18 @@ that many repeats is more likely deliberate copy-paste than the unavoidable
 byproduct of a single refactor. Pass ``--include-trivial-duplicates`` to see
 these groups anyway.
 
+Every non-first member of a reported group also gets a byte-diff annotation
+against the group's first member: ``[byte-identical]`` for a true Type-1
+clone (0% divergence — high confidence, safe to act on without opening the
+files), ``[N% diff from #1]`` for a Type-2 clone or shape coincidence (renamed
+identifiers, changed literals, or a same-shaped-but-different-purpose
+function — worth a human look before merging), or a "too large or
+unreadable" note when the body exceeds ``MAX_DIFF_CHARS`` (20,000 characters)
+and the O(n\ :sup:`2`\ ) edit-distance pass was skipped. This is computed by
+re-reading each member's exact byte range from disk and running a
+Levenshtein edit-distance pass — separate from, and a finer-grained signal
+than, the AST-shape hash that grouped them in the first place.
+
 Substrate — Ecosystem Research (June 2026)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
