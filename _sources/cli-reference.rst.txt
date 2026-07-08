@@ -178,6 +178,57 @@ functions, and among those, only fail on new or worsened ones.
    Scoping affects **gating only** — text, JSON, SARIF, NDJSON, and CSV output
    still report every analyzed function. Only the threshold check is narrowed.
 
+Duplicate Detection
+-------------------
+
+Find structurally identical functions across a corpus — same AST shape,
+regardless of renamed identifiers or literals (Type-1/Type-2 clones). See
+:doc:`architecture` for the mechanics, the noise-reduction filters below,
+and guidance on interpreting results (shape equality is not behavioral
+equality; check for it before proposing any merge).
+
+``--find-duplicates``
+    Report structurally duplicated functions across the corpus. Only
+    meaningful with ``-r``/``--recursive``; ignored otherwise. Adds a second
+    parse pass over the corpus, so it's opt-in. Text output only.
+
+``--include-fixture-pairs``
+    Keep groups made entirely of a ``tests/pass`` vs ``tests/fail``-style
+    fixture pair (or ``compliant``/``noncompliant``, ``good``/``bad``,
+    ``accept``/``reject``, ``valid``/``invalid``) — excluded by default, since
+    these are intentionally near-identical compliant/non-compliant examples,
+    not extraction candidates.
+
+``--include-trivial-duplicates``
+    Keep groups where every member's body is 3 lines or fewer and the group
+    has fewer than 4 members — getters, one-assert tests, dispatch stubs.
+    Excluded by default; a getter repeated 4+ times is kept regardless of
+    size, since that many repeats suggests deliberate copy-paste rather than
+    unavoidable post-refactor glue.
+
+``--dump-duplicates <FILE>``
+    Alongside ``--find-duplicates``, additionally write a JSON snapshot of
+    the reported groups (stable group ID, member count, node count, member
+    labels) for later comparison via ``--diff-duplicates``.
+
+``--diff-duplicates <BEFORE> <AFTER>``
+    Compare two ``--dump-duplicates`` snapshots and summarize what changed —
+    resolved, new, changed (shrank/grew), or unchanged groups — matched by
+    stable group ID rather than position. No corpus files needed; exits
+    after printing the summary.
+
+.. code-block:: bash
+
+    # See what's duplicated
+    knots -r src/ --find-duplicates
+
+    # Confirm a fix actually resolved (or shrank) a specific group,
+    # without re-reading the whole report by eye
+    knots -r src/ --find-duplicates --dump-duplicates before.json
+    # ... refactor ...
+    knots -r src/ --find-duplicates --dump-duplicates after.json
+    knots --diff-duplicates before.json after.json
+
 Informational
 -------------
 

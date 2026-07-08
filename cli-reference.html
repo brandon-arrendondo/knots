@@ -53,6 +53,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#threshold-flags">Threshold Flags</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#baseline-ratchet-mode">Baseline / Ratchet Mode</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#changed-function-scoping">Changed-Function Scoping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#duplicate-detection">Duplicate Detection</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#informational">Informational</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#exit-status">Exit Status</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#complexity-indicators">Complexity Indicators</a></li>
@@ -262,6 +263,52 @@ knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </sp
 <p class="admonition-title">Note</p>
 <p>Scoping affects <strong>gating only</strong> — text, JSON, SARIF, NDJSON, and CSV output
 still report every analyzed function. Only the threshold check is narrowed.</p>
+</div>
+</section>
+<section id="duplicate-detection">
+<h2>Duplicate Detection<a class="headerlink" href="#duplicate-detection" title="Link to this heading"></a></h2>
+<p>Find structurally identical functions across a corpus — same AST shape,
+regardless of renamed identifiers or literals (Type-1/Type-2 clones). See
+<a class="reference internal" href="architecture.html"><span class="doc">Architecture</span></a> for the mechanics, the noise-reduction filters below,
+and guidance on interpreting results (shape equality is not behavioral
+equality; check for it before proposing any merge).</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code></dt><dd><p>Report structurally duplicated functions across the corpus. Only
+meaningful with <code class="docutils literal notranslate"><span class="pre">-r</span></code>/<code class="docutils literal notranslate"><span class="pre">--recursive</span></code>; ignored otherwise. Adds a second
+parse pass over the corpus, so it’s opt-in. Text output only.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--include-fixture-pairs</span></code></dt><dd><p>Keep groups made entirely of a <code class="docutils literal notranslate"><span class="pre">tests/pass</span></code> vs <code class="docutils literal notranslate"><span class="pre">tests/fail</span></code>-style
+fixture pair (or <code class="docutils literal notranslate"><span class="pre">compliant</span></code>/<code class="docutils literal notranslate"><span class="pre">noncompliant</span></code>, <code class="docutils literal notranslate"><span class="pre">good</span></code>/<code class="docutils literal notranslate"><span class="pre">bad</span></code>,
+<code class="docutils literal notranslate"><span class="pre">accept</span></code>/<code class="docutils literal notranslate"><span class="pre">reject</span></code>, <code class="docutils literal notranslate"><span class="pre">valid</span></code>/<code class="docutils literal notranslate"><span class="pre">invalid</span></code>) — excluded by default, since
+these are intentionally near-identical compliant/non-compliant examples,
+not extraction candidates.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--include-trivial-duplicates</span></code></dt><dd><p>Keep groups where every member’s body is 3 lines or fewer and the group
+has fewer than 4 members — getters, one-assert tests, dispatch stubs.
+Excluded by default; a getter repeated 4+ times is kept regardless of
+size, since that many repeats suggests deliberate copy-paste rather than
+unavoidable post-refactor glue.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--dump-duplicates</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Alongside <code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>, additionally write a JSON snapshot of
+the reported groups (stable group ID, member count, node count, member
+labels) for later comparison via <code class="docutils literal notranslate"><span class="pre">--diff-duplicates</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--diff-duplicates</span> <span class="pre">&lt;BEFORE&gt;</span> <span class="pre">&lt;AFTER&gt;</span></code></dt><dd><p>Compare two <code class="docutils literal notranslate"><span class="pre">--dump-duplicates</span></code> snapshots and summarize what changed —
+resolved, new, changed (shrank/grew), or unchanged groups — matched by
+stable group ID rather than position. No corpus files needed; exits
+after printing the summary.</p>
+</dd>
+</dl>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># See what&#39;s duplicated</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--find-duplicates
+
+<span class="c1"># Confirm a fix actually resolved (or shrank) a specific group,</span>
+<span class="c1"># without re-reading the whole report by eye</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--find-duplicates<span class="w"> </span>--dump-duplicates<span class="w"> </span>before.json
+<span class="c1"># ... refactor ...</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--find-duplicates<span class="w"> </span>--dump-duplicates<span class="w"> </span>after.json
+knots<span class="w"> </span>--diff-duplicates<span class="w"> </span>before.json<span class="w"> </span>after.json
+</pre></div>
 </div>
 </section>
 <section id="informational">

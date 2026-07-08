@@ -74,7 +74,10 @@
 <li class="toctree-l3"><a class="reference internal" href="#the-shared-substrate-parse-db">The Shared Substrate (<code class="docutils literal notranslate"><span class="pre">parse-db</span></code>)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#relationship-to-lsp">Relationship to LSP</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#coupling-and-the-ai-metrics">Coupling and the AI Metrics</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#duplicate-code-detection-find-duplicates">Duplicate code detection (<code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#duplicate-code-detection-find-duplicates">Duplicate code detection (<code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#interpreting-results">Interpreting results</a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#substrate-ecosystem-research-june-2026">Substrate — Ecosystem Research (June 2026)</a></li>
 </ul>
 </li>
@@ -407,6 +410,107 @@ runs as its own opt-in corpus pass (a second parse of every file) gated
 behind <code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>, only meaningful alongside <code class="docutils literal notranslate"><span class="pre">--recursive</span></code>, and
 surfaced as a standalone <code class="docutils literal notranslate"><span class="pre">DUPLICATE</span> <span class="pre">CODE</span></code> section in the text report rather
 than folded into per-function output.</p>
+<p>Groups whose members are entirely a <code class="docutils literal notranslate"><span class="pre">tests/pass</span></code> vs <code class="docutils literal notranslate"><span class="pre">tests/fail</span></code>-style
+fixture pair (or <code class="docutils literal notranslate"><span class="pre">compliant</span></code>/<code class="docutils literal notranslate"><span class="pre">noncompliant</span></code>, <code class="docutils literal notranslate"><span class="pre">good</span></code>/<code class="docutils literal notranslate"><span class="pre">bad</span></code>,
+<code class="docutils literal notranslate"><span class="pre">accept</span></code>/<code class="docutils literal notranslate"><span class="pre">reject</span></code>, <code class="docutils literal notranslate"><span class="pre">valid</span></code>/<code class="docutils literal notranslate"><span class="pre">invalid</span></code>) are excluded by default and
+counted in a summary line — these are intentionally near-identical
+compliant/non-compliant examples (as in CERT-C test suites), not extraction
+candidates. Pass <code class="docutils literal notranslate"><span class="pre">--include-fixture-pairs</span></code> to see them anyway. The
+heuristic only fires when <em>every</em> member of a group sits under one of these
+directory names and normalizes to the same path otherwise; a group that also
+contains a genuine third duplicate is left untouched.</p>
+<p>Groups where every member’s body spans 3 lines or fewer (<code class="docutils literal notranslate"><span class="pre">TRIVIAL_BODY_LINE_SPAN</span></code>)
+and the group has fewer than 4 members (<code class="docutils literal notranslate"><span class="pre">TRIVIAL_MIN_REPEAT</span></code>) are likewise
+excluded by default, counted in a separate summary line. <code class="docutils literal notranslate"><span class="pre">MIN_DUPLICATE_NODES</span></code>
+(the AST-node floor) doesn’t catch this case on its own: a one-line accessor
+like <code class="docutils literal notranslate"><span class="pre">fn</span> <span class="pre">src(&amp;self)</span> <span class="pre">-&gt;</span> <span class="pre">&amp;str</span> <span class="pre">{</span> <span class="pre">self.src</span> <span class="pre">}</span></code> can clear 20 AST nodes from type
+annotations and field-access chains alone while still being a single line of
+source. This matters most right after a real duplication fix — the
+irreducible per-type accessor glue a trait-extraction produces shows up as
+brand-new duplicate groups on the next run, incorrectly reading as
+unresolved debt. A getter repeated 4+ times is kept regardless of size, since
+that many repeats is more likely deliberate copy-paste than the unavoidable
+byproduct of a single refactor. Pass <code class="docutils literal notranslate"><span class="pre">--include-trivial-duplicates</span></code> to see
+these groups anyway.</p>
+<p>Every non-first member of a reported group also gets a byte-diff annotation
+against the group’s first member: <code class="docutils literal notranslate"><span class="pre">[byte-identical]</span></code> for a true Type-1
+clone (0% divergence — high confidence, safe to act on without opening the
+files), <code class="docutils literal notranslate"><span class="pre">[N%</span> <span class="pre">diff</span> <span class="pre">from</span> <span class="pre">#1]</span></code> for a Type-2 clone or shape coincidence (renamed
+identifiers, changed literals, or a same-shaped-but-different-purpose
+function — worth a human look before merging), or a “too large or
+unreadable” note when the body exceeds <code class="docutils literal notranslate"><span class="pre">MAX_DIFF_CHARS</span></code> (20,000 characters)
+and the O(n<sup>2</sup>) edit-distance pass was skipped. This is computed by
+re-reading each member’s exact byte range from disk and running a
+Levenshtein edit-distance pass — separate from, and a finer-grained signal
+than, the AST-shape hash that grouped them in the first place.</p>
+<p>Each group is also tagged with a short hex ID (e.g. <code class="docutils literal notranslate"><span class="pre">[a1b2c3d4]</span></code>) derived
+from the structural-shape hash every member already shares — the same key
+<code class="docutils literal notranslate"><span class="pre">duplicate_groups</span></code> grouped on. Positional numbering (1, 2, 3…) reshuffles
+between runs as files change and group sizes shrink or grow; the hex ID
+doesn’t, since it depends only on the duplicated shape, not which files or
+how many currently exhibit it. That makes two reports diffable directly: the
+same ID reappearing with fewer members confirms a group shrank after a
+refactor, and an ID that vanishes entirely confirms it was fully resolved.</p>
+<p>That comparison doesn’t have to be done by hand. <code class="docutils literal notranslate"><span class="pre">--dump-duplicates</span> <span class="pre">&lt;FILE&gt;</span></code>
+(alongside <code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>) writes a JSON snapshot of the current
+groups — their stable IDs, member counts, node counts, and member labels —
+in addition to the normal text report. <code class="docutils literal notranslate"><span class="pre">--diff-duplicates</span> <span class="pre">BEFORE</span> <span class="pre">AFTER</span></code>
+takes two such snapshots (no corpus files needed; it exits after printing
+the summary) and reports each group as resolved (present before, gone
+after), new (absent before, present after), changed (same ID, different
+member count — shrank or grew), or unchanged. This turns the “run, extract
+N members, refactor, re-run, confirm it shrank or vanished” workflow into
+two dumps and one diff instead of two full text reports and a manual grep
+for a size marker:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>knots<span class="w"> </span>-r<span class="w"> </span>src<span class="w"> </span>--find-duplicates<span class="w"> </span>--dump-duplicates<span class="w"> </span>before.json
+<span class="c1"># ... refactor ...</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src<span class="w"> </span>--find-duplicates<span class="w"> </span>--dump-duplicates<span class="w"> </span>after.json
+knots<span class="w"> </span>--diff-duplicates<span class="w"> </span>before.json<span class="w"> </span>after.json
+</pre></div>
+</div>
+<section id="interpreting-results">
+<h4>Interpreting results<a class="headerlink" href="#interpreting-results" title="Link to this heading"></a></h4>
+<p>The filters and annotations above cut the obvious noise, but the output
+still needs a human in the loop. What follows is guidance distilled from
+actually acting on a real report end to end (see <code class="docutils literal notranslate"><span class="pre">MOLDY_DUP_FEEDBACK.md</span></code>
+in the repo root) — a 5.9k-line, 4-file Rust codebase where 16 reported
+groups broke down as 3 genuinely worth fixing, several trivial-boilerplate
+groups, and 2 that looked identical but were a trap to merge.</p>
+<p><strong>Shape equality is not behavioral equality.</strong> The hash matches AST node
+kinds, not identifiers, literals, or intent. A 3-line test function that’s
+just one <code class="docutils literal notranslate"><span class="pre">assert_eq!</span></code> and a 3-line dispatch stub that forwards to a
+differently-named per-language handler can hash identically to each other
+purely because tree-sitter sees the same shape — read the matched bodies
+before trusting a group, especially a small one that survived the trivial
+filter by repeating 4+ times.</p>
+<p><strong>Group size is the strongest triage signal.</strong> A group with a handful of
+members and tens of AST nodes is usually either fixture noise or a
+coincidence; a group with a large <code class="docutils literal notranslate"><span class="pre">~N</span> <span class="pre">AST</span> <span class="pre">nodes</span> <span class="pre">each</span></code> figure or many
+members (especially 3+ files) is the highest-signal finding and the one
+most likely to represent real, worth-extracting duplication.</p>
+<p><strong>“Identical AST across files” does not imply “safe to merge into one
+type.”</strong> Two byte-identical groups can still be unsafe to unify: if merging
+requires the matched functions’ <em>enclosing types</em> to become a single type,
+that breaks the moment those types have same-named-but-different-bodied
+sibling methods elsewhere in their <code class="docutils literal notranslate"><span class="pre">impl</span></code> surface (e.g. two formatters
+that both define <code class="docutils literal notranslate"><span class="pre">emit_node</span></code>/<code class="docutils literal notranslate"><span class="pre">ws_before</span></code> with the same name and
+different bodies — fine as separate types, a collision if merged into one).
+This isn’t visible from the matched function alone. Before proposing a type
+merge, check the rest of each type’s inherent-impl surface for
+same-named-but-different-bodied methods; when in doubt, the safe default
+suggestion is delegation (a shared trait or helper the types each call),
+not unification into one concrete type.</p>
+<p><strong>The tool doesn’t know whether an extraction will typecheck.</strong> Grouping is
+pure AST-shape hashing; it has no notion of ownership, generics, or trait
+bounds, so it can’t tell you whether the fix you have in mind — composing a
+shared sub-struct vs. extracting a default trait method vs. a free function
+— will actually compile. A duplicated method whose parameters include a
+closure or trait-object bound by <code class="docutils literal notranslate"><span class="pre">Self</span></code>, for instance, only works as a
+default trait method, not as a delegated sub-struct field, and nothing in
+this tool’s output signals that distinction. Treat every group as “these
+bodies are shaped the same” and nothing more; the extraction design itself
+is a human (or a separate, Rust-generics-aware analysis) call.</p>
+</section>
 </section>
 <section id="substrate-ecosystem-research-june-2026">
 <h3><a class="toc-backref" href="#id15" role="doc-backlink">Substrate — Ecosystem Research (June 2026)</a><a class="headerlink" href="#substrate-ecosystem-research-june-2026" title="Link to this heading"></a></h3>
