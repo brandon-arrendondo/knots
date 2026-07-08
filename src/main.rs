@@ -190,6 +190,23 @@ struct Args {
     /// always-on. Text output only.
     #[arg(long)]
     find_duplicates: bool,
+
+    /// With --find-duplicates, keep groups whose members are entirely a
+    /// tests/pass vs tests/fail (or similarly named) fixture pair — these
+    /// are intentionally near-identical compliant/non-compliant examples,
+    /// not extraction candidates, and are excluded from the report by
+    /// default. Has no effect without --find-duplicates.
+    #[arg(long)]
+    include_fixture_pairs: bool,
+
+    /// With --find-duplicates, keep groups where every member's body is 3
+    /// lines or fewer and the group has fewer than 4 members — getters,
+    /// one-assert tests, dispatch stubs. These clear the AST-node-count
+    /// floor (MIN_DUPLICATE_NODES) via type annotations and field-access
+    /// chains while still being trivial, and are excluded from the report
+    /// by default. Has no effect without --find-duplicates.
+    #[arg(long)]
+    include_trivial_duplicates: bool,
 }
 
 /// Metrics that `--explain` can describe at the command line.
@@ -387,6 +404,8 @@ struct RunContext {
     recursive: bool,
     /// Gates the duplicate-function-detection pass (see `--find-duplicates`).
     find_duplicates: bool,
+    /// See `--include-fixture-pairs` / `--include-trivial-duplicates`.
+    duplicate_filters: duplicates::DuplicateFilters,
 }
 
 impl Thresholds {
@@ -1056,28 +1075,13 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let changed_ref = if args.changed {
-        Some("HEAD")
-    } else {
-        args.since.as_deref()
-    };
-    let ctx = RunContext {
+    let ctx = build_run_context(
+        &args,
         thresholds,
         include_rules,
         exclude_rules,
         toml_exclude,
-        baseline: args
-            .baseline
-            .as_ref()
-            .map(|p| Baseline::from_file(p))
-            .transpose()?,
-        changed: changed_ref.map(collect_changed_lines).transpose()?,
-        count_anonymous_closures: args.count_anonymous_closures,
-        verbose: args.verbose,
-        quiet: args.quiet,
-        recursive: args.recursive,
-        find_duplicates: args.find_duplicates,
-    };
+    )?;
 
     if args.format != OutputFormat::Text {
         return run_structured_output_mode(args.format, &files, &ctx);
@@ -1198,7 +1202,7 @@ fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContex
             skipped_files,
             report,
             coupling.as_deref(),
-            duplicate_groups.as_deref(),
+            duplicate_groups.as_ref(),
         );
     }
     check_thresholds(
@@ -1480,11 +1484,64 @@ fn extract_file_imports(file: &Path) -> Option<(String, Vec<String>)> {
 fn recursive_duplicate_groups(
     files: &[PathBuf],
     ctx: &RunContext,
-) -> Option<Vec<Vec<duplicates::DuplicateMember>>> {
+) -> Option<duplicates::DuplicateGroupsResult> {
     (ctx.recursive && ctx.find_duplicates).then(|| {
         let fingerprints = collect_corpus_fingerprints(files);
-        duplicates::find_duplicate_groups(&fingerprints)
+        duplicates::find_duplicate_groups(&fingerprints, ctx.duplicate_filters)
     })
+}
+
+/// See `--include-fixture-pairs` / `--include-trivial-duplicates`: both
+/// default to excluding the low-value category, hence the negation.
+fn duplicate_filters_from(args: &Args) -> duplicates::DuplicateFilters {
+    duplicates::DuplicateFilters {
+        exclude_fixture_pairs: !args.include_fixture_pairs,
+        exclude_trivial: !args.include_trivial_duplicates,
+    }
+}
+
+/// Assembles the run configuration threaded through every output mode, from
+/// parsed CLI args plus the filter/threshold state `main` already resolved
+/// (loading those is `main`'s job; this just packages the result).
+fn build_run_context(
+    args: &Args,
+    thresholds: EffectiveThresholds,
+    include_rules: Option<FilterRules>,
+    exclude_rules: Option<FilterRules>,
+    toml_exclude: Vec<config::FilterExclude>,
+) -> Result<RunContext> {
+    Ok(RunContext {
+        thresholds,
+        include_rules,
+        exclude_rules,
+        toml_exclude,
+        baseline: resolve_baseline(args)?,
+        changed: resolve_changed(args)?,
+        count_anonymous_closures: args.count_anonymous_closures,
+        verbose: args.verbose,
+        quiet: args.quiet,
+        recursive: args.recursive,
+        find_duplicates: args.find_duplicates,
+        duplicate_filters: duplicate_filters_from(args),
+    })
+}
+
+fn resolve_baseline(args: &Args) -> Result<Option<Baseline>> {
+    args.baseline
+        .as_ref()
+        .map(|p| Baseline::from_file(p))
+        .transpose()
+}
+
+/// `--changed` is sugar for `--since HEAD`; `--since <REF>` wins if both are
+/// somehow set (clap's `conflicts_with` already prevents that in practice).
+fn resolve_changed(args: &Args) -> Result<Option<ChangedLines>> {
+    let changed_ref = if args.changed {
+        Some("HEAD")
+    } else {
+        args.since.as_deref()
+    };
+    changed_ref.map(collect_changed_lines).transpose()
 }
 
 /// Phase 1 of the duplicate-detection pass: parse every file and fingerprint

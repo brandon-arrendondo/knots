@@ -295,6 +295,30 @@ behind ``--find-duplicates``, only meaningful alongside ``--recursive``, and
 surfaced as a standalone ``DUPLICATE CODE`` section in the text report rather
 than folded into per-function output.
 
+Groups whose members are entirely a ``tests/pass`` vs ``tests/fail``-style
+fixture pair (or ``compliant``/``noncompliant``, ``good``/``bad``,
+``accept``/``reject``, ``valid``/``invalid``) are excluded by default and
+counted in a summary line — these are intentionally near-identical
+compliant/non-compliant examples (as in CERT-C test suites), not extraction
+candidates. Pass ``--include-fixture-pairs`` to see them anyway. The
+heuristic only fires when *every* member of a group sits under one of these
+directory names and normalizes to the same path otherwise; a group that also
+contains a genuine third duplicate is left untouched.
+
+Groups where every member's body spans 3 lines or fewer (``TRIVIAL_BODY_LINE_SPAN``)
+and the group has fewer than 4 members (``TRIVIAL_MIN_REPEAT``) are likewise
+excluded by default, counted in a separate summary line. ``MIN_DUPLICATE_NODES``
+(the AST-node floor) doesn't catch this case on its own: a one-line accessor
+like ``fn src(&self) -> &str { self.src }`` can clear 20 AST nodes from type
+annotations and field-access chains alone while still being a single line of
+source. This matters most right after a real duplication fix — the
+irreducible per-type accessor glue a trait-extraction produces shows up as
+brand-new duplicate groups on the next run, incorrectly reading as
+unresolved debt. A getter repeated 4+ times is kept regardless of size, since
+that many repeats is more likely deliberate copy-paste than the unavoidable
+byproduct of a single refactor. Pass ``--include-trivial-duplicates`` to see
+these groups anyway.
+
 Substrate — Ecosystem Research (June 2026)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

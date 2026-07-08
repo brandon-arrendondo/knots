@@ -623,7 +623,7 @@ pub(crate) fn display_recursive_summary(
     skipped_files: usize,
     report_path: Option<&Path>,
     coupling: Option<&[FileCoupling]>,
-    duplicate_groups: Option<&[Vec<crate::duplicates::DuplicateMember>]>,
+    duplicate_groups: Option<&crate::duplicates::DuplicateGroupsResult>,
 ) {
     let mut sorted = all_metrics.to_vec();
     sorted.sort_by_key(|b| Reverse(b.max_complexity()));
@@ -722,8 +722,8 @@ pub(crate) fn display_recursive_summary(
     if let Some(coupling) = coupling {
         display_file_coupling(coupling);
     }
-    if let Some(groups) = duplicate_groups {
-        display_duplicate_groups(groups);
+    if let Some(result) = duplicate_groups {
+        display_duplicate_groups(result);
     }
     println!("\n=== FILES PROCESSED ===\n");
     println!("  Total files found: {}", total_files);
@@ -762,8 +762,11 @@ pub(crate) fn display_file_coupling(coupling: &[FileCoupling]) {
 
 /// Prints structurally duplicated functions found by `--find-duplicates`.
 /// Groups are already sorted largest-first by `find_duplicate_groups`.
-pub(crate) fn display_duplicate_groups(groups: &[Vec<crate::duplicates::DuplicateMember>]) {
-    if groups.is_empty() {
+pub(crate) fn display_duplicate_groups(result: &crate::duplicates::DuplicateGroupsResult) {
+    let groups = &result.groups;
+    let excluded_fixture_pairs = result.excluded_fixture_pairs;
+    let excluded_trivial = result.excluded_trivial;
+    if groups.is_empty() && excluded_fixture_pairs == 0 && excluded_trivial == 0 {
         return;
     }
 
@@ -772,6 +775,18 @@ pub(crate) fn display_duplicate_groups(groups: &[Vec<crate::duplicates::Duplicat
         "  {} group(s) of structurally identical functions found.",
         groups.len()
     );
+    if excluded_fixture_pairs > 0 {
+        println!(
+            "  {} group(s) excluded as pass/fail fixture pairs (use --include-fixture-pairs to show them).",
+            excluded_fixture_pairs
+        );
+    }
+    if excluded_trivial > 0 {
+        println!(
+            "  {} group(s) excluded as trivial (small-body, low-repeat noise; use --include-trivial-duplicates to show them).",
+            excluded_trivial
+        );
+    }
 
     for (i, group) in groups.iter().enumerate() {
         let node_count = group[0].node_count;
