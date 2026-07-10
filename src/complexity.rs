@@ -312,7 +312,6 @@ fn visit_node_cognitive<'a>(
             | "catch_clause"
             | "except_clause"
             | "loop_statement"
-            | "case_statement"
             | "exception_handler"
             | "selective_accept"
             | "timed_entry_call"
@@ -2271,6 +2270,31 @@ mod tests {
             .set_language(&crate::tree_sitter_cpp::LANGUAGE.into())
             .unwrap();
         parser.parse(code, None).unwrap()
+    }
+
+    // ---- C switch cognitive regression ----
+
+    // A `switch` is a single cognitive increment regardless of arm count
+    // (Cognitive Complexity spec / `--explain cognitive`). Regression guard for
+    // the C per-arm node `case_statement` being counted as a nesting structure,
+    // which inflated flat dispatch switches ~10-20x (e.g. a 21-arm switch → 69).
+    #[test]
+    fn test_c_switch_cognitive_flat() {
+        let code = r#"
+        void func(int x) {
+            switch (x) {
+                case 1: a = 1; break;
+                case 2: a = 2; break;
+                case 3: a = 3; break;
+                case 4: a = 4; break;
+                default: a = 0; break;
+            }
+        }
+        "#;
+        let tree = parse_c_function(code);
+        let node = tree.root_node();
+        // switch: +1 (nesting 0); the five arms add nothing.
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
     }
 
     // ---- C++ parser/discovery tests ----
