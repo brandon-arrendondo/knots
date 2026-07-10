@@ -48,9 +48,14 @@ Layer 1 — Language Registry (``src/lib.rs``)
 in the same file enforces that the two never drift.
 
 ``language_for_file(path)`` maps a file extension to a tree-sitter
-``Language``.  ``is_source_extension`` / ``is_parseable_extension`` gate
-recursive discovery vs. explicit-file parsing respectively (e.g. ``.h`` and
-``.ads`` are parseable but not discovered recursively).
+``Language``.  ``is_source_extension`` covers a language's primary
+``extensions`` only; ``is_parseable_extension`` adds ``explicit_only``
+(e.g. ``.h``, ``.ads``) on top. Recursive (``-r``/``--recursive``) discovery
+uses ``is_parseable_extension``, so headers are walked and scanned by
+default alongside their primary-extension counterparts — pushing complexity
+into a header is not a way to hide it from a recursive scan. Explicit-only
+extensions remain reachable outside recursive mode too, when passed directly
+as a single file.
 
 All grammars are re-exported as ``pub use tree_sitter_*`` so tests and
 workspace members can reach them without adding their own direct dependencies.

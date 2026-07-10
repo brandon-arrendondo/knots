@@ -30,19 +30,13 @@ Or exclude problematic files via a filter:
 
 Check:
 
-- File extensions are ``.c``, ``.cpp``, ``.cc``, ``.cxx``, ``.rs``,
-  ``.py``, ``.js``, ``.mjs``, or ``.cjs``
-  (recursive mode only scans source files, not headers)
+- File extensions are among knots' supported set (see
+  ``knots --supported-languages``) — recursive mode scans both a
+  language's primary extensions (``.c``, ``.cpp``, ``.rs``, ``.py``,
+  ``.js``, ``.mjs``, ``.cjs``, etc.) and explicit-only ones like ``.h``
+  and ``.ads``
 - You're pointing at the right directory
 - Files aren't filtered out by an active include/exclude rule
-
-To include ``.h`` header files:
-
-.. code-block:: json
-
-    {
-      "file_patterns": ["**/*.c", "**/*.h"]
-    }
 
 Metrics seem lower than expected for Rust (vs. clippy)
 -------------------------------------------------------

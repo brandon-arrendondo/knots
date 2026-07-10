@@ -1352,7 +1352,7 @@ fn collect_files(
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension() {
-                    if is_source_extension(ext) && ext_allowed(ext) {
+                    if is_parseable_extension(ext) && ext_allowed(ext) {
                         let file_str = file_path.to_string_lossy();
                         if !path_is_excluded(&file_str, exclude_path_patterns)
                             && should_process_file(&file_str, include_rules, exclude_rules)
@@ -3396,6 +3396,73 @@ mod tests {
                 "caller"
             ),
             1
+        );
+    }
+
+    // ---- Recursive header inclusion (see HEADER_INCLUSION.md) ----
+
+    /// Writes a `main.c` / `util.h` pair (the latter `#include`d by the
+    /// former) to a fresh temp dir unique to `label`, for the header
+    /// inclusion tests below.
+    fn write_c_header_fixture(label: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("knots_{label}_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("main.c"),
+            "#include \"util.h\"\nint main(void) { return add(1, 2); }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("util.h"),
+            "static inline int add(int a, int b) { return a + b; }\n",
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_collect_files_recursive_includes_headers() {
+        // is_source_extension (extensions only) previously gated the
+        // recursive walk, silently dropping .h files. collect_files should
+        // now accept explicit-only extensions here too, matching the
+        // single-file-mode behavior it already had.
+        let dir = write_c_header_fixture("header_inclusion_test");
+        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
+        std::fs::remove_dir_all(&dir).ok();
+
+        let has_header = files
+            .iter()
+            .any(|p| p.extension().is_some_and(|e| e == "h"));
+        assert!(
+            has_header,
+            "--recursive should now include .h files, found: {files:?}"
+        );
+    }
+
+    /// `main.c`'s Ce from a coupling list, or `None` if it's missing.
+    fn main_c_ce(coupling: &[knots::FileCoupling]) -> Option<u32> {
+        coupling
+            .iter()
+            .find(|c| c.file_path.ends_with("main.c"))
+            .map(|c| c.ce)
+    }
+
+    #[test]
+    fn test_recursive_header_include_resolves_end_to_end() {
+        // Exercises the full path the earlier coupling.rs unit test only
+        // simulated with hand-typed strings: real files on disk, walked by
+        // collect_files in recursive mode, parsed, and resolved into a real
+        // Ce edge from the .c file to the .h file it #includes.
+        let dir = write_c_header_fixture("header_coupling_test");
+        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
+        let coupling = collect_import_graph(&files).coupling();
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(
+            main_c_ce(&coupling),
+            Some(1),
+            "main.c's #include \"util.h\" should resolve to a real corpus file now that \
+             recursive mode includes headers"
         );
     }
 }
