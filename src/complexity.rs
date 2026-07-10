@@ -1,6 +1,23 @@
 use std::collections::HashSet;
 use tree_sitter::Node;
 
+// Ada's `case_statement` (the whole `case X is when ... end case;` block) and C's
+// `case_statement` (a single `case N: ...` arm) share the same node-kind string but
+// mean structurally different things. Ada's case_statement always has at least one
+// `case_statement_alternative` child (its `when` arms); C's never does — C has no
+// wrapper node for its arms at all. This is the only reliable way to tell them apart
+// without threading the source language through every metric function.
+fn is_ada_case_statement(node: Node) -> bool {
+    if node.kind() != "case_statement" {
+        return false;
+    }
+    let mut cursor = node.walk();
+    let has_alternative = node
+        .children(&mut cursor)
+        .any(|c| c.kind() == "case_statement_alternative");
+    has_alternative
+}
+
 /// Calculates McCabe cyclomatic complexity for a function
 /// Formula: M = E - N + 2P where E = edges, N = nodes, P = connected components
 /// Simplified: Count decision points + 1
@@ -203,7 +220,7 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
 /// Based on the Cognitive Complexity specification by SonarSource
 pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
     let mut complexity = 0;
-    visit_node_cognitive(node, source_code, 0, &mut complexity, None);
+    walk_cognitive(node, source_code, 0, &mut complexity, None);
     complexity
 }
 
@@ -229,14 +246,13 @@ fn handle_logical_op<'a>(
     Some(op_text)
 }
 
-// Iterative (explicit stack), not recursive: see visit_node_mccabe's comment. The
-// stack carries the per-node state (`nesting_level`, `parent_binary_op`) that used
-// to be threaded through recursive call arguments. Each match arm below either
-// pushes its own choice of node/state and `continue`s (mirroring the original
-// function's early `return` after a specialized `visit_children_cognitive` call),
-// or falls through to the shared push at the bottom (mirroring the original
-// function's fallthrough to its own trailing `visit_children_cognitive` call).
-fn visit_node_cognitive<'a>(
+// Owns the explicit stack (not recursive: see visit_node_mccabe's comment) and
+// the case_statement language-collision guard (C's per-arm case_statement, same
+// node-kind string as Ada's whole case_statement block, must not reach dispatch
+// below — mirrors visit_node_abc's identical guard). Per-node dispatch itself
+// lives in visit_node_cognitive so that function's size is judged against its
+// own baseline rather than compounding with traversal scaffolding.
+fn walk_cognitive<'a>(
     root: Node<'a>,
     source_code: &'a [u8],
     nesting_level: u32,
@@ -245,177 +261,215 @@ fn visit_node_cognitive<'a>(
 ) {
     let mut stack = vec![(root, nesting_level, parent_binary_op)];
     while let Some((node, nesting_level, parent_binary_op)) = stack.pop() {
-        match node.kind() {
-            // if/else — special: Ada bare `else` keyword adds a flat +1.
-            "if_statement" | "if_expression" => {
-                *complexity += 1 + nesting_level;
-                let mut cur = node.walk();
-                if node
-                    .children(&mut cur)
-                    .any(|c| !c.is_named() && c.kind() == "else")
-                {
-                    *complexity += 1;
-                }
-                push_children_cognitive(&mut stack, node, nesting_level + 1, None);
-                continue;
-            }
+        if node.kind() == "case_statement" && !is_ada_case_statement(node) {
+            push_children_cognitive(&mut stack, node, nesting_level, parent_binary_op);
+            continue;
+        }
+        visit_node_cognitive(
+            node,
+            source_code,
+            nesting_level,
+            complexity,
+            parent_binary_op,
+            &mut stack,
+        );
+    }
+}
 
-            // else clause — flat +1; if it contains an else-if, recurse into that child directly.
-            "else_clause" => {
-                *complexity += 1;
-                let mut cursor = node.walk();
-                let target = node
-                    .children(&mut cursor)
-                    .find(|c| matches!(c.kind(), "if_statement" | "if_expression"))
-                    .unwrap_or(node);
-                push_children_cognitive(&mut stack, target, nesting_level, None);
-                continue;
-            }
+// The stack carries the per-node state (`nesting_level`, `parent_binary_op`) that
+// used to be threaded through recursive call arguments. Each match arm below
+// either pushes its own choice of node/state and `return`s (mirroring the
+// original function's early `return` after a specialized `visit_children_cognitive`
+// call), or falls through to the shared push at the bottom (mirroring the
+// original function's fallthrough to its own trailing `visit_children_cognitive`
+// call).
+fn visit_node_cognitive<'a>(
+    node: Node<'a>,
+    source_code: &'a [u8],
+    nesting_level: u32,
+    complexity: &mut u32,
+    parent_binary_op: Option<&'a str>,
+    stack: &mut Vec<(Node<'a>, u32, Option<&'a str>)>,
+) {
+    // Every arm below only ever *overrides* what gets pushed for this node's
+    // children (target node / nesting / parent_binary_op); none of them need
+    // a different stack push callsite of their own. Threading the choice
+    // through these three locals lets the whole function fall through to a
+    // single trailing push_children_cognitive call (mirroring the original
+    // function's per-arm `continue` after its own specialized call, but
+    // without duplicating the callsite or adding early-return nodes).
+    let mut push_node = node;
+    let mut push_nesting = nesting_level;
+    let mut push_op = parent_binary_op;
 
-            // try has NO cost and NO nesting increment; only catch/except gets the penalty.
-            "try_statement" => {
-                push_children_cognitive(&mut stack, node, nesting_level, None);
-                continue;
-            }
-
-            // Closures/lambdas: nesting +1, no base cost.
-            // Covers C++/Rust, Python, JS/TS arrow functions, C# delegates/local fns,
-            // Kotlin lambdas, Go closures.
-            "lambda_expression"
-            | "closure_expression"
-            | "lambda"
-            | "arrow_function"
-            | "anonymous_method_expression"
-            | "local_function_statement"
-            | "lambda_literal"
-            | "anonymous_function"
-            | "annotated_lambda"
-            | "func_literal" => {
-                push_children_cognitive(&mut stack, node, nesting_level + 1, None);
-                continue;
-            }
-
-            // Nesting structures: +1 + nesting_level, children at nesting+1.
-            // Covers loops, switch/match/select, catch/except across all supported languages.
-            "while_statement"
-            | "do_statement"
-            | "for_statement"
-            | "for_range_loop"
-            | "for_in_statement"
-            | "while_expression"
-            | "for_expression"
-            | "loop_expression"
-            | "do_while_expression"
-            | "switch_statement"
-            | "match_expression"
-            | "match_statement"
-            | "catch_clause"
-            | "except_clause"
-            | "loop_statement"
-            | "exception_handler"
-            | "selective_accept"
-            | "timed_entry_call"
-            | "conditional_entry_call"
-            | "asynchronous_select"
-            | "expression_switch_statement"
-            | "type_switch_statement"
-            | "select_statement"
-            | "enhanced_for_statement"
-            | "switch_expression"
-            | "foreach_statement"
-            | "do_while_statement"
-            | "when_expression"
-            | "catch_block"
-            | "guard_statement"
-            | "repeat_while_statement"
-            | "repeat_statement"
-            | "select_case_statement"
-            | "select_rank_statement"
-            | "select_type_statement"
-            | "where_statement" => {
-                *complexity += 1 + nesting_level;
-                push_children_cognitive(&mut stack, node, nesting_level + 1, None);
-                continue;
-            }
-
-            // Flat branches: +1, children at same nesting.
-            // elif/elsif/elseif/elsewhere across Python, Ada, PHP, Lua, Fortran.
-            "elif_clause"
-            | "elsif_statement_item"
-            | "else_if_clause"
-            | "elseif_statement"
-            | "elseif_clause"
-            | "elsewhere_clause" => {
-                *complexity += 1;
-                push_children_cognitive(&mut stack, node, nesting_level, None);
-                continue;
-            }
-
-            // Flat jumps: +1, no recursion needed.
-            // goto/throw/raise across C/C++, Rust, Python, PHP (throw_expression); Ada guard; Fortran arithmetic-if.
-            "goto_statement"
-            | "throw_statement"
-            | "raise_statement"
-            | "raise_expression"
-            | "guard"
-            | "throw_expression"
-            | "arithmetic_if_statement" => {
+    match node.kind() {
+        // if/else — special: Ada bare `else` keyword adds a flat +1.
+        "if_statement" | "if_expression" => {
+            *complexity += 1 + nesting_level;
+            let mut cur = node.walk();
+            if node
+                .children(&mut cur)
+                .any(|c| !c.is_named() && c.kind() == "else")
+            {
                 *complexity += 1;
             }
+            push_nesting = nesting_level + 1;
+            push_op = None;
+        }
 
-            // Logical operator chains: +1 per distinct operator kind, not per operator in a sequence.
-            // binary_expression: C/C++/Rust/PHP (&&, ||, ??, and, or)
-            // boolean_operator: Python (and, or)
-            // infix_expression: Scala (&&, ||)
-            // logical_expression: Fortran (.and., .or., .AND., .OR.)
-            "binary_expression" | "boolean_operator" | "infix_expression"
-            | "logical_expression" => {
-                let valid_ops: &[&str] = match node.kind() {
-                    "binary_expression" => &["&&", "||", "??", "and", "or"],
-                    "boolean_operator" => &["and", "or"],
-                    "infix_expression" => &["&&", "||"],
-                    _ => &[".and.", ".or.", ".AND.", ".OR."],
-                };
-                if let Some(op_text) =
-                    handle_logical_op(node, source_code, complexity, parent_binary_op, valid_ops)
-                {
-                    push_children_cognitive(&mut stack, node, nesting_level, Some(op_text));
-                    continue;
-                }
+        // else clause — flat +1; if it contains an else-if, recurse into that child directly.
+        "else_clause" => {
+            *complexity += 1;
+            let mut cursor = node.walk();
+            push_node = node
+                .children(&mut cursor)
+                .find(|c| matches!(c.kind(), "if_statement" | "if_expression"))
+                .unwrap_or(node);
+            push_op = None;
+        }
+
+        // try has NO cost and NO nesting increment; only catch/except gets the penalty.
+        "try_statement" => {
+            push_op = None;
+        }
+
+        // Closures/lambdas: nesting +1, no base cost.
+        // Covers C++/Rust, Python, JS/TS arrow functions, C# delegates/local fns,
+        // Kotlin lambdas, Go closures.
+        "lambda_expression"
+        | "closure_expression"
+        | "lambda"
+        | "arrow_function"
+        | "anonymous_method_expression"
+        | "local_function_statement"
+        | "lambda_literal"
+        | "anonymous_function"
+        | "annotated_lambda"
+        | "func_literal" => {
+            push_nesting = nesting_level + 1;
+            push_op = None;
+        }
+
+        // Nesting structures: +1 + nesting_level, children at nesting+1.
+        // Covers loops, switch/match/select, catch/except across all supported languages.
+        // case_statement here is only ever Ada's whole case block (the guard
+        // above already filtered out C's per-arm case_statement).
+        "while_statement"
+        | "do_statement"
+        | "for_statement"
+        | "for_range_loop"
+        | "for_in_statement"
+        | "while_expression"
+        | "for_expression"
+        | "loop_expression"
+        | "do_while_expression"
+        | "switch_statement"
+        | "match_expression"
+        | "match_statement"
+        | "case_statement"
+        | "catch_clause"
+        | "except_clause"
+        | "loop_statement"
+        | "exception_handler"
+        | "selective_accept"
+        | "timed_entry_call"
+        | "conditional_entry_call"
+        | "asynchronous_select"
+        | "expression_switch_statement"
+        | "type_switch_statement"
+        | "select_statement"
+        | "enhanced_for_statement"
+        | "switch_expression"
+        | "foreach_statement"
+        | "do_while_statement"
+        | "when_expression"
+        | "catch_block"
+        | "guard_statement"
+        | "repeat_while_statement"
+        | "repeat_statement"
+        | "select_case_statement"
+        | "select_rank_statement"
+        | "select_type_statement"
+        | "where_statement" => {
+            *complexity += 1 + nesting_level;
+            push_nesting = nesting_level + 1;
+            push_op = None;
+        }
+
+        // Flat branches: +1, children at same nesting.
+        // elif/elsif/elseif/elsewhere across Python, Ada, PHP, Lua, Fortran.
+        "elif_clause"
+        | "elsif_statement_item"
+        | "else_if_clause"
+        | "elseif_statement"
+        | "elseif_clause"
+        | "elsewhere_clause" => {
+            *complexity += 1;
+            push_op = None;
+        }
+
+        // Flat jumps: +1, no recursion needed.
+        // goto/throw/raise across C/C++, Rust, Python, PHP (throw_expression); Ada guard; Fortran arithmetic-if.
+        "goto_statement"
+        | "throw_statement"
+        | "raise_statement"
+        | "raise_expression"
+        | "guard"
+        | "throw_expression"
+        | "arithmetic_if_statement" => {
+            *complexity += 1;
+        }
+
+        // Logical operator chains: +1 per distinct operator kind, not per operator in a sequence.
+        // binary_expression: C/C++/Rust/PHP (&&, ||, ??, and, or)
+        // boolean_operator: Python (and, or)
+        // infix_expression: Scala (&&, ||)
+        // logical_expression: Fortran (.and., .or., .AND., .OR.)
+        "binary_expression" | "boolean_operator" | "infix_expression" | "logical_expression" => {
+            let valid_ops: &[&str] = match node.kind() {
+                "binary_expression" => &["&&", "||", "??", "and", "or"],
+                "boolean_operator" => &["and", "or"],
+                "infix_expression" => &["&&", "||"],
+                _ => &[".and.", ".or.", ".AND.", ".OR."],
+            };
+            if let Some(op_text) =
+                handle_logical_op(node, source_code, complexity, parent_binary_op, valid_ops)
+            {
+                push_op = Some(op_text);
             }
+        }
 
-            // Ada: logical operators (and / or / xor) as unnamed keyword children of expression.
-            // Count each new operator sequence, not each occurrence.
-            "expression" => {
-                let mut last_op: Option<&str> = None;
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
-                        let op = child.kind();
-                        if last_op != Some(op) {
-                            *complexity += 1;
-                            last_op = Some(op);
-                        }
+        // Ada: logical operators (and / or / xor) as unnamed keyword children of expression.
+        // Count each new operator sequence, not each occurrence.
+        "expression" => {
+            let mut last_op: Option<&str> = None;
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
+                    let op = child.kind();
+                    if last_op != Some(op) {
+                        *complexity += 1;
+                        last_op = Some(op);
                     }
                 }
             }
-
-            // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
-            "exit_statement" => {
-                let mut cur = node.walk();
-                if node
-                    .children(&mut cur)
-                    .any(|c| !c.is_named() && c.kind() == "when")
-                {
-                    *complexity += 1;
-                }
-            }
-
-            _ => {}
         }
 
-        push_children_cognitive(&mut stack, node, nesting_level, parent_binary_op);
+        // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
+        "exit_statement" => {
+            let mut cur = node.walk();
+            if node
+                .children(&mut cur)
+                .any(|c| !c.is_named() && c.kind() == "when")
+            {
+                *complexity += 1;
+            }
+        }
+
+        _ => {}
     }
+
+    push_children_cognitive(stack, push_node, push_nesting, push_op);
 }
 
 fn push_children_cognitive<'a>(
@@ -460,6 +514,11 @@ fn visit_node_nesting(root: Node, current_depth: u32, max_depth: &mut u32) {
 }
 
 fn visit_node_nesting_depth(node: Node, current_depth: u32, max_depth: &mut u32) -> u32 {
+    // Ada's whole case_statement nests like switch_statement; C's per-arm
+    // case_statement (same node-kind string) must not. See is_ada_case_statement.
+    if node.kind() == "case_statement" && !is_ada_case_statement(node) {
+        return current_depth;
+    }
     match node.kind() {
         // C/C++ control structures
         "if_statement" | "while_statement" | "do_statement" | "for_statement"
@@ -771,7 +830,11 @@ fn visit_node_abc(
 ) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        visit_node_abc_one(node, source_code, assignments, branches, conditions);
+        // C's per-arm case_statement (same node-kind string as Ada's whole
+        // case_statement block) must not add a condition; skip dispatch for it.
+        if node.kind() != "case_statement" || is_ada_case_statement(node) {
+            visit_node_abc_one(node, source_code, assignments, branches, conditions);
+        }
         let mut cursor = node.walk();
         stack.extend(node.children(&mut cursor));
     }
@@ -837,7 +900,9 @@ fn visit_node_abc_one(
         // Conditions (Python)
         "elif_clause" | "match_statement" => *conditions += 1,
 
-        // Conditions (Ada)
+        // Conditions (Ada). case_statement here is only ever Ada's whole
+        // case_statement block (the top-of-function guard filters out C's
+        // per-arm case_statement, which shares the same node-kind string).
         "elsif_statement_item" | "loop_statement" | "case_statement" | "exception_handler" => {
             *conditions += 1
         }
@@ -2295,6 +2360,58 @@ mod tests {
         let node = tree.root_node();
         // switch: +1 (nesting 0); the five arms add nothing.
         assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+    }
+
+    // Same collision affects nesting depth and ABC conditions: C's `case_statement`
+    // (per-arm) must not contribute, only the enclosing `switch_statement`.
+    #[test]
+    fn test_c_switch_nesting_and_abc_flat() {
+        let code = r#"
+        void func(int x) {
+            switch (x) {
+                case 1: a = 1; break;
+                case 2: a = 2; break;
+                case 3: a = 3; break;
+                case 4: a = 4; break;
+                default: a = 0; break;
+            }
+        }
+        "#;
+        let tree = parse_c_function(code);
+        let node = tree.root_node();
+        assert_eq!(calculate_nesting_depth(node), 1);
+        assert_eq!(
+            calculate_abc_complexity(node, code.as_bytes()).conditions,
+            1
+        );
+    }
+
+    // Ada's `case_statement` is the whole `case ... end case;` block (distinguished
+    // from C's per-arm node of the same name by the presence of a
+    // case_statement_alternative child — see is_ada_case_statement). It must still
+    // contribute to cognitive complexity, nesting depth, and ABC conditions like any
+    // other switch-equivalent, regardless of the C-specific fix above.
+    #[test]
+    fn test_ada_case_statement_still_counted() {
+        let code = r#"
+        procedure Func (X : Integer) is
+        begin
+            case X is
+                when 1 => A := 1;
+                when 2 => A := 2;
+                when others => A := 0;
+            end case;
+        end Func;
+        "#;
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&crate::tree_sitter_ada::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let node = tree.root_node();
+        assert!(calculate_cognitive_complexity(node, code.as_bytes()) >= 1);
+        assert!(calculate_nesting_depth(node) >= 1);
+        assert!(calculate_abc_complexity(node, code.as_bytes()).conditions >= 1);
     }
 
     // ---- C++ parser/discovery tests ----
