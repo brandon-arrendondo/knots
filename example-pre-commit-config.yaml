@@ -24,7 +24,7 @@ repos:
   # from-source compile.
   # ===========================================================================
   - repo: https://github.com/brandon-arrendondo/knots-pre-commit
-    rev: v1.14.0
+    rev: v1.15.0
     hooks:
       # -----------------------------------------------------------------------
       # All supported languages — default gate: AIRD ≤ 85
@@ -102,7 +102,7 @@ repos:
   # test-complexity hook (which lives only in the main repo).
   # ===========================================================================
   # - repo: https://github.com/brandon-arrendondo/knots
-  #   rev: v1.14.0
+  #   rev: v1.15.0
   #   hooks:
   #     # Build from source (no PyPI dependency; slow first run)
   #     - id: knots
