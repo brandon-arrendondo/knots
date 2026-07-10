@@ -185,9 +185,14 @@ case.</p>
 <code class="docutils literal notranslate"><span class="pre">SUPPORTED_EXTENSIONS</span></code> mirrors its recursive-discovery extensions; a test
 in the same file enforces that the two never drift.</p>
 <p><code class="docutils literal notranslate"><span class="pre">language_for_file(path)</span></code> maps a file extension to a tree-sitter
-<code class="docutils literal notranslate"><span class="pre">Language</span></code>.  <code class="docutils literal notranslate"><span class="pre">is_source_extension</span></code> / <code class="docutils literal notranslate"><span class="pre">is_parseable_extension</span></code> gate
-recursive discovery vs. explicit-file parsing respectively (e.g. <code class="docutils literal notranslate"><span class="pre">.h</span></code> and
-<code class="docutils literal notranslate"><span class="pre">.ads</span></code> are parseable but not discovered recursively).</p>
+<code class="docutils literal notranslate"><span class="pre">Language</span></code>.  <code class="docutils literal notranslate"><span class="pre">is_source_extension</span></code> covers a language’s primary
+<code class="docutils literal notranslate"><span class="pre">extensions</span></code> only; <code class="docutils literal notranslate"><span class="pre">is_parseable_extension</span></code> adds <code class="docutils literal notranslate"><span class="pre">explicit_only</span></code>
+(e.g. <code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.ads</span></code>) on top. Recursive (<code class="docutils literal notranslate"><span class="pre">-r</span></code>/<code class="docutils literal notranslate"><span class="pre">--recursive</span></code>) discovery
+uses <code class="docutils literal notranslate"><span class="pre">is_parseable_extension</span></code>, so headers are walked and scanned by
+default alongside their primary-extension counterparts — pushing complexity
+into a header is not a way to hide it from a recursive scan. Explicit-only
+extensions remain reachable outside recursive mode too, when passed directly
+as a single file.</p>
 <p>All grammars are re-exported as <code class="docutils literal notranslate"><span class="pre">pub</span> <span class="pre">use</span> <span class="pre">tree_sitter_*</span></code> so tests and
 workspace members can reach them without adding their own direct dependencies.</p>
 <p><code class="docutils literal notranslate"><span class="pre">lib.rs</span></code> also owns the shared data model:</p>

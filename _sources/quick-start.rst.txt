@@ -58,7 +58,8 @@ Recursive Directory Analysis
 
 Recursive mode:
 
-- Scans all supported source files (see :doc:`installation` for the full extension list; headers skipped by default)
+- Scans all supported source files, including headers like ``.h``/``.ads``
+  (see :doc:`installation` for the full extension list)
 - Shows top 5 worst functions by complexity
 - Displays totals and averages across all files
 - Writes per-function detail to a file when ``--report <FILE>`` is given (opt-in)
@@ -91,12 +92,14 @@ For large codebases, add ``-j`` to analyse files in parallel::
 sequential processing.  Each thread owns its own parser, so there is no
 contention.
 
-To include header files, use an include filter:
+Header files (``.h``, ``.ads``, etc.) are included by default in recursive
+mode — pushing logic into a header is not a way to hide it from the scan.
+To scan *only* headers, or exclude them, use an include/exclude filter:
 
 .. code-block:: json
 
     {
-      "file_patterns": ["**/*.c", "**/*.h"]
+      "file_patterns": ["**/*.c", "!**/*.h"]
     }
 
 Compile Commands Integration

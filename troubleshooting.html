@@ -121,18 +121,14 @@
 <h2>“No supported source files found in directory”<a class="headerlink" href="#no-supported-source-files-found-in-directory" title="Link to this heading"></a></h2>
 <p>Check:</p>
 <ul class="simple">
-<li><p>File extensions are <code class="docutils literal notranslate"><span class="pre">.c</span></code>, <code class="docutils literal notranslate"><span class="pre">.cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.cc</span></code>, <code class="docutils literal notranslate"><span class="pre">.cxx</span></code>, <code class="docutils literal notranslate"><span class="pre">.rs</span></code>,
-<code class="docutils literal notranslate"><span class="pre">.py</span></code>, <code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.mjs</span></code>, or <code class="docutils literal notranslate"><span class="pre">.cjs</span></code>
-(recursive mode only scans source files, not headers)</p></li>
+<li><p>File extensions are among knots’ supported set (see
+<code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--supported-languages</span></code>) — recursive mode scans both a
+language’s primary extensions (<code class="docutils literal notranslate"><span class="pre">.c</span></code>, <code class="docutils literal notranslate"><span class="pre">.cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.rs</span></code>, <code class="docutils literal notranslate"><span class="pre">.py</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.mjs</span></code>, <code class="docutils literal notranslate"><span class="pre">.cjs</span></code>, etc.) and explicit-only ones like <code class="docutils literal notranslate"><span class="pre">.h</span></code>
+and <code class="docutils literal notranslate"><span class="pre">.ads</span></code></p></li>
 <li><p>You’re pointing at the right directory</p></li>
 <li><p>Files aren’t filtered out by an active include/exclude rule</p></li>
 </ul>
-<p>To include <code class="docutils literal notranslate"><span class="pre">.h</span></code> header files:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/*.c&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;**/*.h&quot;</span><span class="p">]</span>
-<span class="p">}</span>
-</pre></div>
-</div>
 </section>
 <section id="metrics-seem-lower-than-expected-for-rust-vs-clippy">
 <h2>Metrics seem lower than expected for Rust (vs. clippy)<a class="headerlink" href="#metrics-seem-lower-than-expected-for-rust-vs-clippy" title="Link to this heading"></a></h2>

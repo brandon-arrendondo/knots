@@ -151,7 +151,8 @@ Average AICP Score: 40.00</p>
 </div>
 <p>Recursive mode:</p>
 <ul class="simple">
-<li><p>Scans all supported source files (see <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a> for the full extension list; headers skipped by default)</p></li>
+<li><p>Scans all supported source files, including headers like <code class="docutils literal notranslate"><span class="pre">.h</span></code>/<code class="docutils literal notranslate"><span class="pre">.ads</span></code>
+(see <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a> for the full extension list)</p></li>
 <li><p>Shows top 5 worst functions by complexity</p></li>
 <li><p>Displays totals and averages across all files</p></li>
 <li><p>Writes per-function detail to a file when <code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code> is given (opt-in)</p></li>
@@ -183,9 +184,11 @@ Average AICP Score: 40.00</p>
 <p><code class="docutils literal notranslate"><span class="pre">-j</span> <span class="pre">0</span></code> (the default) auto-detects available CPU cores; <code class="docutils literal notranslate"><span class="pre">-j</span> <span class="pre">1</span></code> forces
 sequential processing.  Each thread owns its own parser, so there is no
 contention.</p>
-<p>To include header files, use an include filter:</p>
+<p>Header files (<code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.ads</span></code>, etc.) are included by default in recursive
+mode — pushing logic into a header is not a way to hide it from the scan.
+To scan <em>only</em> headers, or exclude them, use an include/exclude filter:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/*.c&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;**/*.h&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/*.c&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;!**/*.h&quot;</span><span class="p">]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
