@@ -119,7 +119,7 @@ Cover: plain function, method on a type, multiple functions, anonymous/closure (
 - **Metrics are language-neutral** — the formulas in `complexity.rs` never change; only node-kind strings differ.
 - **`LANGUAGES` is the single source of truth for language support** — `SUPPORTED_EXTENSIONS`, `knots --supported-languages`, and every doc that lists languages derive from it. After editing it, run `invoke sync-languages` (a test guards that `SUPPORTED_EXTENSIONS` still matches).
 - **`SUPPORTED_EXTENSIONS` is the recursive-discovery gate** — if an extension isn't listed there, `--recursive` silently skips those files.
-- **`.h` files are intentionally excluded** from `SUPPORTED_EXTENSIONS` even though `language_for_file` maps them to C. Headers are parsed when passed explicitly.
+- **`.h` (and other `explicit_only` extensions like Ada's `.ads`) are included in `--recursive` discovery** via `is_parseable_extension`, alongside each language's primary `extensions` — see `HEADER_INCLUSION.md` for why. `.h` content is sniffed for unambiguous C++-only syntax (`language_for_header_content`) before falling back to the C grammar.
 - **SLOC mode** — only Python uses `calculate_sloc_python` (skips `#` lines). Everything else uses `calculate_sloc` (`//` and `/* */`). Add a new mode only if necessary.
 - **External calls** — `collect_local_names_recursive` must mirror `visit_functions`; any function node kind in one should be in the other, or locally-defined functions will be misclassified as external calls.
 

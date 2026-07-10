@@ -196,11 +196,40 @@ header projects may see noisy results until the follow-up lands.
   section, which listed extensions without headers and called recursive
   mode header-exclusive).
 
-- **Known limitation** (from the brief, not fixed here): `.h` still always
-  parses as C regardless of project language, so C++-only headers
-  (classes, templates, namespaces) may now produce parse errors or noisy
-  metrics in mixed/C++-only projects under `--recursive`, where previously
-  they were invisible. Plain-C projects get a clean win immediately. The
-  C-vs-C++ header sniffer to address this is tracked separately as
-  follow-up work on `lang_parsing_substrate`, per the brief — not started
-  here.
+- **Known limitation** (from the brief, not fixed here at the time): `.h`
+  always parsed as C regardless of project language, so C++-only headers
+  (classes, templates, namespaces) could produce parse errors or noisy
+  metrics in mixed/C++-only projects under `--recursive`.
+
+  ## Follow-up: resolved by `lang_parsing_substrate` v0.4.0
+
+  `lang_parsing_substrate` v0.4.0 landed `looks_like_cpp` /
+  `language_for_header_content` — a best-effort syntax sniff that
+  classifies a `.h` file as C++ only when it contains a construct with no
+  meaning in C at all (`class`, `namespace`, `template`, `::`, references,
+  `try`/`catch`, `using`, etc). knots now bumped its dependency to
+  `"0.4.0"` (`Cargo.toml`) and switched `parse_file` (`src/main.rs`) from
+  `language_for_file` to `language_for_header_content`, passing the
+  already-read source bytes so the sniff runs on the same content being
+  parsed — the one call site every recursive/single-file code path routes
+  through. `language_for_header_content` re-exported from `knots::` in
+  `src/lib.rs` alongside the existing `language_for_file`.
+
+  Added `test_parse_file_sniffs_cpp_only_header_content` (`src/main.rs`),
+  which feeds `parse_file` a `.h` source with C++-only syntax (namespace +
+  class + a trailing `const` qualifier, which is invalid C) and asserts
+  the C++ grammar is selected by checking that `value` — the method name —
+  is discovered via `visit_functions`/`get_function_name`; misparsing
+  under the C grammar would either miss it or mangle the name. No temp
+  files needed — `parse_file` takes already-read source, so only the
+  path's extension matters, and `language_for_header_content` doesn't
+  touch disk itself.
+
+  The plain-C-only-projects-get-a-clean-win / C++-only-projects-may-see-
+  parse-noise split described above is now narrowed: a `.h` file is only
+  misclassified as C if it happens to use *no* unambiguous C++-only
+  syntax (a C++ header written entirely in the C-compatible subset), which
+  is the same "never fabricate" tradeoff `detect_min_c_standard` makes
+  elsewhere in the substrate — see `lang_parsing_substrate/src/cpp_header.rs`
+  module docs for the full marker list and the `static_assert` false-
+  positive exclusion.

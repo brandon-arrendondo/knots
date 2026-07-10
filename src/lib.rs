@@ -38,8 +38,9 @@ pub use tree_sitter;
 // Language registry, detection, and SLOC-mode lookup also live in the substrate
 // (they were extracted from knots). Re-export so existing `knots::` paths resolve.
 pub use lang_parsing_substrate::{
-    is_parseable_extension, is_source_extension, language_for_file, language_info_for_file,
-    languages, sloc_mode_for_file, supported_languages_report, LanguageInfo, SlocMode,
+    is_parseable_extension, is_source_extension, language_for_file, language_for_header_content,
+    language_info_for_file, languages, sloc_mode_for_file, supported_languages_report,
+    LanguageInfo, SlocMode,
 };
 
 // Inline suppression / ignore-region scanning (tools:off, tools:suppress)

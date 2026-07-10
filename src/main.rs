@@ -15,8 +15,8 @@ mod duplicates;
 mod output;
 use config::KnotsToml;
 use knots::{
-    collect_function_metrics, is_parseable_extension, is_source_extension, language_for_file,
-    language_info_for_file, languages, FilterRules, FunctionMetrics,
+    collect_function_metrics, is_parseable_extension, is_source_extension,
+    language_for_header_content, language_info_for_file, languages, FilterRules, FunctionMetrics,
 };
 use output::*;
 
@@ -379,11 +379,16 @@ enum OutputFormat {
 
 /// Parse a source file into a tree-sitter Tree, selecting the grammar by extension.
 ///
+/// Uses `language_for_header_content` rather than plain `language_for_file` so
+/// a `.h` file gets sniffed for unambiguous C++-only syntax before falling
+/// back to C (see that function's docs) — otherwise a C++ header parsed as C
+/// could misreport its own complexity or fail to parse at all.
+///
 /// The substrate returns `None` for an unknown extension or a language whose
 /// feature was compiled out — knots no longer falls back to C. Recursive mode
 /// skips such files (see the caller); single-file mode surfaces the error.
 fn parse_file(file: &Path, source_code: &str) -> Result<Tree> {
-    let language = language_for_file(file)
+    let language = language_for_header_content(file, source_code.as_bytes())
         .with_context(|| format!("Unsupported language for {}", file.display()))?;
     let mut parser = tree_sitter::Parser::new();
     parser
@@ -3396,6 +3401,32 @@ mod tests {
                 "caller"
             ),
             1
+        );
+    }
+
+    #[test]
+    fn test_parse_file_sniffs_cpp_only_header_content() {
+        // A .h file with unambiguous C++-only syntax (namespace + class +
+        // trailing `const` qualifier — invalid C) must resolve to the C++
+        // grammar via language_for_header_content, not the C default;
+        // otherwise `value` either isn't found or is misparsed.
+        // parse_file takes already-read source, so no real file is needed —
+        // only the extension on the path it's given.
+        let source =
+            "namespace ns {\nclass Thing {\npublic:\n    int value() const { return 1; }\n};\n}\n";
+        let tree = parse_file(Path::new("thing.h"), source).expect("should parse as C++");
+
+        let mut cursor = tree.root_node().walk();
+        let mut names = Vec::new();
+        visit_functions(&mut cursor, source, &mut |node, src| {
+            if let Some(name) = get_function_name(node, src) {
+                names.push(name);
+            }
+        });
+        assert_eq!(
+            names,
+            vec!["value"],
+            "expected the C++ grammar to discover the `value` method"
         );
     }
 
