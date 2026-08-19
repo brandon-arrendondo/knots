@@ -28,6 +28,7 @@ use crate::FunctionMetrics;
 /// Ce, Ca, and Instability for one file in the corpus.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileCoupling {
+    /// Path to the file these coupling metrics were computed for.
     pub file_path: String,
     /// Efferent coupling — distinct corpus files this file imports.
     pub ce: u32,

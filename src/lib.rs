@@ -11,6 +11,8 @@
 //! that reads files, walks directories, or prints anything — this crate
 //! stays a pure function of `(Tree, source_code) -> Vec<FunctionMetrics>`.
 
+#![warn(missing_docs)]
+
 use anyhow::{Context, Result};
 use globset::Glob;
 use regex::Regex;
@@ -163,20 +165,38 @@ fn glob_match(pattern: &str, path: &str) -> bool {
 /// function discovered via [`visit_functions`].
 #[derive(Debug, Clone)]
 pub struct FunctionMetrics {
+    /// The function's name, or a synthetic `<anonymous>@line:col` when
+    /// `count_anonymous_closures` recorded an unnamed closure/lambda.
     pub name: String,
+    /// Path to the source file this function was discovered in, as passed
+    /// to [`collect_function_metrics`].
     pub file_path: String,
+    /// 1-indexed line the function's declaration starts on.
     pub start_line: u32,
+    /// 1-indexed line the function's body ends on.
     pub end_line: u32,
+    /// McCabe cyclomatic complexity.
     pub mccabe: u32,
+    /// Cognitive complexity (Sonar's structural-nesting-weighted measure).
     pub cognitive: u32,
+    /// Maximum nesting depth of control-flow structures.
     pub nesting: u32,
+    /// Source lines of code, excluding blank lines, comments, and any
+    /// nested function's own SLOC (see [`nested_fn_sloc`]).
     pub sloc: u32,
+    /// ABC complexity magnitude (assignments/branches/conditions).
     pub abc_magnitude: f64,
+    /// Number of `return` statements.
     pub return_count: u32,
+    /// Automated-test-generation difficulty score and its component breakdown.
     pub test_scoring: TestScoringMetric,
+    /// AIRD score — this crate's composite reviewability/risk metric.
     pub aird: u32,
+    /// AICP score — this crate's composite AI-context-cost metric.
     pub aicp: u32,
+    /// Count of calls to functions not defined in the same file.
     pub external_calls: u32,
+    /// Count of reads/writes to `self`/`this` fields.
     pub state_coupling: u32,
     /// Efferent coupling (Ce) of this function's file, from the corpus-wide
     /// import graph — `0` outside `--recursive` mode, where no corpus exists
@@ -199,6 +219,8 @@ pub struct FunctionMetrics {
 }
 
 impl FunctionMetrics {
+    /// The higher of `mccabe` and `cognitive`, used for threshold gating
+    /// where either metric alone would let a violation through.
     pub fn max_complexity(&self) -> u32 {
         std::cmp::max(self.mccabe, self.cognitive)
     }

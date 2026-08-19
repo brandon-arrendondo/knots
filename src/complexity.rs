@@ -748,12 +748,16 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// Represents ABC complexity components
 #[derive(Debug, Clone, Copy)]
 pub struct AbcComplexity {
+    /// Assignment statements and increment/decrement operations.
     pub assignments: u32,
+    /// Function/method calls.
     pub branches: u32,
+    /// Conditional logic (comparisons, logical operators, conditionals).
     pub conditions: u32,
 }
 
 impl AbcComplexity {
+    /// Euclidean magnitude of the (assignments, branches, conditions) vector.
     pub fn magnitude(&self) -> f64 {
         let a = self.assignments as f64;
         let b = self.branches as f64;
@@ -1047,15 +1051,28 @@ fn visit_node_returns(root: Node, count: &mut u32) {
 /// Based on automated test generation difficulty assessment
 #[derive(Debug, Clone, Copy)]
 pub struct TestScoringMetric {
+    /// Difficulty contributed by the function's parameter/return signature.
     pub signature_score: u32,
+    /// Difficulty contributed by external dependencies a test would need to
+    /// set up or mock.
     pub dependency_score: u32,
+    /// Difficulty contributed by how hard the function's behavior is to
+    /// observe from a test (return value vs. side effects only, etc.).
     pub observable_score: u32,
+    /// Difficulty contributed by the function's own cyclomatic complexity,
+    /// mapped from `mccabe` via [`map_cyclomatic_to_implementation_score`].
     pub implementation_score: u32,
+    /// Reduction applied when the function carries doc comments that would
+    /// help a test author (negative of the raw documentation score, since
+    /// more documentation makes testing easier).
     pub documentation_score: i32,
+    /// Sum of the four difficulty scores minus `documentation_score`; see
+    /// [`Self::classification`] for the human-readable band.
     pub total_score: i32,
 }
 
 impl TestScoringMetric {
+    /// Human-readable difficulty band for `total_score`.
     pub fn classification(&self) -> &'static str {
         match self.total_score {
             i32::MIN..=10 => "Trivial",
@@ -1067,6 +1084,8 @@ impl TestScoringMetric {
         }
     }
 
+    /// Suggested degree of manual effort a test for this function would need,
+    /// derived from the same bands as [`Self::classification`].
     #[allow(dead_code)]
     pub fn automation_level(&self) -> &'static str {
         match self.total_score {
