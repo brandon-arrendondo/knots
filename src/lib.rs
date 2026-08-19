@@ -1,4 +1,15 @@
-// knots library - shared complexity calculation functions
+//! knots' public library API: the language registry (`language_for_file`,
+//! `languages`), the tree-sitter-driven function-discovery pipeline
+//! (`visit_functions`, `get_function_name`, `collect_function_metrics`), and
+//! the per-function result type (`FunctionMetrics`).
+//!
+//! All 13 metrics themselves live in [`complexity`] as pure tree-sitter
+//! traversals with no I/O; this module is the layer that discovers which
+//! tree-sitter nodes count as "a function" for a given grammar, extracts a
+//! name for one, and assembles the metrics into a `FunctionMetrics` per
+//! discovered function. `main.rs` (the CLI binary) is the only consumer
+//! that reads files, walks directories, or prints anything — this crate
+//! stays a pure function of `(Tree, source_code) -> Vec<FunctionMetrics>`.
 
 use anyhow::{Context, Result};
 use globset::Glob;
@@ -146,6 +157,10 @@ fn glob_match(pattern: &str, path: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// All computed metrics for a single function, plus the identity fields
+/// (`name`, `file_path`, `start_line`/`end_line`) needed to report or
+/// threshold-check it. Produced by [`collect_function_metrics`], one per
+/// function discovered via [`visit_functions`].
 #[derive(Debug, Clone)]
 pub struct FunctionMetrics {
     pub name: String,
@@ -189,6 +204,12 @@ impl FunctionMetrics {
     }
 }
 
+/// Walk every node in `cursor`'s tree in pre-order, invoking `callback` on
+/// each node whose kind is a recognized function/method/subprogram node
+/// across the supported grammars (see the `matches!` arm below for the
+/// full list). Language-specific discovery (e.g. new function node kinds
+/// for a newly added grammar) is wired up here; see the "Adding a new
+/// language" checklist in `CLAUDE.md`.
 pub fn visit_functions<F>(cursor: &mut TreeCursor, source_code: &str, callback: &mut F)
 where
     F: FnMut(Node, &str),
@@ -350,6 +371,13 @@ fn get_c_name(node: Node, source_code: &str) -> Option<String> {
     None
 }
 
+/// Extract a function/method's name from its declaration node, dispatching
+/// on `node.kind()` to the right strategy per grammar: a direct `name`
+/// field for most languages, a declarator walk for C, and
+/// assignment-context inference for anonymous JS/Lua function expressions.
+/// Returns `None` for genuinely anonymous nodes (callbacks, IIFEs) that
+/// [`collect_function_metrics`] may still record under a synthetic
+/// `<anonymous>@line:col` name when `count_anonymous_closures` is set.
 pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
     match node.kind() {
         "function_item"
@@ -832,6 +860,12 @@ fn suppressed_metrics_for(
     out
 }
 
+/// Parse-tree entry point of the library: walk `tree` via [`visit_functions`]
+/// and return one [`FunctionMetrics`] per discovered function, with every
+/// metric in `complexity` computed and `include_rules`/`exclude_rules`
+/// applied to drop functions (by file or by name) that don't match. Set
+/// `count_anonymous_closures` to also record unnamed closures/lambdas under
+/// a synthetic `<anonymous>@line:col` name instead of skipping them.
 pub fn collect_function_metrics(
     tree: &Tree,
     source_code: &str,

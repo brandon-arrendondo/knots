@@ -1,3 +1,9 @@
+//! Report rendering for the CLI: per-function emoji/severity labels,
+//! `file:line:name` locators, and the human/JSON/matrix output formats
+//! `main.rs` selects between. Pure formatting over an already-computed
+//! `Vec<FunctionMetrics>` — no metric calculation and no file I/O beyond
+//! the `Write` the caller hands in.
+
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::cmp::Reverse;

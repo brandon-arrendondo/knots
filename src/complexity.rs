@@ -1,3 +1,18 @@
+//! All 13 complexity metrics (McCabe, Cognitive, Nesting, SLOC, ABC, AIRD,
+//! AICP, Test Scoring, Return Count, State Coupling, External Calls,
+//! Unreachable Blocks, plus the file-level Ce multiplier folded into AIRD)
+//! as pure tree-sitter traversals over one function's syntax node — no I/O,
+//! and no knowledge of which file or language it came from beyond the node
+//! kinds a caller already resolved.
+//!
+//! Every metric's formula is language-neutral by construction: a `match` on
+//! `node.kind()` is the only place a new grammar's control-flow/loop/case
+//! spelling enters, per the "Adding a new language" checklist in this
+//! repo's `CLAUDE.md`. A few node kinds collide across grammars with
+//! different meaning (Ada's vs. C's `case_statement`, see
+//! `is_ada_case_statement` below) and are disambiguated by shape, not by
+//! threading a language tag through every function.
+
 use std::collections::HashSet;
 use tree_sitter::Node;
 

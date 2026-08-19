@@ -1,3 +1,12 @@
+//! The `knots` CLI: argument parsing, file/directory discovery
+//! (`--recursive`, `compile_commands.json`), output formatting (human,
+//! JSON, SARIF, matrix), and threshold enforcement (baseline ratcheting,
+//! `--changed`-scoped gating). Everything here reads files, walks
+//! directories, or writes to stdout; the actual metric computation is
+//! `knots::collect_function_metrics` in the library crate — this binary's
+//! job is turning CLI flags into calls against that pure function and
+//! turning its `Vec<FunctionMetrics>` into a report.
+
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use ignore::WalkBuilder;
