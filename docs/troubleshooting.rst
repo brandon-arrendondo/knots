@@ -63,6 +63,23 @@ Knots omits SARIF results for functions with ``max(McCabe, cognitive) ≤ 10``
 will contain a valid but empty results array. Use ``--include`` with
 ``"min_complexity": 1`` to force all functions through if needed.
 
+Metrics dropped after upgrading (C/C++, Swift, C#)
+----------------------------------------------------
+
+Starting in knots 1.16.0, preprocessor branches a compiler would never
+compile — ``#if 0`` bodies, ``#ifdef __cplusplus`` guards, and other
+locally-provable dead ``#ifdef``/``#if`` branches — are excluded from
+McCabe, Cognitive, SLOC, and ABC before those metrics are computed, for
+C, C++, Swift, and C#. A function with a large dead branch (e.g. a
+``#if defined(SUPPORT_X)``/``#else`` pair where ``SUPPORT_X`` is never
+defined) will report a lower complexity than it did before the upgrade.
+This is expected — see :doc:`metrics-reference` — Preprocessor Dead-Code
+Exclusion for exactly what is and isn't recognized as dead.
+
+If you have a CI baseline (``--baseline``) captured before upgrading, some
+functions may now read as improvements against it; re-running with
+``--write-baseline`` will refresh it to the new, more accurate numbers.
+
 Compile commands: "file not found" or missing files
 ----------------------------------------------------
 
