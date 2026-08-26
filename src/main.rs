@@ -396,12 +396,37 @@ enum OutputFormat {
 /// The substrate returns `None` for an unknown extension or a language whose
 /// feature was compiled out — knots no longer falls back to C. Recursive mode
 /// skips such files (see the caller); single-file mode surfaces the error.
-fn parse_file(file: &Path, source_code: &str) -> Result<Tree> {
+///
+/// Before parsing, preprocessor-dead lines (C/C++, Swift, C# — see
+/// [`knots::blank_dead_code`]) are blanked out, so the returned tree — and
+/// the source string returned alongside it, which callers should use in
+/// place of their own for anything downstream (metrics, import extraction,
+/// fingerprinting) — never reflects code a compiler would strip.
+fn parse_file(file: &Path, source_code: &str) -> Result<(Tree, String)> {
     let language = language_for_header_content(file, source_code.as_bytes())
         .with_context(|| format!("Unsupported language for {}", file.display()))?;
+    let effective_source = dead_code_stripped_source(file, source_code);
+    let tree = parse_with_language(&language, &effective_source, file)?;
+    Ok((tree, effective_source))
+}
+
+/// `source_code` with any preprocessor-dead lines blanked (see
+/// [`knots::blank_dead_code`]), keyed off `file`'s language by extension.
+fn dead_code_stripped_source(file: &Path, source_code: &str) -> String {
+    let key = language_info_for_file(file)
+        .map(|info| info.key)
+        .unwrap_or("");
+    knots::blank_dead_code(source_code, key)
+}
+
+fn parse_with_language(
+    language: &tree_sitter::Language,
+    source_code: &str,
+    file: &Path,
+) -> Result<Tree> {
     let mut parser = tree_sitter::Parser::new();
     parser
-        .set_language(&language)
+        .set_language(language)
         .context("Failed to set language")?;
     parser
         .parse(source_code, None)
@@ -1198,7 +1223,7 @@ fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
 fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
     let source_code = fs::read_to_string(file)
         .with_context(|| format!("Failed to read file: {}", file.display()))?;
-    let tree = parse_file(file, &source_code)?;
+    let (tree, source_code) = parse_file(file, &source_code)?;
 
     let mut metrics = collect_function_metrics(
         &tree,
@@ -1439,7 +1464,7 @@ fn collect_all_metrics(
                     return Vec::new();
                 }
             };
-            let tree = match parse_file(file, &source_code) {
+            let (tree, source_code) = match parse_file(file, &source_code) {
                 Ok(t) => t,
                 Err(_) => {
                     let hint = if file.extension().and_then(|e| e.to_str()) == Some("h") {
@@ -1514,7 +1539,7 @@ fn collect_import_graph(files: &[PathBuf]) -> knots::ImportGraph {
 /// that function already warns about the same files.
 fn extract_file_imports(file: &Path) -> Option<(String, Vec<String>)> {
     let source_code = fs::read_to_string(file).ok()?;
-    let tree = parse_file(file, &source_code).ok()?;
+    let (tree, source_code) = parse_file(file, &source_code).ok()?;
     let key = language_info_for_file(file)?.key;
     let path = file.to_str().unwrap_or("").to_string();
     Some((
@@ -1704,7 +1729,7 @@ fn extract_file_fingerprints(
     file: &Path,
 ) -> Option<Vec<lang_parsing_substrate::CorpusFingerprint<String>>> {
     let source_code = fs::read_to_string(file).ok()?;
-    let tree = parse_file(file, &source_code).ok()?;
+    let (tree, source_code) = parse_file(file, &source_code).ok()?;
     let path = file.to_str().unwrap_or("").to_string();
     let fingerprints = lang_parsing_substrate::function_fingerprints(
         tree.root_node(),
@@ -3423,11 +3448,11 @@ mod tests {
         // only the extension on the path it's given.
         let source =
             "namespace ns {\nclass Thing {\npublic:\n    int value() const { return 1; }\n};\n}\n";
-        let tree = parse_file(Path::new("thing.h"), source).expect("should parse as C++");
+        let (tree, source) = parse_file(Path::new("thing.h"), source).expect("should parse as C++");
 
         let mut cursor = tree.root_node().walk();
         let mut names = Vec::new();
-        visit_functions(&mut cursor, source, &mut |node, src| {
+        visit_functions(&mut cursor, &source, &mut |node, src| {
             if let Some(name) = get_function_name(node, src) {
                 names.push(name);
             }
@@ -3436,6 +3461,81 @@ mod tests {
             names,
             vec!["value"],
             "expected the C++ grammar to discover the `value` method"
+        );
+    }
+
+    // ---- Preprocessor dead-code awareness (parse_file blanks dead regions) ----
+
+    #[test]
+    fn test_dead_ifdef_branch_excluded_from_c_metrics() {
+        // Raylib-shaped function: the #if 0 branch is provably dead, so the
+        // #else branch is the only one that would ever compile. Without
+        // dead-code blanking both branches get counted, inflating mccabe/
+        // cognitive/sloc.
+        let code = "\
+int f(int x) {
+#if 0
+    if (x == 1) return 1;
+    if (x == 2) return 2;
+    if (x == 3) return 3;
+#else
+    return 0;
+#endif
+}
+";
+        let (tree, code) = parse_file(Path::new("test.c"), code).unwrap();
+        let metrics = collect_function_metrics(&tree, &code, "test.c", &None, &None, false);
+        let f = metrics.iter().find(|m| m.name == "f").unwrap();
+        assert_eq!(f.mccabe, 1, "dead #if branch should not add to mccabe");
+        // 9 total code lines minus the 3 blanked `if` lines inside #if 0;
+        // directive lines themselves still count as SLOC (existing behavior).
+        assert_eq!(
+            f.sloc, 6,
+            "the 3 dead `if` lines should not count toward sloc"
+        );
+    }
+
+    #[test]
+    fn test_dead_swift_if_false_branch_excluded_from_metrics() {
+        let code = "\
+func f() -> Int {
+#if false
+    if true { return 1 }
+    if true { return 2 }
+#else
+    return 0
+#endif
+}
+";
+        let (tree, code) = parse_file(Path::new("test.swift"), code).unwrap();
+        let metrics = collect_function_metrics(&tree, &code, "test.swift", &None, &None, false);
+        let f = metrics.iter().find(|m| m.name == "f").unwrap();
+        assert_eq!(
+            f.mccabe, 1,
+            "dead #if false branch should not add to mccabe"
+        );
+    }
+
+    #[test]
+    fn test_dead_csharp_if_false_branch_excluded_from_metrics() {
+        let code = "\
+class C {
+    int F() {
+#if false
+        if (true) return 1;
+        if (true) return 2;
+#else
+        return 0;
+#endif
+    }
+}
+";
+        let (tree, code) = parse_file(Path::new("test.cs"), code).unwrap();
+        let metrics = collect_function_metrics(&tree, &code, "test.cs", &None, &None, false);
+        let f = metrics.iter().find(|m| m.name == "F").unwrap();
+        assert_eq!(
+            f.mccabe, 1,
+            "dead #if false branch should not add to mccabe"
         );
     }
 

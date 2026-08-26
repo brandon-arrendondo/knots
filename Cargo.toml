@@ -48,7 +48,7 @@ keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "typescr
 categories = ["development-tools", "command-line-utilities"]
 
 [workspace.dependencies]
-lang-parsing-substrate = "0.4.0"
+lang-parsing-substrate = "0.6.1"
 tree-sitter = "0.25"
 tree-sitter-ada = "0.1"
 tree-sitter-c = "0.24"

@@ -61,6 +61,109 @@ pub use lang_parsing_substrate::{
 // inspect suppressions directly rather than through `FunctionMetrics::suppressed`.
 pub use lang_parsing_substrate::{ignored_regions, suppressions, IgnoredRegion, Suppression};
 
+// Preprocessor dead-code region detection (C/C++, Swift, C#) — re-exported
+// for consumers that want the raw regions; [`blank_dead_code`] is the
+// entry point knots itself uses.
+pub use lang_parsing_substrate::{
+    csharp_dead_code_regions, dead_code_ranges, swift_dead_code_regions, CSharpDeadCodeRegion,
+    DeadCodeReason, DeadCodeRegion, SwiftDeadCodeRegion,
+};
+
+/// Blanks out preprocessor-dead lines in `source_code` — regions a compiler
+/// would never see, per the substrate's `dead_code_ranges` (C/C++),
+/// `swift_dead_code_regions`, and `csharp_dead_code_regions` — before it is
+/// parsed, so every metric computed from the resulting tree is already
+/// dead-code-free rather than needing per-metric filtering.
+///
+/// Every character on a dead line is replaced with a space; the line itself
+/// (and its newline) is kept, so line numbers and byte length are unaffected
+/// for everything else in the file. The `#if`/`#ifdef`/`#else`/`#endif`
+/// directive lines that bound a region are never part of it (they're
+/// deliberately excluded upstream), so they parse unchanged.
+///
+/// `language_key` is the same key `language_info_for_file` returns (`"c"`,
+/// `"cpp"`, `"swift"`, `"csharp"`, ...). Any other key — including every
+/// language without a dead-code detector — returns `source_code` unchanged.
+pub fn blank_dead_code(source_code: &str, language_key: &str) -> String {
+    let regions = dead_code_line_ranges(source_code, language_key);
+    if regions.is_empty() {
+        return source_code.to_string();
+    }
+    blank_lines(source_code, &regions)
+}
+
+/// The `(start_line, end_line)` dead regions for `language_key`, per the
+/// substrate detector that language has (if any). See [`blank_dead_code`].
+fn dead_code_line_ranges(source_code: &str, language_key: &str) -> Vec<(usize, usize)> {
+    match language_key {
+        "c" | "cpp" => c_family_dead_code_line_ranges(source_code),
+        "swift" => swift_dead_code_line_ranges(source_code),
+        "csharp" => csharp_dead_code_line_ranges(source_code),
+        _ => Vec::new(),
+    }
+}
+
+fn c_family_dead_code_line_ranges(source_code: &str) -> Vec<(usize, usize)> {
+    let regions = lang_parsing_substrate::dead_code_ranges(source_code);
+    let mut out = Vec::with_capacity(regions.len());
+    for region in regions {
+        out.push((region.start_line, region.end_line));
+    }
+    out
+}
+
+fn swift_dead_code_line_ranges(source_code: &str) -> Vec<(usize, usize)> {
+    let regions = lang_parsing_substrate::swift_dead_code_regions(source_code.as_bytes());
+    let mut out = Vec::with_capacity(regions.len());
+    for region in regions {
+        out.push((region.start_line, region.end_line));
+    }
+    out
+}
+
+fn csharp_dead_code_line_ranges(source_code: &str) -> Vec<(usize, usize)> {
+    let regions = lang_parsing_substrate::csharp_dead_code_regions(source_code.as_bytes());
+    let mut out = Vec::with_capacity(regions.len());
+    for region in regions {
+        out.push((region.start_line, region.end_line));
+    }
+    out
+}
+
+/// The 1-based lines covered by any of `regions`.
+fn dead_line_set(regions: &[(usize, usize)]) -> HashSet<usize> {
+    let mut out = HashSet::new();
+    for &(start, end) in regions {
+        let mut line = start;
+        while line <= end {
+            out.insert(line);
+            line += 1;
+        }
+    }
+    out
+}
+
+/// Replaces every character on each 1-based line covered by `regions` with a
+/// space, keeping line count and every other line untouched.
+fn blank_lines(source_code: &str, regions: &[(usize, usize)]) -> String {
+    let dead_lines = dead_line_set(regions);
+    let mut out = Vec::new();
+    for (idx, line) in source_code.lines().enumerate() {
+        out.push(blank_line_if_dead(line, idx + 1, &dead_lines));
+    }
+    out.join("\n")
+}
+
+/// `line` unchanged, or blanked to spaces of the same length if `line_no`
+/// (1-based) is in `dead_lines`.
+fn blank_line_if_dead(line: &str, line_no: usize, dead_lines: &HashSet<usize>) -> String {
+    if dead_lines.contains(&line_no) {
+        " ".repeat(line.len())
+    } else {
+        line.to_string()
+    }
+}
+
 /// Filter rules for including/excluding files and functions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1043,5 +1146,63 @@ mod suppression_tests {
         let metrics = rust_metrics(src);
         assert_eq!(metrics.len(), 1);
         assert!(metrics[0].suppressed.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod dead_code_blanking_tests {
+    use super::*;
+
+    #[test]
+    fn if_zero_body_is_blanked_but_directives_survive() {
+        let src = "int a;\n#if 0\nint dead;\n#endif\nint b;\n";
+        let out = blank_dead_code(src, "c");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), src.lines().count());
+        assert_eq!(lines[0], "int a;");
+        assert_eq!(lines[1], "#if 0");
+        assert_eq!(lines[2].trim(), "");
+        assert_eq!(lines[2].len(), "int dead;".len());
+        assert_eq!(lines[3], "#endif");
+        assert_eq!(lines[4], "int b;");
+    }
+
+    #[test]
+    fn always_defined_macro_blanks_the_else_branch() {
+        let src = "#define FOO\nint a;\n#ifdef FOO\nint live;\n#else\nint dead;\n#endif\n";
+        let out = blank_dead_code(src, "c");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[3], "int live;");
+        assert_eq!(lines[5].trim(), "");
+    }
+
+    #[test]
+    fn non_c_family_key_is_a_no_op() {
+        let src = "#if 0\nfn dead() {}\n#endif\n";
+        assert_eq!(blank_dead_code(src, "rust"), src);
+    }
+
+    #[test]
+    fn source_with_no_dead_regions_is_unchanged() {
+        let src = "int a;\nint b;\n";
+        assert_eq!(blank_dead_code(src, "c"), src);
+    }
+
+    #[test]
+    fn swift_dead_if_false_branch_is_blanked() {
+        let src = "func f() {\n#if false\nlet dead = 1\n#endif\n}\n";
+        let out = blank_dead_code(src, "swift");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), src.lines().count());
+        assert_eq!(lines[2].trim(), "");
+    }
+
+    #[test]
+    fn csharp_dead_if_false_branch_is_blanked() {
+        let src = "class C {\nvoid F() {\n#if false\nint dead = 1;\n#endif\n}\n}\n";
+        let out = blank_dead_code(src, "csharp");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), src.lines().count());
+        assert_eq!(lines[3].trim(), "");
     }
 }
