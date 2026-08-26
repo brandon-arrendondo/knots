@@ -64,6 +64,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#metrics-seem-lower-than-expected-for-rust-vs-clippy">Metrics seem lower than expected for Rust (vs. clippy)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#report-file-not-generated">Report file not generated</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sarif-has-no-results">SARIF has no results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#metrics-dropped-after-upgrading-c-c-swift-c">Metrics dropped after upgrading (C/C++, Swift, C#)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#compile-commands-file-not-found-or-missing-files">Compile commands: “file not found” or missing files</a></li>
 </ul>
 </li>
@@ -151,6 +152,21 @@ count loops and has no nesting penalty, producing scores 3–4× lower.</p>
 (the 😊 “Good” band). If all functions score in that range, the SARIF file
 will contain a valid but empty results array. Use <code class="docutils literal notranslate"><span class="pre">--include</span></code> with
 <code class="docutils literal notranslate"><span class="pre">&quot;min_complexity&quot;:</span> <span class="pre">1</span></code> to force all functions through if needed.</p>
+</section>
+<section id="metrics-dropped-after-upgrading-c-c-swift-c">
+<h2>Metrics dropped after upgrading (C/C++, Swift, C#)<a class="headerlink" href="#metrics-dropped-after-upgrading-c-c-swift-c" title="Link to this heading"></a></h2>
+<p>Starting in knots 1.16.0, preprocessor branches a compiler would never
+compile — <code class="docutils literal notranslate"><span class="pre">#if</span> <span class="pre">0</span></code> bodies, <code class="docutils literal notranslate"><span class="pre">#ifdef</span> <span class="pre">__cplusplus</span></code> guards, and other
+locally-provable dead <code class="docutils literal notranslate"><span class="pre">#ifdef</span></code>/<code class="docutils literal notranslate"><span class="pre">#if</span></code> branches — are excluded from
+McCabe, Cognitive, SLOC, and ABC before those metrics are computed, for
+C, C++, Swift, and C#. A function with a large dead branch (e.g. a
+<code class="docutils literal notranslate"><span class="pre">#if</span> <span class="pre">defined(SUPPORT_X)</span></code>/<code class="docutils literal notranslate"><span class="pre">#else</span></code> pair where <code class="docutils literal notranslate"><span class="pre">SUPPORT_X</span></code> is never
+defined) will report a lower complexity than it did before the upgrade.
+This is expected — see <a class="reference internal" href="metrics-reference.html"><span class="doc">Metrics Reference</span></a> — Preprocessor Dead-Code
+Exclusion for exactly what is and isn’t recognized as dead.</p>
+<p>If you have a CI baseline (<code class="docutils literal notranslate"><span class="pre">--baseline</span></code>) captured before upgrading, some
+functions may now read as improvements against it; re-running with
+<code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code> will refresh it to the new, more accurate numbers.</p>
 </section>
 <section id="compile-commands-file-not-found-or-missing-files">
 <h2>Compile commands: “file not found” or missing files<a class="headerlink" href="#compile-commands-file-not-found-or-missing-files" title="Link to this heading"></a></h2>

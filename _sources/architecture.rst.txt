@@ -2,7 +2,7 @@ Architecture
 ============
 
 This document describes knots' internal structure, its key invariants, and
-the known coupling hotspots and extensibility concerns as of v1.12.0.
+the known coupling hotspots and extensibility concerns as of v1.16.0.
 
 .. contents:: Contents
    :local:
@@ -163,7 +163,12 @@ Pipeline flow
 
     main()
       → collect_files() / load_compile_commands()
-      → parse_file()                  ← grammar from language_for_file()
+      → parse_file()                  ← grammar from language_for_file();
+                                         blanks preprocessor-dead lines via
+                                         knots::blank_dead_code() first
+                                         (C/C++/Swift/C# only) — see
+                                         "Preprocessor dead-code awareness"
+                                         below
       → collect_function_metrics()    ← lib.rs; called once per file
           → visit_functions()         ← discovers function nodes
           → get_function_name()       ← extracts name per language
@@ -183,6 +188,30 @@ After building ``RunContext``, ``main()`` routes to one of:
 - ``run_matrix_mode`` — testability matrix display, thresholds
 - ``run_structured_output_mode`` — SARIF / JSON / NDJSON / CSV via
   ``collect_all_metrics``
+
+Preprocessor dead-code awareness
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``parse_file`` calls ``knots::blank_dead_code(source_code, language_key)``
+before handing source to the tree-sitter parser. For C, C++, Swift, and C#,
+this replaces every character (not the newline) on a line the substrate
+proves preprocessor-dead — ``dead_code_ranges`` for C/C++,
+``swift_dead_code_regions``, ``csharp_dead_code_regions`` — with a space, so
+line numbers and byte length are otherwise unaffected. Every other language
+is a no-op passthrough.
+
+Blanking happens before parsing rather than as a post-hoc filter over the
+tree, for two reasons: every downstream consumer of the returned ``(Tree,
+String)`` pair — ``collect_function_metrics``, import extraction for file
+coupling, duplicate fingerprinting — gets dead-code-free input for free,
+with no per-metric-function threading of "is this node dead" required; and
+it sidesteps the C/C++ detector's motivating failure mode, where
+``extern "C" { ... }`` guarded on both sides by ``#ifdef __cplusplus`` has an
+unbalanced brace when parsed as C, causing tree-sitter error recovery to
+mis-nest everything that follows — blanking removes the brace along with the
+rest of the dead line's text, so the mis-nesting never happens. See
+:doc:`metrics-reference` — Preprocessor Dead-Code Exclusion for exactly what
+counts as dead per language.
 
 .. _known-issues:
 
@@ -561,6 +590,13 @@ addressed.
   ``accumulate_nested_sloc`` now take ``SlocMode`` instead of four booleans.
   Adding a language with a non-default comment style requires only a new enum
   variant and a one-field change to its ``LANGUAGES`` entry.
+- **Preprocessor-dead branches inflated C/C++/Swift/C# metrics** — a
+  function with a dead ``#if``/``#else`` branch (e.g. a raylib-shaped
+  ``#if defined(SUPPORT_X)`` guard where ``SUPPORT_X`` is never defined) had
+  McCabe/Cognitive/SLOC/ABC counted through both branches. Fixed by bumping
+  ``lang-parsing-substrate`` to 0.6.1 and blanking dead lines in
+  ``parse_file`` before parsing (task/commit ``ddf935a``) — see
+  "Preprocessor dead-code awareness" above.
 
 ---------------------------------------------------------------------------
 

@@ -55,6 +55,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#nesting-depth">Nesting Depth</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sloc-source-lines-of-code">SLOC (Source Lines of Code)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#abc-complexity">ABC Complexity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#preprocessor-dead-code-exclusion-c-c-swift-c">Preprocessor Dead-Code Exclusion (C/C++, Swift, C#)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#test-scoring">Test Scoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#external-calls">External Calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#unreachable-blocks">Unreachable Blocks</a></li>
@@ -214,6 +215,37 @@ and structural complexity. Based on the
 <li><p><strong>Magnitude</strong>: <code class="docutils literal notranslate"><span class="pre">√(A²</span> <span class="pre">+</span> <span class="pre">B²</span> <span class="pre">+</span> <span class="pre">C²)</span></code></p></li>
 <li><p>Threshold flag: <code class="docutils literal notranslate"><span class="pre">--abc-threshold</span></code> (accepts floating-point)</p></li>
 </ul>
+</section>
+<section id="preprocessor-dead-code-exclusion-c-c-swift-c">
+<h2>Preprocessor Dead-Code Exclusion (C/C++, Swift, C#)<a class="headerlink" href="#preprocessor-dead-code-exclusion-c-c-swift-c" title="Link to this heading"></a></h2>
+<p>Before parsing, knots blanks out preprocessor branches that a compiler would
+never see, so McCabe, Cognitive, Nesting, SLOC, and ABC are all computed only
+from code that can actually run:</p>
+<ul class="simple">
+<li><p><strong>C/C++</strong>: <code class="docutils literal notranslate"><span class="pre">#if</span> <span class="pre">0</span></code> bodies; <code class="docutils literal notranslate"><span class="pre">#ifdef</span> <span class="pre">__cplusplus</span></code> / <code class="docutils literal notranslate"><span class="pre">#if</span>
+<span class="pre">defined(__cplusplus)</span></code> branches (dead when compiled as C); and <code class="docutils literal notranslate"><span class="pre">#ifdef</span>
+<span class="pre">MACRO</span></code> / <code class="docutils literal notranslate"><span class="pre">#if</span> <span class="pre">defined(MACRO)</span></code> branches where <code class="docutils literal notranslate"><span class="pre">MACRO</span></code>’s definedness is
+locally provable from the file — unconditionally <code class="docutils literal notranslate"><span class="pre">#define</span></code>d earlier
+with no later <code class="docutils literal notranslate"><span class="pre">#undef</span></code> (branch always live, its <code class="docutils literal notranslate"><span class="pre">#else</span></code> dead), or never
+validly <code class="docutils literal notranslate"><span class="pre">#define</span></code>d in scope at that point (branch always dead). A macro
+the file never mentions at all (e.g. a build-system flag like <code class="docutils literal notranslate"><span class="pre">_WIN32</span></code>)
+is left alone — there’s no local evidence either way, and guessing would
+produce false exclusions.</p></li>
+<li><p><strong>Swift</strong>: <code class="docutils literal notranslate"><span class="pre">#if</span></code>/<code class="docutils literal notranslate"><span class="pre">#elseif</span></code>/<code class="docutils literal notranslate"><span class="pre">#else</span></code> branches whose condition is a
+compile-time-constant <code class="docutils literal notranslate"><span class="pre">false</span></code> (<code class="docutils literal notranslate"><span class="pre">true</span></code>/<code class="docutils literal notranslate"><span class="pre">false</span></code> literals, <code class="docutils literal notranslate"><span class="pre">!</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>, <code class="docutils literal notranslate"><span class="pre">||</span></code>, parens only — no <code class="docutils literal notranslate"><span class="pre">#define</span></code> in Swift).</p></li>
+<li><p><strong>C#</strong>: the same two sub-problems as C/C++ (constant-condition branches and
+locally-provable <code class="docutils literal notranslate"><span class="pre">#define</span></code>/<code class="docutils literal notranslate"><span class="pre">#undef</span></code> symbol definedness), plus
+short-circuit <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>/<code class="docutils literal notranslate"><span class="pre">||</span></code> evaluation for free, since C#’s conditions are
+a real expression tree rather than a flat token stream.</p></li>
+</ul>
+<p>A dead branch’s own <code class="docutils literal notranslate"><span class="pre">#if</span></code>/<code class="docutils literal notranslate"><span class="pre">#else</span></code>/<code class="docutils literal notranslate"><span class="pre">#endif</span></code> directive lines are never
+blanked — only the code inside them — so line numbers and the surrounding
+function’s reported <code class="docutils literal notranslate"><span class="pre">start_line</span></code>/<code class="docutils literal notranslate"><span class="pre">end_line</span></code> are unaffected. Every other
+language is unaffected; this only applies to the four listed here.</p>
+<p>If a function’s metrics look lower than they used to after upgrading past
+knots 1.16.0, this is very likely why — see the “Metrics dropped after
+upgrading” entry in <a class="reference internal" href="troubleshooting.html"><span class="doc">Troubleshooting</span></a>.</p>
 </section>
 <section id="test-scoring">
 <h2>Test Scoring<a class="headerlink" href="#test-scoring" title="Link to this heading"></a></h2>

@@ -119,6 +119,39 @@ Assignment, Branch, Condition magnitude vector.
 - **Magnitude**: ``√(A² + B² + C²)``
 - Threshold flag: ``--abc-threshold`` (accepts floating-point)
 
+Preprocessor Dead-Code Exclusion (C/C++, Swift, C#)
+-----------------------------------------------------
+
+Before parsing, knots blanks out preprocessor branches that a compiler would
+never see, so McCabe, Cognitive, Nesting, SLOC, and ABC are all computed only
+from code that can actually run:
+
+- **C/C++**: ``#if 0`` bodies; ``#ifdef __cplusplus`` / ``#if
+  defined(__cplusplus)`` branches (dead when compiled as C); and ``#ifdef
+  MACRO`` / ``#if defined(MACRO)`` branches where ``MACRO``'s definedness is
+  locally provable from the file — unconditionally ``#define``\ d earlier
+  with no later ``#undef`` (branch always live, its ``#else`` dead), or never
+  validly ``#define``\ d in scope at that point (branch always dead). A macro
+  the file never mentions at all (e.g. a build-system flag like ``_WIN32``)
+  is left alone — there's no local evidence either way, and guessing would
+  produce false exclusions.
+- **Swift**: ``#if``/``#elseif``/``#else`` branches whose condition is a
+  compile-time-constant ``false`` (``true``/``false`` literals, ``!``,
+  ``&&``, ``||``, parens only — no ``#define`` in Swift).
+- **C#**: the same two sub-problems as C/C++ (constant-condition branches and
+  locally-provable ``#define``/``#undef`` symbol definedness), plus
+  short-circuit ``&&``/``||`` evaluation for free, since C#'s conditions are
+  a real expression tree rather than a flat token stream.
+
+A dead branch's own ``#if``/``#else``/``#endif`` directive lines are never
+blanked — only the code inside them — so line numbers and the surrounding
+function's reported ``start_line``/``end_line`` are unaffected. Every other
+language is unaffected; this only applies to the four listed here.
+
+If a function's metrics look lower than they used to after upgrading past
+knots 1.16.0, this is very likely why — see the "Metrics dropped after
+upgrading" entry in :doc:`troubleshooting`.
+
 Test Scoring
 ------------
 
