@@ -3539,7 +3539,7 @@ class C {
         );
     }
 
-    // ---- Recursive header inclusion (see HEADER_INCLUSION.md) ----
+    // ---- Recursive header inclusion (see docs/architecture.rst) ----
 
     /// Writes a `main.c` / `util.h` pair (the latter `#include`d by the
     /// former) to a fresh temp dir unique to `label`, for the header
