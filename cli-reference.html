@@ -273,9 +273,19 @@ regardless of renamed identifiers or literals (Type-1/Type-2 clones). See
 and guidance on interpreting results (shape equality is not behavioral
 equality; check for it before proposing any merge).</p>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code></dt><dd><p>Report structurally duplicated functions across the corpus. Only
-meaningful with <code class="docutils literal notranslate"><span class="pre">-r</span></code>/<code class="docutils literal notranslate"><span class="pre">--recursive</span></code>; ignored otherwise. Adds a second
-parse pass over the corpus, so it’s opt-in. Text output only.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code></dt><dd><p>Report structurally duplicated code across the corpus. Only meaningful
+with <code class="docutils literal notranslate"><span class="pre">-r</span></code>/<code class="docutils literal notranslate"><span class="pre">--recursive</span></code>; ignored otherwise. Adds a second parse pass
+over the corpus, so it’s opt-in. Text output only.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--tier</span> <span class="pre">&lt;function|block&gt;</span></code></dt><dd><p>With <code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>, the fingerprint granularity. <code class="docutils literal notranslate"><span class="pre">function</span></code>
+(default) reports whole structurally-duplicated functions. <code class="docutils literal notranslate"><span class="pre">block</span></code>
+reports duplicated loop/conditional/switch-shaped regions <em>inside</em>
+functions instead — useful when you already have one flagged region
+(e.g. a CERT-C rule violation) and want to find every other place in the
+corpus with the same shape, not just whole-function clones; a match at
+this granularity can span two otherwise unrelated functions. The two
+tiers never cross-match each other. Has no effect without
+<code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--include-fixture-pairs</span></code></dt><dd><p>Keep groups made entirely of a <code class="docutils literal notranslate"><span class="pre">tests/pass</span></code> vs <code class="docutils literal notranslate"><span class="pre">tests/fail</span></code>-style
 fixture pair (or <code class="docutils literal notranslate"><span class="pre">compliant</span></code>/<code class="docutils literal notranslate"><span class="pre">noncompliant</span></code>, <code class="docutils literal notranslate"><span class="pre">good</span></code>/<code class="docutils literal notranslate"><span class="pre">bad</span></code>,
@@ -301,6 +311,10 @@ after printing the summary.</p>
 </dl>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># See what&#39;s duplicated</span>
 knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--find-duplicates
+
+<span class="c1"># Find other places in the corpus with the same shape as one already-</span>
+<span class="c1"># flagged loop/conditional/switch region, not just whole-function clones</span>
+knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </span>--find-duplicates<span class="w"> </span>--tier<span class="w"> </span>block
 
 <span class="c1"># Confirm a fix actually resolved (or shrank) a specific group,</span>
 <span class="c1"># without re-reading the whole report by eye</span>
