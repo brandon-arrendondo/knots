@@ -193,15 +193,27 @@ struct Args {
     #[arg(short = 'l', long = "language", value_name = "LANG", action = clap::ArgAction::Append)]
     languages: Vec<String>,
 
-    /// Report structurally duplicated functions across the corpus (Type-1/
-    /// Type-2 clones: identical shape, regardless of renamed identifiers or
+    /// Report structurally duplicated code across the corpus (Type-1/Type-2
+    /// clones: identical shape, regardless of renamed identifiers or
     /// literals). Only meaningful with --recursive; ignored otherwise. Adds
     /// a second parse pass over the corpus, so it's opt-in rather than
     /// always-on. Text output only. Identical shape does not imply safe to
     /// merge into one type — see the CLI reference / architecture docs
-    /// before proposing an extraction.
+    /// before proposing an extraction. See --tier for granularity.
     #[arg(long)]
     find_duplicates: bool,
+
+    /// With --find-duplicates, the fingerprint granularity: `function`
+    /// (default) reports whole structurally-duplicated functions; `block`
+    /// reports duplicated loop/conditional/switch-shaped regions *inside*
+    /// functions instead. Use `block` when you already have one flagged
+    /// region (e.g. a CERT-C rule violation) and want to find every other
+    /// place in the corpus with the same shape, not just whole-function
+    /// clones — a match at this granularity can span two otherwise
+    /// unrelated functions. The two tiers never cross-match each other.
+    /// Has no effect without --find-duplicates.
+    #[arg(long, value_enum, default_value_t = DuplicateTier::Function)]
+    tier: DuplicateTier,
 
     /// With --find-duplicates, keep groups whose members are entirely a
     /// tests/pass vs tests/fail (or similarly named) fixture pair — these
@@ -372,6 +384,26 @@ collaborators."
     }
 }
 
+/// `--tier` — the granularity `--find-duplicates` fingerprints at. Mirrors
+/// `lang_parsing_substrate::FingerprintTier` (see `duplicate_tier_for`), kept
+/// as knots' own CLI-facing enum rather than deriving `ValueEnum` on the
+/// substrate type directly, since that's a shared library type other
+/// consumers (funky, tools_sqc) use without any CLI of their own.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+enum DuplicateTier {
+    /// Whole function-like subtrees (default).
+    Function,
+    /// Loop/conditional/switch-shaped subtrees inside functions.
+    Block,
+}
+
+fn duplicate_tier_for(tier: DuplicateTier) -> lang_parsing_substrate::FingerprintTier {
+    match tier {
+        DuplicateTier::Function => lang_parsing_substrate::FingerprintTier::Function,
+        DuplicateTier::Block => lang_parsing_substrate::FingerprintTier::Block,
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 enum OutputFormat {
     /// Human-readable text output (default)
@@ -460,8 +492,11 @@ struct RunContext {
     /// resolution is only meaningful once `--recursive` has established
     /// "the corpus" as a real project tree, not an arbitrary file list.
     recursive: bool,
-    /// Gates the duplicate-function-detection pass (see `--find-duplicates`).
+    /// Gates the duplicate-detection pass (see `--find-duplicates`).
     find_duplicates: bool,
+    /// See `--tier`: `Function` (whole functions) or `Block` (loop/
+    /// conditional/switch-shaped subtrees inside functions).
+    duplicate_tier: lang_parsing_substrate::FingerprintTier,
     /// See `--include-fixture-pairs` / `--include-trivial-duplicates`.
     duplicate_filters: duplicates::DuplicateFilters,
     /// See `--dump-duplicates`.
@@ -1557,7 +1592,7 @@ fn recursive_duplicate_groups(
     ctx: &RunContext,
 ) -> Option<duplicates::DuplicateGroupsResult> {
     (ctx.recursive && ctx.find_duplicates).then(|| {
-        let fingerprints = collect_corpus_fingerprints(files);
+        let fingerprints = collect_corpus_fingerprints(files, ctx.duplicate_tier);
         let mut result = duplicates::find_duplicate_groups(&fingerprints, ctx.duplicate_filters);
         annotate_diffs(&mut result.groups);
         result
@@ -1689,6 +1724,7 @@ fn build_run_context(
         quiet: args.quiet,
         recursive: args.recursive,
         find_duplicates: args.find_duplicates,
+        duplicate_tier: duplicate_tier_for(args.tier),
         duplicate_filters: duplicate_filters_from(args),
         dump_duplicates: args.dump_duplicates.clone(),
     })
@@ -1713,25 +1749,47 @@ fn resolve_changed(args: &Args) -> Result<Option<ChangedLines>> {
 }
 
 /// Phase 1 of the duplicate-detection pass: parse every file and fingerprint
-/// each function-like subtree, skipping unreadable/unparseable files
-/// silently — `collect_all_metrics` already warns about the same files.
+/// each subtree at the requested `tier` (whole functions, or the loop/
+/// conditional/switch-shaped subtrees inside them — see `--tier`), skipping
+/// unreadable/unparseable files silently — `collect_all_metrics` already
+/// warns about the same files.
 fn collect_corpus_fingerprints(
     files: &[PathBuf],
+    tier: lang_parsing_substrate::FingerprintTier,
 ) -> Vec<lang_parsing_substrate::CorpusFingerprint<String>> {
+    let fingerprint_fn = fingerprint_walker(tier);
     files
         .par_iter()
-        .filter_map(|file| extract_file_fingerprints(file))
+        .filter_map(|file| extract_file_fingerprints(file, fingerprint_fn))
         .flatten()
         .collect()
 }
 
+/// The substrate walk that fingerprints at `tier`'s granularity — see
+/// `--tier`. Resolved once per corpus run in [`collect_corpus_fingerprints`]
+/// rather than per file, so [`extract_file_fingerprints`] just calls a
+/// function pointer instead of re-branching on `tier` for every file.
+fn fingerprint_walker(
+    tier: lang_parsing_substrate::FingerprintTier,
+) -> fn(tree_sitter::Node, &str, usize) -> Vec<lang_parsing_substrate::Fingerprint> {
+    match tier {
+        lang_parsing_substrate::FingerprintTier::Function => {
+            lang_parsing_substrate::function_fingerprints
+        }
+        lang_parsing_substrate::FingerprintTier::Block => {
+            lang_parsing_substrate::block_fingerprints
+        }
+    }
+}
+
 fn extract_file_fingerprints(
     file: &Path,
+    fingerprint_fn: fn(tree_sitter::Node, &str, usize) -> Vec<lang_parsing_substrate::Fingerprint>,
 ) -> Option<Vec<lang_parsing_substrate::CorpusFingerprint<String>>> {
     let source_code = fs::read_to_string(file).ok()?;
     let (tree, source_code) = parse_file(file, &source_code).ok()?;
     let path = file.to_str().unwrap_or("").to_string();
-    let fingerprints = lang_parsing_substrate::function_fingerprints(
+    let fingerprints = fingerprint_fn(
         tree.root_node(),
         &source_code,
         duplicates::MIN_DUPLICATE_NODES,

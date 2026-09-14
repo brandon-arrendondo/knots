@@ -37,7 +37,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.16.0"
+version = "1.17.0"
 edition = "2021"
 license = "MIT"
 authors = ["Brandon Arrendondo <brandon.arrendondo@bissell.com>"]
@@ -48,7 +48,7 @@ keywords = ["complexity", "cyclomatic", "cognitive", "static-analysis", "typescr
 categories = ["development-tools", "command-line-utilities"]
 
 [workspace.dependencies]
-lang-parsing-substrate = "0.6.1"
+lang-parsing-substrate = "0.9.0"
 tree-sitter = "0.25"
 tree-sitter-ada = "0.1"
 tree-sitter-c = "0.24"

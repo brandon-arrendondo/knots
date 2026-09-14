@@ -329,6 +329,25 @@ behind ``--find-duplicates``, only meaningful alongside ``--recursive``, and
 surfaced as a standalone ``DUPLICATE CODE`` section in the text report rather
 than folded into per-function output.
 
+``--tier <function|block>`` selects the granularity. ``function`` (the
+default) fingerprints whole function-like subtrees, as above. ``block``
+fingerprints loop/conditional/switch-shaped subtrees *inside* functions
+instead, via the substrate's ``block_fingerprints`` — for the narrower case
+where a caller already has one flagged region (e.g. a tools_sqc CERT-C
+violation) and wants to search the corpus for other structurally similar
+regions, not run a corpus-wide clone search. A ``block``-tier match can span
+two functions that are otherwise unrelated (different statements before and
+after an identical loop body), which is exactly the point: it surfaces
+sub-function recurrence that ``function``-tier duplicate detection cannot
+see. ``Block``-tier members have no function name, so the text report falls
+back to the tree-sitter node kind (e.g. ``<for_statement>``) in their place.
+The two tiers never cross-match — the substrate's ``duplicate_groups`` groups
+by ``(hash, tier)``, not hash alone, so a small flagged loop can't
+coincidentally group with some unrelated file's whole one-line function. Like
+the function tier, this is still exact-hash matching only: a near-miss that
+differs by one added or removed statement (a Type-3 clone) still won't match
+at either granularity.
+
 Groups whose members are entirely a ``tests/pass`` vs ``tests/fail``-style
 fixture pair (or ``compliant``/``noncompliant``, ``good``/``bad``,
 ``accept``/``reject``, ``valid``/``invalid``) are excluded by default and

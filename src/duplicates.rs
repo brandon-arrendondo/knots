@@ -1,16 +1,26 @@
-//! Corpus-wide duplicate function detection, built on the substrate's
-//! structural fingerprinting (`lang_parsing_substrate::fingerprint`).
+//! Corpus-wide duplicate detection, built on the substrate's structural
+//! fingerprinting (`lang_parsing_substrate::fingerprint`).
 //!
-//! Two functions group together when their AST subtrees hash identically —
-//! same node kinds in the same shape, regardless of identifier/literal text.
-//! That catches Type-1 (byte-identical) and Type-2 (renamed) clones; it does
-//! not catch Type-3 near-misses (e.g. one extra statement), which would need
-//! a fuzzy similarity threshold the substrate deliberately doesn't provide.
+//! Two subtrees group together when they hash identically — same node kinds
+//! in the same shape, regardless of identifier/literal text. That catches
+//! Type-1 (byte-identical) and Type-2 (renamed) clones; it does not catch
+//! Type-3 near-misses (e.g. one extra statement), which would need a fuzzy
+//! similarity threshold the substrate deliberately doesn't provide.
 //!
 //! Gated behind `--find-duplicates` (see `RunContext::find_duplicates`)
 //! rather than folded into the default `--recursive` pass: fingerprinting
 //! is corpus-wide and requires a second parse of every file, unlike the
 //! per-function metrics that come for free from the first pass.
+//!
+//! `--tier` (see `RunContext::duplicate_tier`) selects the granularity:
+//! `Function` (default) fingerprints whole function-like subtrees via
+//! `lang_parsing_substrate::function_fingerprints`; `Block` fingerprints
+//! loop/conditional/switch-shaped subtrees *inside* functions via
+//! `block_fingerprints` — useful when a caller already has one flagged
+//! region (e.g. a tools_sqc CERT-C violation) and wants to find other
+//! places in the corpus with the same shape, not just whole-function
+//! clones. The two tiers never cross-match: `lang_parsing_substrate::
+//! duplicate_groups` groups by `(hash, tier)`, not `hash` alone.
 
 use lang_parsing_substrate::{duplicate_groups, CorpusFingerprint};
 use std::collections::HashSet;
@@ -44,6 +54,11 @@ pub const TRIVIAL_MIN_REPEAT: usize = 4;
 pub struct DuplicateMember {
     pub file_path: String,
     pub name: Option<String>,
+    /// The fingerprint's tree-sitter node kind (e.g. `"function_item"`,
+    /// `"for_statement"`). Always present, unlike `name` — a `Block`-tier
+    /// member has no name, so this is what a report falls back to instead
+    /// of a bare "<anonymous>" for every member.
+    pub kind: &'static str,
     pub start_line: usize,
     pub end_line: usize,
     pub start_byte: usize,
@@ -143,6 +158,7 @@ fn to_duplicate_member(m: &CorpusFingerprint<String>) -> DuplicateMember {
     DuplicateMember {
         file_path: m.source.clone(),
         name: m.fingerprint.name.clone(),
+        kind: m.fingerprint.kind,
         start_line: m.fingerprint.start_line,
         end_line: m.fingerprint.end_line,
         start_byte: m.fingerprint.start_byte,
@@ -324,12 +340,27 @@ fn edit_cost(prev: &[usize], curr: &[usize], j: usize, ca: char, cb: char) -> us
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lang_parsing_substrate::Fingerprint;
+    use lang_parsing_substrate::{Fingerprint, FingerprintTier};
 
     fn fp(hash: u64, node_count: usize, name: &str) -> Fingerprint {
         Fingerprint {
             name: Some(name.to_string()),
+            tier: FingerprintTier::Function,
             kind: "function_definition",
+            hash,
+            node_count,
+            start_byte: 0,
+            end_byte: 0,
+            start_line: 1,
+            end_line: 2,
+        }
+    }
+
+    fn block_fp(hash: u64, node_count: usize, kind: &'static str) -> Fingerprint {
+        Fingerprint {
+            name: None,
+            tier: FingerprintTier::Block,
+            kind,
             hash,
             node_count,
             start_byte: 0,
@@ -374,6 +405,41 @@ mod tests {
         assert_eq!(result.groups.len(), 1);
         assert_eq!(result.groups[0].len(), 2);
         assert_eq!(result.excluded_fixture_pairs, 0);
+    }
+
+    #[test]
+    fn block_tier_groups_separately_from_function_tier() {
+        // A Block-tier and a Function-tier fingerprint sharing a hash (the
+        // exact cross-tier collision `lang_parsing_substrate::duplicate_groups`
+        // guards against) must produce two separate groups, and the Block
+        // member must carry no name — `kind` is what a report falls back to.
+        let fingerprints = vec![
+            CorpusFingerprint {
+                source: "a.c".to_string(),
+                fingerprint: fp(1, 10, "f"),
+            },
+            CorpusFingerprint {
+                source: "b.c".to_string(),
+                fingerprint: fp(1, 10, "g"),
+            },
+            CorpusFingerprint {
+                source: "c.c".to_string(),
+                fingerprint: block_fp(1, 10, "for_statement"),
+            },
+            CorpusFingerprint {
+                source: "d.c".to_string(),
+                fingerprint: block_fp(1, 10, "for_statement"),
+            },
+        ];
+        let result = find_duplicate_groups(&fingerprints, NO_FILTERS);
+        assert_eq!(result.groups.len(), 2);
+        let block_group = result
+            .groups
+            .iter()
+            .find(|g| g[0].name.is_none())
+            .expect("expected one Block-tier group");
+        assert!(block_group.iter().all(|m| m.name.is_none()));
+        assert!(block_group.iter().all(|m| m.kind == "for_statement"));
     }
 
     #[test]

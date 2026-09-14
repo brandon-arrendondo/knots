@@ -785,7 +785,7 @@ fn is_empty_duplicate_result(result: &crate::duplicates::DuplicateGroupsResult) 
 fn print_duplicate_summary(result: &crate::duplicates::DuplicateGroupsResult) {
     println!("\n=== DUPLICATE CODE (structural clones) ===\n");
     println!(
-        "  {} group(s) of structurally identical functions found.",
+        "  {} group(s) of structurally identical code found.",
         result.groups.len()
     );
     println!(
@@ -821,7 +821,10 @@ fn print_duplicate_group(index: usize, group: &[crate::duplicates::DuplicateMemb
 }
 
 fn print_duplicate_member(index_in_group: usize, member: &crate::duplicates::DuplicateMember) {
-    let name = member.name.as_deref().unwrap_or("<anonymous>");
+    let name = member
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("<{}>", member.kind));
     let suffix = if index_in_group == 0 {
         String::new()
     } else {

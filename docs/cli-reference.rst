@@ -188,9 +188,20 @@ and guidance on interpreting results (shape equality is not behavioral
 equality; check for it before proposing any merge).
 
 ``--find-duplicates``
-    Report structurally duplicated functions across the corpus. Only
-    meaningful with ``-r``/``--recursive``; ignored otherwise. Adds a second
-    parse pass over the corpus, so it's opt-in. Text output only.
+    Report structurally duplicated code across the corpus. Only meaningful
+    with ``-r``/``--recursive``; ignored otherwise. Adds a second parse pass
+    over the corpus, so it's opt-in. Text output only.
+
+``--tier <function|block>``
+    With ``--find-duplicates``, the fingerprint granularity. ``function``
+    (default) reports whole structurally-duplicated functions. ``block``
+    reports duplicated loop/conditional/switch-shaped regions *inside*
+    functions instead — useful when you already have one flagged region
+    (e.g. a CERT-C rule violation) and want to find every other place in the
+    corpus with the same shape, not just whole-function clones; a match at
+    this granularity can span two otherwise unrelated functions. The two
+    tiers never cross-match each other. Has no effect without
+    ``--find-duplicates``.
 
 ``--include-fixture-pairs``
     Keep groups made entirely of a ``tests/pass`` vs ``tests/fail``-style
@@ -221,6 +232,10 @@ equality; check for it before proposing any merge).
 
     # See what's duplicated
     knots -r src/ --find-duplicates
+
+    # Find other places in the corpus with the same shape as one already-
+    # flagged loop/conditional/switch region, not just whole-function clones
+    knots -r src/ --find-duplicates --tier block
 
     # Confirm a fix actually resolved (or shrank) a specific group,
     # without re-reading the whole report by eye

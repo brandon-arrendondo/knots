@@ -121,7 +121,7 @@ fn classify_match(diff: &mut DuplicateDiff, before: &GroupSnapshot, after: &Grou
 mod tests {
     use super::*;
     use crate::duplicates::{find_duplicate_groups, DuplicateFilters};
-    use lang_parsing_substrate::{CorpusFingerprint, Fingerprint};
+    use lang_parsing_substrate::{CorpusFingerprint, Fingerprint, FingerprintTier};
 
     const NO_FILTERS: DuplicateFilters = DuplicateFilters {
         exclude_fixture_pairs: false,
@@ -131,6 +131,7 @@ mod tests {
     fn fp(hash: u64, name: &str) -> Fingerprint {
         Fingerprint {
             name: Some(name.to_string()),
+            tier: FingerprintTier::Function,
             kind: "function_definition",
             hash,
             node_count: 30,
