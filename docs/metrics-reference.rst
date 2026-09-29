@@ -61,6 +61,78 @@ TypeScript (``.ts``, ``.tsx``). All 13 metrics are computed. Notes:
    functions but does not fully sum their bodies into the parent the way McCabe
    does.
 
+Ada Language Support
+--------------------
+
+Knots supports Ada (``.adb``, ``.ada``, and ``.ads`` when passed explicitly).
+All 13 metrics are computed. Ada needs explicit treatment in eight places that
+the general-purpose rules do not cover:
+
+- **Logical operators**: every ``and``, ``or``, and ``xor`` in an expression
+  counts, with no distinction between the short-circuit forms (``and then``,
+  ``or else``) and the plain ones. McCabe adds +1 per operator; Cognitive adds
+  +1 per new operator in a sequence (``A and B and C`` is +1,
+  ``(A or else B) xor C`` is +2); ABC adds one condition per operator.
+- **Multi-name parameters**: ``A, B, C : Integer`` is three parameters, not
+  one. Each identifier before the ``:`` in a ``parameter_specification`` is
+  counted (state coupling, test scoring).
+- **Return statements**: both ``simple_return_statement`` and
+  ``extended_return_statement`` (``return R : T do ... end return;``) count
+  toward the return count. Neither adds to McCabe.
+- **Expression functions**: ``function F (X : T) return T is (expr);`` is
+  discovered as a function (``expression_function_declaration``), alongside
+  ``subprogram_body``.
+- **Exit statements**: ``exit when Condition`` is +1 to McCabe, Cognitive (flat),
+  and ABC (a condition). A bare ``exit`` adds nothing.
+- **Raise**: ``raise`` statements and Ada 2012 raise expressions are +1 to
+  McCabe, +1 (flat) to Cognitive, and one branch to ABC.
+- **Tasking**: task bodies (``task_body``) are discovered as functions, and
+  subprograms inside a protected body are discovered too. In a ``select``,
+  each ``select_alternative`` is +1 to McCabe, each guard
+  (``when Condition =>``) is +1 to McCabe and +1 (flat) to Cognitive, and an
+  ``else`` part is +1 to McCabe. The ``selective_accept`` itself, timed and
+  conditional entry calls, and asynchronous select are Cognitive nesting
+  structures (+1 plus the nesting penalty); the last three are also +1 to
+  McCabe.
+- **Else in Cognitive**: Ada's ``if`` has no separate else node, so knots adds
+  a flat +1 for the ``else`` keyword of an ``if`` statement, as the
+  specification charges for ``else``. ``elsif`` is a flat +1.
+
+Other notes:
+
+- **McCabe**: also counts ``if``, ``elsif``, every ``loop`` statement (plain,
+  ``while``, and ``for``), each ``when`` alternative of a ``case``, and each
+  exception handler
+- **Cognitive**: ``loop``, ``case``, and exception handlers are nesting
+  structures; a ``case`` costs +1 plus the nesting penalty once, however many
+  alternatives it has
+- **Nesting depth**: ``if``, ``loop``, ``case``, and exception handlers
+  increase it; ``select`` does not
+- **SLOC**: ``--`` comment lines are excluded
+- **case_statement**: Ada and C both use the node kind ``case_statement``, for a
+  whole ``case`` block in Ada and for one arm in C. Knots tells them apart by
+  shape (an Ada ``case_statement`` has ``case_statement_alternative``
+  children), so each gets its own treatment.
+- **Limitations**: ``entry`` bodies in a protected body are not discovered as
+  functions, and their code is not attributed to any other function.
+
+.. note::
+
+   **Case/dispatch inflation**: McCabe adds +1 for each ``when`` alternative, so
+   a ``case`` used as a dispatch table scores its arm count whether the arms
+   are one-line mappings or nested logic. Cognitive charges the ``case`` once.
+   At knots 1.17.0, two dispatch functions in the HAC corpus (``Compute`` and
+   ``Eval``, from an Advent of Code puzzle, ``~/toolchain/hac`` at ``b0fa2e5``)
+   score McCabe 1,682 and Cognitive 5; the AES ``Encrypt`` functions in Ada-Util
+   (``~/toolchain/ada-util`` at ``bd635f5``) score McCabe 119 and Cognitive 82
+   from their SubBytes ``case`` statements.
+
+   For Ada codebases, prefer ``--cognitive-threshold`` as the primary gate. If
+   you gate on McCabe, derive the threshold from the project's own
+   distribution: values set for C/C++ flag routine dispatch tables. A function
+   whose McCabe is far above its Cognitive score is more likely a dispatch
+   table than hard logic; review it before refactoring.
+
 McCabe Cyclomatic Complexity
 -----------------------------
 
