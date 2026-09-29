@@ -50,6 +50,7 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Metrics Reference</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#python-language-support">Python Language Support</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#javascript-and-typescript-language-support">JavaScript and TypeScript Language Support</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ada-language-support">Ada Language Support</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#mccabe-cyclomatic-complexity">McCabe Cyclomatic Complexity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#cognitive-complexity">Cognitive Complexity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#nesting-depth">Nesting Depth</a></li>
@@ -158,6 +159,77 @@ rather than total lines of logic, use <code class="docutils literal notranslate"
 primary gate: cognitive complexity adds a nesting increment for nested
 functions but does not fully sum their bodies into the parent the way McCabe
 does.</p>
+</div>
+</section>
+<section id="ada-language-support">
+<h2>Ada Language Support<a class="headerlink" href="#ada-language-support" title="Link to this heading"></a></h2>
+<p>Knots supports Ada (<code class="docutils literal notranslate"><span class="pre">.adb</span></code>, <code class="docutils literal notranslate"><span class="pre">.ada</span></code>, and <code class="docutils literal notranslate"><span class="pre">.ads</span></code> when passed explicitly).
+All 13 metrics are computed. Ada needs explicit treatment in eight places that
+the general-purpose rules do not cover:</p>
+<ul class="simple">
+<li><p><strong>Logical operators</strong>: every <code class="docutils literal notranslate"><span class="pre">and</span></code>, <code class="docutils literal notranslate"><span class="pre">or</span></code>, and <code class="docutils literal notranslate"><span class="pre">xor</span></code> in an expression
+counts, with no distinction between the short-circuit forms (<code class="docutils literal notranslate"><span class="pre">and</span> <span class="pre">then</span></code>,
+<code class="docutils literal notranslate"><span class="pre">or</span> <span class="pre">else</span></code>) and the plain ones. McCabe adds +1 per operator; Cognitive adds
++1 per new operator in a sequence (<code class="docutils literal notranslate"><span class="pre">A</span> <span class="pre">and</span> <span class="pre">B</span> <span class="pre">and</span> <span class="pre">C</span></code> is +1,
+<code class="docutils literal notranslate"><span class="pre">(A</span> <span class="pre">or</span> <span class="pre">else</span> <span class="pre">B)</span> <span class="pre">xor</span> <span class="pre">C</span></code> is +2); ABC adds one condition per operator.</p></li>
+<li><p><strong>Multi-name parameters</strong>: <code class="docutils literal notranslate"><span class="pre">A,</span> <span class="pre">B,</span> <span class="pre">C</span> <span class="pre">:</span> <span class="pre">Integer</span></code> is three parameters, not
+one. Each identifier before the <code class="docutils literal notranslate"><span class="pre">:</span></code> in a <code class="docutils literal notranslate"><span class="pre">parameter_specification</span></code> is
+counted (state coupling, test scoring).</p></li>
+<li><p><strong>Return statements</strong>: both <code class="docutils literal notranslate"><span class="pre">simple_return_statement</span></code> and
+<code class="docutils literal notranslate"><span class="pre">extended_return_statement</span></code> (<code class="docutils literal notranslate"><span class="pre">return</span> <span class="pre">R</span> <span class="pre">:</span> <span class="pre">T</span> <span class="pre">do</span> <span class="pre">...</span> <span class="pre">end</span> <span class="pre">return;</span></code>) count
+toward the return count. Neither adds to McCabe.</p></li>
+<li><p><strong>Expression functions</strong>: <code class="docutils literal notranslate"><span class="pre">function</span> <span class="pre">F</span> <span class="pre">(X</span> <span class="pre">:</span> <span class="pre">T)</span> <span class="pre">return</span> <span class="pre">T</span> <span class="pre">is</span> <span class="pre">(expr);</span></code> is
+discovered as a function (<code class="docutils literal notranslate"><span class="pre">expression_function_declaration</span></code>), alongside
+<code class="docutils literal notranslate"><span class="pre">subprogram_body</span></code>.</p></li>
+<li><p><strong>Exit statements</strong>: <code class="docutils literal notranslate"><span class="pre">exit</span> <span class="pre">when</span> <span class="pre">Condition</span></code> is +1 to McCabe, Cognitive (flat),
+and ABC (a condition). A bare <code class="docutils literal notranslate"><span class="pre">exit</span></code> adds nothing.</p></li>
+<li><p><strong>Raise</strong>: <code class="docutils literal notranslate"><span class="pre">raise</span></code> statements and Ada 2012 raise expressions are +1 to
+McCabe, +1 (flat) to Cognitive, and one branch to ABC.</p></li>
+<li><p><strong>Tasking</strong>: task bodies (<code class="docutils literal notranslate"><span class="pre">task_body</span></code>) are discovered as functions, and
+subprograms inside a protected body are discovered too. In a <code class="docutils literal notranslate"><span class="pre">select</span></code>,
+each <code class="docutils literal notranslate"><span class="pre">select_alternative</span></code> is +1 to McCabe, each guard
+(<code class="docutils literal notranslate"><span class="pre">when</span> <span class="pre">Condition</span> <span class="pre">=&gt;</span></code>) is +1 to McCabe and +1 (flat) to Cognitive, and an
+<code class="docutils literal notranslate"><span class="pre">else</span></code> part is +1 to McCabe. The <code class="docutils literal notranslate"><span class="pre">selective_accept</span></code> itself, timed and
+conditional entry calls, and asynchronous select are Cognitive nesting
+structures (+1 plus the nesting penalty); the last three are also +1 to
+McCabe.</p></li>
+<li><p><strong>Else in Cognitive</strong>: Ada’s <code class="docutils literal notranslate"><span class="pre">if</span></code> has no separate else node, so knots adds
+a flat +1 for the <code class="docutils literal notranslate"><span class="pre">else</span></code> keyword of an <code class="docutils literal notranslate"><span class="pre">if</span></code> statement, as the
+specification charges for <code class="docutils literal notranslate"><span class="pre">else</span></code>. <code class="docutils literal notranslate"><span class="pre">elsif</span></code> is a flat +1.</p></li>
+</ul>
+<p>Other notes:</p>
+<ul class="simple">
+<li><p><strong>McCabe</strong>: also counts <code class="docutils literal notranslate"><span class="pre">if</span></code>, <code class="docutils literal notranslate"><span class="pre">elsif</span></code>, every <code class="docutils literal notranslate"><span class="pre">loop</span></code> statement (plain,
+<code class="docutils literal notranslate"><span class="pre">while</span></code>, and <code class="docutils literal notranslate"><span class="pre">for</span></code>), each <code class="docutils literal notranslate"><span class="pre">when</span></code> alternative of a <code class="docutils literal notranslate"><span class="pre">case</span></code>, and each
+exception handler</p></li>
+<li><p><strong>Cognitive</strong>: <code class="docutils literal notranslate"><span class="pre">loop</span></code>, <code class="docutils literal notranslate"><span class="pre">case</span></code>, and exception handlers are nesting
+structures; a <code class="docutils literal notranslate"><span class="pre">case</span></code> costs +1 plus the nesting penalty once, however many
+alternatives it has</p></li>
+<li><p><strong>Nesting depth</strong>: <code class="docutils literal notranslate"><span class="pre">if</span></code>, <code class="docutils literal notranslate"><span class="pre">loop</span></code>, <code class="docutils literal notranslate"><span class="pre">case</span></code>, and exception handlers
+increase it; <code class="docutils literal notranslate"><span class="pre">select</span></code> does not</p></li>
+<li><p><strong>SLOC</strong>: <code class="docutils literal notranslate"><span class="pre">--</span></code> comment lines are excluded</p></li>
+<li><p><strong>case_statement</strong>: Ada and C both use the node kind <code class="docutils literal notranslate"><span class="pre">case_statement</span></code>, for a
+whole <code class="docutils literal notranslate"><span class="pre">case</span></code> block in Ada and for one arm in C. Knots tells them apart by
+shape (an Ada <code class="docutils literal notranslate"><span class="pre">case_statement</span></code> has <code class="docutils literal notranslate"><span class="pre">case_statement_alternative</span></code>
+children), so each gets its own treatment.</p></li>
+<li><p><strong>Limitations</strong>: <code class="docutils literal notranslate"><span class="pre">entry</span></code> bodies in a protected body are not discovered as
+functions, and their code is not attributed to any other function.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Case/dispatch inflation</strong>: McCabe adds +1 for each <code class="docutils literal notranslate"><span class="pre">when</span></code> alternative, so
+a <code class="docutils literal notranslate"><span class="pre">case</span></code> used as a dispatch table scores its arm count whether the arms
+are one-line mappings or nested logic. Cognitive charges the <code class="docutils literal notranslate"><span class="pre">case</span></code> once.
+At knots 1.17.0, two dispatch functions in the HAC corpus (<code class="docutils literal notranslate"><span class="pre">Compute</span></code> and
+<code class="docutils literal notranslate"><span class="pre">Eval</span></code>, from an Advent of Code puzzle, <code class="docutils literal notranslate"><span class="pre">~/toolchain/hac</span></code> at <code class="docutils literal notranslate"><span class="pre">b0fa2e5</span></code>)
+score McCabe 1,682 and Cognitive 5; the AES <code class="docutils literal notranslate"><span class="pre">Encrypt</span></code> functions in Ada-Util
+(<code class="docutils literal notranslate"><span class="pre">~/toolchain/ada-util</span></code> at <code class="docutils literal notranslate"><span class="pre">bd635f5</span></code>) score McCabe 119 and Cognitive 82
+from their SubBytes <code class="docutils literal notranslate"><span class="pre">case</span></code> statements.</p>
+<p>For Ada codebases, prefer <code class="docutils literal notranslate"><span class="pre">--cognitive-threshold</span></code> as the primary gate. If
+you gate on McCabe, derive the threshold from the project’s own
+distribution: values set for C/C++ flag routine dispatch tables. A function
+whose McCabe is far above its Cognitive score is more likely a dispatch
+table than hard logic; review it before refactoring.</p>
 </div>
 </section>
 <section id="mccabe-cyclomatic-complexity">
