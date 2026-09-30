@@ -72,10 +72,10 @@ Options
          - CSV with header row.
 
 ``--score-components``
-    With ``--format json``, ``ndjson`` or ``csv``, append AIRD's and AICP's
+    With ``--format json``, ``ndjson`` or ``csv``, add AIRD's and AICP's
     per-term contributions, their pre-clamp raw sums, AIRD before the
-    file-level multiplier, the multiplier itself, and ``state_coupling``. The
-    default columns are unchanged. Ignored for ``text`` and ``sarif``. See
+    file-level multiplier, the multiplier itself, and ``state_coupling``
+    (extra JSON keys; trailing CSV columns). The default fields are unchanged. Ignored for ``text`` and ``sarif``. See
     :ref:`score-components`.
 
 ``-j <N>``, ``--jobs <N>``

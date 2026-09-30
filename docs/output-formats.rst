@@ -25,7 +25,8 @@ Pretty-printed JSON array of per-function records:
     knots --format json src/main.c > metrics.json
     knots -r --format json src/ > metrics.json
 
-Each record contains these 17 fields:
+Each record contains these 17 fields (key order is not significant;
+serialized keys come out in alphabetical order):
 
 .. code-block:: json
 
@@ -90,9 +91,9 @@ Score components
 ----------------
 
 Add ``--score-components`` to any of ``json``, ``ndjson`` or ``csv`` to get
-AIRD's and AICP's per-term contributions and pre-clamp values as extra
-fields (CSV: extra columns after the default ones). See
-:ref:`score-components` for the column list.
+AIRD's and AICP's per-term contributions and pre-clamp values: extra keys
+in JSON/NDJSON, trailing columns in CSV. See :ref:`score-components` for
+the column list and how to use them.
 
 ::
 

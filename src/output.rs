@@ -49,7 +49,7 @@ fn aird_component_line(func: &FunctionMetrics) -> String {
     let sloc = aird_term("sloc", c.sloc, 15.0, " [capped]");
     let nest = aird_term("nesting", c.nesting, 15.0, " [capped]");
     let test = aird_term("test", c.test, 15.0, " [capped]");
-    let doc = format!("doc: -{:.1}/15", -c.doc);
+    let doc = format!("doc: -{:.1}/15", c.doc.abs());
     let coup = format!("coupling: +{:.1}/10", c.coupling);
 
     format!(
@@ -589,12 +589,11 @@ fn write_csv_row(out: &mut impl Write, f: &FunctionMetrics) -> Result<()> {
     Ok(())
 }
 
-/// Fractional component values to four decimals, as `abc_magnitude`; integers as-is.
+/// A component value at full (shortest round-trip) precision, as JSON writes
+/// it. Four decimals, as `abc_magnitude` uses, would turn a raw sum like
+/// 21.499999999999996 into 21.5000, which rounds to a different score.
 fn csv_component_value(value: &serde_json::Value) -> String {
-    match value.as_f64() {
-        Some(x) if value.is_f64() => format!("{:.4}", x),
-        _ => value.to_string(),
-    }
+    value.to_string()
 }
 
 pub(crate) fn write_detailed_report(

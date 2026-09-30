@@ -235,7 +235,7 @@ Signature       Parameter complexity — count, types, pointer depth
 Dependency      External dependencies called or referenced
 Observable      Side effects, I/O, global state — how hard to observe outputs
 Implementation  Internal control flow and structure — McCabe-derived
-Documentation   Comment quality (-10 to 0, reduces the total score)
+Documentation   Comment quality (0 to 10, subtracted from the total score)
 ==============  ==================================================================
 
 **Score ranges:**
@@ -382,9 +382,10 @@ Score components
 AIRD and AICP each report only their final, clamped score, and in
 ``--recursive`` mode AIRD also includes the file-level multiplier. To
 decompose a score, for example to test one term against SLOC or cognitive
-complexity, or to see how far a saturated score overshoots 100, pass
-``--score-components`` with ``--format json``, ``ndjson`` or ``csv``. It
-appends these columns after the default ones, which stay as they are:
+complexity, or to see which cap a saturated score is pinned by, pass
+``--score-components`` with ``--format json``, ``ndjson`` or ``csv``. The
+default fields stay as they are; CSV gains these as trailing columns, JSON
+and NDJSON as extra keys (JSON key order is not significant):
 
 =============================  =====================================================
 Column                         Meaning
@@ -397,10 +398,11 @@ Column                         Meaning
 ``aird_doc``                   ``-min(max(doc_score, 0)/10, 1) × 15`` (≤ 0)
 ``aird_coupling``              ``min(state_coupling/12, 1) × 10``
 ``aird_raw``                   Sum of the six ``aird_*`` terms, before rounding and
-                               the 0–100 clamp; can be negative or above 100
+                               the 0–100 clamp; always within -15 to 110
 ``aird_uncapped_raw``          As ``aird_raw`` but with the cognitive and SLOC ratios
-                               uncapped, floored at 0: the "raw AIRD (uncapped)" the
-                               text breakdown prints for large functions
+                               uncapped (nesting stays capped), floored at 0: the
+                               "raw AIRD (uncapped)" the text breakdown prints for
+                               large functions
 ``aird_base``                  ``aird_raw`` rounded and clamped to 0–100: AIRD before
                                the file-level multiplier
 ``aird_file_ce_multiplier``    ``1 + min(file_ce/10, 1) × 0.20``; 1.0 outside
@@ -412,7 +414,16 @@ Column                         Meaning
                                the 0–100 clamp
 =============================  =====================================================
 
-These identities hold for every row:
+**Two kinds of saturation.** ``aird_raw`` answers "how far past the 0–100
+output clamp is this score?" Because every term is capped before it is
+summed, it can exceed 100 by at most 10 and rarely does. ``aird_uncapped_raw``
+answers "how far past the cognitive and SLOC caps is this function?", which is
+usually what pins a score at or near its ceiling. It can exceed 100 while
+``aird_base`` is below 100, and it reads 0 wherever ``aird_raw`` is negative,
+so it is not a pre-clamp value at the low end.
+
+**Recomputing a score.** With the emitted values, IEEE-754 double arithmetic
+and Rust's rounding (``f64::round``, half away from zero), every row satisfies:
 
 .. code-block:: text
 
@@ -420,5 +431,19 @@ These identities hold for every row:
     aird_base = clamp(round(aird_raw), 0, 100)
     aicp = clamp(round(aicp_raw), 0, 100)
 
-CSV writes the fractional columns to four decimal places; JSON and NDJSON
-keep full precision.
+The component columns are written at full precision in all three formats
+(CSV included), because many raw sums land within floating-point error of a
+.5 tie. For those rows, round-half-to-even (the default in Python, NumPy and
+R), decimal arithmetic, or recomputing the terms from the default integer
+columns can give a different score than knots reports. **Analyses should use
+the emitted** ``aird``, ``aird_base`` **and** ``aicp`` **as outcomes, not
+recompute them.**
+
+**The terms are not independent inputs.** ``test_score`` includes an
+implementation sub-score mapped from McCabe complexity and already subtracts
+``doc_score``. So McCabe feeds AIRD through ``aird_test``, documentation
+counts twice (inside ``aird_test`` and again as ``aird_doc``), and SLOC and
+cognitive complexity are themselves terms. A model that regresses AIRD on
+SLOC, cognitive complexity or McCabe has those predictors partly inside the
+outcome. In practice ``doc_score`` takes only a few values (0, 2 and 4 are
+typical), so ``aird_doc`` is usually 0, -3 or -6.

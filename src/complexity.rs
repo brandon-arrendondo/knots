@@ -1062,9 +1062,9 @@ pub struct TestScoringMetric {
     /// Difficulty contributed by the function's own cyclomatic complexity,
     /// mapped from `mccabe` via [`map_cyclomatic_to_implementation_score`].
     pub implementation_score: u32,
-    /// Reduction applied when the function carries doc comments that would
-    /// help a test author (negative of the raw documentation score, since
-    /// more documentation makes testing easier).
+    /// Doc-comment quality, 0 to 10, that would help a test author. It is
+    /// subtracted from `total_score`, since more documentation makes testing
+    /// easier.
     pub documentation_score: i32,
     /// Sum of the four difficulty scores minus `documentation_score`; see
     /// [`Self::classification`] for the human-readable band.

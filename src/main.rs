@@ -98,7 +98,7 @@ struct Args {
     /// With --format json/ndjson/csv, add AIRD's and AICP's per-term
     /// contributions, their pre-clamp raw sums, AIRD before the file-level
     /// Ce multiplier and the multiplier itself, and state_coupling — so each
-    /// score can be decomposed and recomputed. Default columns are unchanged;
+    /// score can be decomposed. Default fields are unchanged;
     /// ignored for text and SARIF. See docs/metrics-reference.rst.
     #[arg(long)]
     score_components: bool,
@@ -2519,6 +2519,24 @@ mod tests {
         assert!(aird_drivers(&func, 2).is_empty());
     }
 
+    /// The breakdown line is the one main printed: an undocumented function
+    /// shows `doc: -0.0/15`, never a doubled sign.
+    #[test]
+    fn test_aird_breakdown_doc_term_sign() {
+        let mut func = fixture(30, 80, 4, 8, 4);
+        assert_eq!(
+            format_aird_breakdown(&func),
+            "    cognitive: 22.0/55, sloc: 6.0/15, nesting: 7.5/15, test: 6.0/15, \
+             doc: -0.0/15, coupling: +3.3/10"
+        );
+        func.test_scoring.documentation_score = 4;
+        let line = format_aird_breakdown(&func);
+        assert!(
+            line.contains("doc: -6.0/15") && !line.contains("--"),
+            "{line}"
+        );
+    }
+
     fn csv_lines(f: &FunctionMetrics, components: bool) -> Vec<String> {
         let mut out = Vec::new();
         write_csv(&mut out, std::slice::from_ref(f), components).unwrap();
@@ -2552,7 +2570,7 @@ mod tests {
         let row: Vec<&str> = lines[1].split(',').collect();
         let col = |name| row[header.iter().position(|h| *h == name).unwrap()];
         assert_eq!(col("state_coupling"), "4");
-        assert_eq!(col("aird_file_ce_multiplier"), "1.1000");
+        assert_eq!(col("aird_file_ce_multiplier"), "1.1");
         assert_eq!(col("aird_base"), f.aird_components().base.to_string());
     }
 
