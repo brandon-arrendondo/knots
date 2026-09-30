@@ -255,9 +255,12 @@ the same reason).
 **Import graph depth.** Coupling analysis only needs *syntactic* import
 counting — count distinct import-source nodes per file from the tree-sitter
 AST, no path resolution required.  This is far shallower than full symbol
-resolution and sufficient for the Ce/Ca/Instability signal.  Full resolution
-(following re-exports, handling conditional includes) is deferred until sqc
-demands it for taint flow.
+resolution and sufficient for the Ce/Ca/Instability signal.  Rust is the one
+exception: its ``use`` paths name items and groups rather than files, so knots
+walks the crate's module tree to find the file each path lands in (see "How an
+import becomes a file" in the metrics reference).  Full resolution (following
+re-exports, handling conditional includes) is deferred until sqc demands it
+for taint flow.
 
 Relationship to LSP
 ~~~~~~~~~~~~~~~~~~~

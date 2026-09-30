@@ -315,6 +315,44 @@ imports. Outside ``--recursive`` it is 0, the multiplier is 1.0, and AIRD is
 the base score. ``--score-components`` reports every term (see
 `Score components`_).
 
+How an import becomes a file
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For most languages an import resolves by name: its path prefix, a known
+source extension and any ``::``/``.`` qualifier are stripped, and what is
+left must match the stem of exactly one corpus file (``#include "util.h"``
+finds ``util.h``; ``import com.example.Helper`` finds ``Helper.java``). A
+name two corpus files share, or none, adds no edge, and neither does a
+library outside the corpus.
+
+Rust resolves through the crate's module tree instead, because a ``use``
+usually names an item or a group (``use crate::a::{B, c::D}``), not a
+module, and every ``mod.rs`` shares one stem. Each ``use`` is expanded to
+one path per imported name (an alias or a glob counts as its path), and
+each path resolves to the deepest *module file* it passes through:
+``crate::coupling::FileCoupling`` counts ``coupling.rs``, and
+``crate::Root`` counts the crate root (``lib.rs``). A path may start with
+``crate``, ``self``, ``super``, a child module (edition 2018), or the
+library crate's own name, which is how ``main.rs`` or a test reaches its
+library. Module ``a::b`` is ``a/b.rs`` or ``a/b/mod.rs`` below the crate
+root's directory.
+
+Crate roots come from the nearest ``Cargo.toml``, read only for the
+library's name and the declared ``[lib]`` and ``[[bin]]`` paths: no build
+and no ``cargo metadata``. Cargo's defaults add ``src/lib.rs``,
+``src/main.rs`` and every file directly in ``src/bin``, ``tests``,
+``examples`` or ``benches`` (or a ``main.rs`` one directory below them). A
+file under no ``Cargo.toml`` is rooted at the nearest directory holding a
+corpus ``lib.rs`` or ``main.rs``, and failing that falls back to the name
+match above.
+
+What does not count: a ``mod`` declaration (it builds the tree; counting it
+would give every ``lib.rs`` a Ce equal to its submodule count), ``std`` and
+other external crates, and a file's own inline modules, so ``use super::*``
+in a ``#[cfg(test)] mod tests`` block is the file itself. ``#[path]``
+attributes are not followed, and an inline ``mod x { ... }`` has no file of
+its own to count.
+
 Ceiling values (p99 of observed distribution across 32,205 functions from
 mosquitto, SQLite, curl, hostap, Lua, libcrc):
 
