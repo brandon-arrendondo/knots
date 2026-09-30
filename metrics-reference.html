@@ -62,6 +62,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#unreachable-blocks">Unreachable Blocks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#aird-ai-reasoning-difficulty">AIRD — AI Reasoning Difficulty</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#aicp-ai-context-pressure">AICP — AI Context Pressure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#score-components">Score components</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="output-formats.html">Output Formats</a></li>
@@ -338,7 +339,7 @@ automatically. Five sub-axes, each 0–10:</p>
 <td><p>Internal control flow and structure — McCabe-derived</p></td>
 </tr>
 <tr class="row-odd"><td><p>Documentation</p></td>
-<td><p>Comment quality (-10 to 0, reduces the total score)</p></td>
+<td><p>Comment quality (0 to 10, subtracted from the total score)</p></td>
 </tr>
 </tbody>
 </table>
@@ -395,8 +396,23 @@ flagged, even though the loop itself has no implicit exit test.</p>
 needs to safely modify a function. Higher = harder for an AI to modify.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>AIRD = (cognitive/75 × 55) + (sloc/200 × 15) + (nesting/8 × 15)
      + (test_score/20 × 15) - (doc_score/10 × 15)
+     + (state_coupling/12 × 10)
 </pre></div>
 </div>
+<p>Each ratio is capped at 1 before it is weighted (a negative <code class="docutils literal notranslate"><span class="pre">test_score</span></code> or
+<code class="docutils literal notranslate"><span class="pre">doc_score</span></code> counts as 0), and the sum is rounded and clamped to 0–100.
+<code class="docutils literal notranslate"><span class="pre">state_coupling</span></code> is the explicit parameter count plus the number of
+distinct <code class="docutils literal notranslate"><span class="pre">self</span></code>/<code class="docutils literal notranslate"><span class="pre">this</span></code> fields the function touches.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">--recursive</span></code>, the clamped score is then multiplied by a file-level
+coupling factor and rounded and clamped again:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>multiplier = 1 + min(file_ce/10, 1) × 0.20        (1.0 to 1.2)
+AIRD       = clamp(round(AIRD_base × multiplier), 0, 100)
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">file_ce</span></code> is the number of corpus-internal files the function’s file
+imports. Outside <code class="docutils literal notranslate"><span class="pre">--recursive</span></code> it is 0, the multiplier is 1.0, and AIRD is
+the base score. <code class="docutils literal notranslate"><span class="pre">--score-components</span></code> reports every term (see
+<a class="reference internal" href="#id1">Score components</a>).</p>
 <p>Ceiling values (p99 of observed distribution across 32,205 functions from
 mosquitto, SQLite, curl, hostap, Lua, libcrc):</p>
 <table class="docutils align-default">
@@ -454,6 +470,106 @@ calls is consistent across all 6 corpora.</p>
 <ul class="simple">
 <li><p>Threshold flag: <code class="docutils literal notranslate"><span class="pre">--aicp-threshold</span></code></p></li>
 </ul>
+</section>
+<section id="score-components">
+<span id="id1"></span><h2>Score components<a class="headerlink" href="#score-components" title="Link to this heading"></a></h2>
+<p>AIRD and AICP each report only their final, clamped score, and in
+<code class="docutils literal notranslate"><span class="pre">--recursive</span></code> mode AIRD also includes the file-level multiplier. To
+decompose a score, for example to test one term against SLOC or cognitive
+complexity, or to see which cap a saturated score is pinned by, pass
+<code class="docutils literal notranslate"><span class="pre">--score-components</span></code> with <code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">json</span></code>, <code class="docutils literal notranslate"><span class="pre">ndjson</span></code> or <code class="docutils literal notranslate"><span class="pre">csv</span></code>. The
+default fields stay as they are; CSV gains these as trailing columns, JSON
+and NDJSON as extra keys (JSON key order is not significant):</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Column</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">state_coupling</span></code></p></td>
+<td><p>Input to the AIRD coupling term (parameters + fields)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">aird_cognitive</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">min(cognitive/75,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">55</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">aird_sloc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">min(sloc/200,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">15</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">aird_nesting</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">min(nesting/8,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">15</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">aird_test</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">min(max(test_score,</span> <span class="pre">0)/20,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">15</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">aird_doc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">-min(max(doc_score,</span> <span class="pre">0)/10,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">15</span></code> (≤ 0)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">aird_coupling</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">min(state_coupling/12,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">10</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">aird_raw</span></code></p></td>
+<td><p>Sum of the six <code class="docutils literal notranslate"><span class="pre">aird_*</span></code> terms, before rounding and
+the 0–100 clamp; always within -15 to 110</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">aird_uncapped_raw</span></code></p></td>
+<td><p>As <code class="docutils literal notranslate"><span class="pre">aird_raw</span></code> but with the cognitive and SLOC ratios
+uncapped (nesting stays capped), floored at 0: the
+“raw AIRD (uncapped)” the text breakdown prints for
+large functions</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">aird_base</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">aird_raw</span></code> rounded and clamped to 0–100: AIRD before
+the file-level multiplier</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">aird_file_ce_multiplier</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span> <span class="pre">+</span> <span class="pre">min(file_ce/10,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">0.20</span></code>; 1.0 outside
+<code class="docutils literal notranslate"><span class="pre">--recursive</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">aicp_external_calls</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">min(external_calls/20,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">60</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">aicp_sloc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">min(sloc/200,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">40</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">aicp_doc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">-min(max(doc_score,</span> <span class="pre">0)/10,</span> <span class="pre">1)</span> <span class="pre">×</span> <span class="pre">15</span></code> (≤ 0)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">aicp_raw</span></code></p></td>
+<td><p>Sum of the three <code class="docutils literal notranslate"><span class="pre">aicp_*</span></code> terms, before rounding and
+the 0–100 clamp</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Two kinds of saturation.</strong> <code class="docutils literal notranslate"><span class="pre">aird_raw</span></code> answers “how far past the 0–100
+output clamp is this score?” Because every term is capped before it is
+summed, it can exceed 100 by at most 10 and rarely does. <code class="docutils literal notranslate"><span class="pre">aird_uncapped_raw</span></code>
+answers “how far past the cognitive and SLOC caps is this function?”, which is
+usually what pins a score at or near its ceiling. It can exceed 100 while
+<code class="docutils literal notranslate"><span class="pre">aird_base</span></code> is below 100, and it reads 0 wherever <code class="docutils literal notranslate"><span class="pre">aird_raw</span></code> is negative,
+so it is not a pre-clamp value at the low end.</p>
+<p><strong>Recomputing a score.</strong> With the emitted values, IEEE-754 double arithmetic
+and Rust’s rounding (<code class="docutils literal notranslate"><span class="pre">f64::round</span></code>, half away from zero), every row satisfies:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>aird = clamp(round(aird_base × aird_file_ce_multiplier), 0, 100)
+aird_base = clamp(round(aird_raw), 0, 100)
+aicp = clamp(round(aicp_raw), 0, 100)
+</pre></div>
+</div>
+<p>The component columns are written at full precision in all three formats
+(CSV included), because many raw sums land within floating-point error of a
+.5 tie. For those rows, round-half-to-even (the default in Python, NumPy and
+R), decimal arithmetic, or recomputing the terms from the default integer
+columns can give a different score than knots reports. <strong>Analyses should use
+the emitted</strong> <code class="docutils literal notranslate"><span class="pre">aird</span></code>, <code class="docutils literal notranslate"><span class="pre">aird_base</span></code> <strong>and</strong> <code class="docutils literal notranslate"><span class="pre">aicp</span></code> <strong>as outcomes, not
+recompute them.</strong></p>
+<p><strong>The terms are not independent inputs.</strong> <code class="docutils literal notranslate"><span class="pre">test_score</span></code> includes an
+implementation sub-score mapped from McCabe complexity and already subtracts
+<code class="docutils literal notranslate"><span class="pre">doc_score</span></code>. So McCabe feeds AIRD through <code class="docutils literal notranslate"><span class="pre">aird_test</span></code>, documentation
+counts twice (inside <code class="docutils literal notranslate"><span class="pre">aird_test</span></code> and again as <code class="docutils literal notranslate"><span class="pre">aird_doc</span></code>), and SLOC and
+cognitive complexity are themselves terms. A model that regresses AIRD on
+SLOC, cognitive complexity or McCabe has those predictors partly inside the
+outcome. In practice <code class="docutils literal notranslate"><span class="pre">doc_score</span></code> takes only a few values (0, 2 and 4 are
+typical), so <code class="docutils literal notranslate"><span class="pre">aird_doc</span></code> is usually 0, -3 or -6.</p>
 </section>
 </section>
 

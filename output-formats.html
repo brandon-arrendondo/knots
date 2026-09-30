@@ -53,6 +53,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#json">JSON</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ndjson-newline-delimited-json">NDJSON (newline-delimited JSON)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#csv">CSV</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#score-components">Score components</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sarif-vs-code-github-code-scanning">SARIF (VS Code / GitHub Code Scanning)</a></li>
 </ul>
 </li>
@@ -112,7 +113,8 @@ Suitable for interactive use and terminal review.</p>
 <span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">--</span><span class="nb">format</span> <span class="n">json</span> <span class="n">src</span><span class="o">/</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">json</span>
 </pre></div>
 </div>
-<p>Each record contains all 15 fields:</p>
+<p>Each record contains these 17 fields (key order is not significant;
+serialized keys come out in alphabetical order):</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;src/main.c&quot;</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;function&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;process_data&quot;</span><span class="p">,</span>
@@ -129,6 +131,7 @@ Suitable for interactive use and terminal review.</p>
 <span class="w">  </span><span class="nt">&quot;aird&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">87</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;aicp&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">72</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;external_calls&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;file_ce&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">&quot;unreachable_blocks&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
 <span class="p">}</span>
 </pre></div>
@@ -165,6 +168,16 @@ field order.</p>
 </pre></div>
 </div>
 <p>Import directly into spreadsheets, pandas, or any SQL tool.</p>
+</section>
+<section id="score-components">
+<h2>Score components<a class="headerlink" href="#score-components" title="Link to this heading"></a></h2>
+<p>Add <code class="docutils literal notranslate"><span class="pre">--score-components</span></code> to any of <code class="docutils literal notranslate"><span class="pre">json</span></code>, <code class="docutils literal notranslate"><span class="pre">ndjson</span></code> or <code class="docutils literal notranslate"><span class="pre">csv</span></code> to get
+AIRD’s and AICP’s per-term contributions and pre-clamp values: extra keys
+in JSON/NDJSON, trailing columns in CSV. See <a class="reference internal" href="metrics-reference.html#score-components"><span class="std std-ref">Score components</span></a> for
+the column list and how to use them.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">--</span><span class="nb">format</span> <span class="n">csv</span> <span class="o">--</span><span class="n">score</span><span class="o">-</span><span class="n">components</span> <span class="n">src</span><span class="o">/</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
 </section>
 <section id="sarif-vs-code-github-code-scanning">
 <h2>SARIF (VS Code / GitHub Code Scanning)<a class="headerlink" href="#sarif-vs-code-github-code-scanning" title="Link to this heading"></a></h2>

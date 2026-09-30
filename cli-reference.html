@@ -169,6 +169,12 @@ suppress the file.</p>
 </tbody>
 </table>
 </dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--score-components</span></code></dt><dd><p>With <code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">json</span></code>, <code class="docutils literal notranslate"><span class="pre">ndjson</span></code> or <code class="docutils literal notranslate"><span class="pre">csv</span></code>, add AIRD’s and AICP’s
+per-term contributions, their pre-clamp raw sums, AIRD before the
+file-level multiplier, the multiplier itself, and <code class="docutils literal notranslate"><span class="pre">state_coupling</span></code>
+(extra JSON keys; trailing CSV columns). The default fields are unchanged. Ignored for <code class="docutils literal notranslate"><span class="pre">text</span></code> and <code class="docutils literal notranslate"><span class="pre">sarif</span></code>. See
+<a class="reference internal" href="metrics-reference.html#score-components"><span class="std std-ref">Score components</span></a>.</p>
+</dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-j</span> <span class="pre">&lt;N&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">--jobs</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Number of parallel analysis threads when processing multiple files.
 <code class="docutils literal notranslate"><span class="pre">0</span></code> (the default) auto-detects available CPU cores via
 <code class="docutils literal notranslate"><span class="pre">std::thread::available_parallelism</span></code>; <code class="docutils literal notranslate"><span class="pre">1</span></code> forces sequential
