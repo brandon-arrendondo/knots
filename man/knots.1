@@ -140,6 +140,12 @@ Newline-delimited JSON \(em one record per line, composable via find/xargs.
 CSV with header row.
 .RE
 .TP
+.B \-\-score\-components
+With \fB\-\-format\fR json, ndjson or csv, append AIRD's and AICP's
+per\-term contributions, their pre\-clamp raw sums, AIRD before the
+file\-level multiplier, the multiplier itself, and state_coupling.
+The default columns are unchanged. Ignored for text and sarif.
+.TP
 .BI \-\-mccabe\-threshold " N"
 Exit 1 if any function exceeds this McCabe complexity.
 .TP

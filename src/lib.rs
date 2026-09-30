@@ -26,11 +26,11 @@ pub mod coupling;
 
 // Re-export complexity functions for use by workspace members and for internal use
 pub use complexity::{
-    apply_aird_ce_multiplier, calculate_abc_complexity, calculate_aicp, calculate_aird,
-    calculate_cognitive_complexity, calculate_mccabe_complexity, calculate_nesting_depth,
-    calculate_return_count, calculate_sloc, calculate_sloc_ada, calculate_sloc_fortran,
-    calculate_sloc_python, calculate_state_coupling, calculate_test_scoring,
-    calculate_unreachable_blocks, TestScoringMetric,
+    aicp_components, aird_components, apply_aird_ce_multiplier, calculate_abc_complexity,
+    calculate_aicp, calculate_aird, calculate_cognitive_complexity, calculate_mccabe_complexity,
+    calculate_nesting_depth, calculate_return_count, calculate_sloc, calculate_sloc_ada,
+    calculate_sloc_fortran, calculate_sloc_python, calculate_state_coupling,
+    calculate_test_scoring, calculate_unreachable_blocks, TestScoringMetric,
 };
 
 // File-level Ce/Ca/Instability coupling metrics, built on the substrate's
@@ -299,7 +299,8 @@ pub struct FunctionMetrics {
     pub aicp: u32,
     /// Count of calls to functions not defined in the same file.
     pub external_calls: u32,
-    /// Count of reads/writes to `self`/`this` fields.
+    /// Explicit parameter count plus distinct `self`/`this` fields accessed
+    /// (see [`complexity::calculate_state_coupling`]).
     pub state_coupling: u32,
     /// Efferent coupling (Ce) of this function's file, from the corpus-wide
     /// import graph — `0` outside `--recursive` mode, where no corpus exists
@@ -326,6 +327,29 @@ impl FunctionMetrics {
     /// where either metric alone would let a violation through.
     pub fn max_complexity(&self) -> u32 {
         std::cmp::max(self.mccabe, self.cognitive)
+    }
+
+    /// This function's AIRD split into weighted terms. Its `base` is `aird`
+    /// before the file-level Ce multiplier, so the two match outside
+    /// `--recursive` mode.
+    pub fn aird_components(&self) -> complexity::AirdComponents {
+        aird_components(
+            self.cognitive,
+            self.sloc,
+            self.nesting,
+            self.test_scoring.total_score,
+            self.test_scoring.documentation_score,
+            self.state_coupling,
+        )
+    }
+
+    /// This function's AICP split into weighted terms; its `score` is `aicp`.
+    pub fn aicp_components(&self) -> complexity::AicpComponents {
+        aicp_components(
+            self.external_calls,
+            self.sloc,
+            self.test_scoring.documentation_score,
+        )
     }
 }
 

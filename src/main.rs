@@ -95,6 +95,14 @@ struct Args {
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     format: OutputFormat,
 
+    /// With --format json/ndjson/csv, add AIRD's and AICP's per-term
+    /// contributions, their pre-clamp raw sums, AIRD before the file-level
+    /// Ce multiplier and the multiplier itself, and state_coupling — so each
+    /// score can be decomposed and recomputed. Default columns are unchanged;
+    /// ignored for text and SARIF. See docs/metrics-reference.rst.
+    #[arg(long)]
+    score_components: bool,
+
     /// Exit 1 if any function exceeds this McCabe complexity (default: off)
     #[arg(long, value_name = "N")]
     mccabe_threshold: Option<u32>,
@@ -486,6 +494,8 @@ struct RunContext {
     baseline: Option<Baseline>,
     changed: Option<ChangedLines>,
     count_anonymous_closures: bool,
+    /// See `--score-components`.
+    score_components: bool,
     verbose: bool,
     quiet: bool,
     /// Gates the Ce/Ca/Instability file-coupling pass — corpus-wide import
@@ -1221,9 +1231,9 @@ fn run_structured_output_mode(
     compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
     match format {
         OutputFormat::Sarif => emit_sarif(&all_metrics),
-        OutputFormat::Json => emit_json(&all_metrics),
-        OutputFormat::Ndjson => emit_ndjson(&all_metrics),
-        OutputFormat::Csv => emit_csv(&all_metrics),
+        OutputFormat::Json => emit_json(&all_metrics, ctx.score_components),
+        OutputFormat::Ndjson => emit_ndjson(&all_metrics, ctx.score_components),
+        OutputFormat::Csv => emit_csv(&all_metrics, ctx.score_components),
         OutputFormat::Text => Ok(()),
     }
 }
@@ -1720,6 +1730,7 @@ fn build_run_context(
         baseline: resolve_baseline(args)?,
         changed: resolve_changed(args)?,
         count_anonymous_closures: args.count_anonymous_closures,
+        score_components: args.score_components,
         verbose: args.verbose,
         quiet: args.quiet,
         recursive: args.recursive,
@@ -2506,6 +2517,43 @@ mod tests {
     fn test_aird_drivers_empty_when_all_zero() {
         let func = fixture(0, 0, 0, 0, 0);
         assert!(aird_drivers(&func, 2).is_empty());
+    }
+
+    fn csv_lines(f: &FunctionMetrics, components: bool) -> Vec<String> {
+        let mut out = Vec::new();
+        write_csv(&mut out, std::slice::from_ref(f), components).unwrap();
+        String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// --score-components only appends: header and row keep the default
+    /// columns as a prefix and gain one value per extra header column.
+    #[test]
+    fn test_csv_score_components_append_to_default_columns() {
+        let f = fixture(30, 80, 2, 8, 4);
+        let plain = csv_lines(&f, false);
+        let with = csv_lines(&f, true);
+        assert!(plain[0].ends_with(",file_ce,unreachable_blocks"));
+        assert!(with[0].starts_with(&plain[0]) && with[1].starts_with(&plain[1]));
+        let width = 17 + SCORE_COMPONENT_COLUMNS.len();
+        assert_eq!(with[0].split(',').count(), width);
+        assert_eq!(with[1].split(',').count(), width);
+    }
+
+    #[test]
+    fn test_csv_score_components_values() {
+        let mut f = fixture(30, 80, 2, 8, 4);
+        f.file_ce = 5;
+        let lines = csv_lines(&f, true);
+        let header: Vec<&str> = lines[0].split(',').collect();
+        let row: Vec<&str> = lines[1].split(',').collect();
+        let col = |name| row[header.iter().position(|h| *h == name).unwrap()];
+        assert_eq!(col("state_coupling"), "4");
+        assert_eq!(col("aird_file_ce_multiplier"), "1.1000");
+        assert_eq!(col("aird_base"), f.aird_components().base.to_string());
     }
 
     // ---- baseline / ratchet mode ----

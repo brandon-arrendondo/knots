@@ -71,6 +71,13 @@ Options
        * - ``csv``
          - CSV with header row.
 
+``--score-components``
+    With ``--format json``, ``ndjson`` or ``csv``, append AIRD's and AICP's
+    per-term contributions, their pre-clamp raw sums, AIRD before the
+    file-level multiplier, the multiplier itself, and ``state_coupling``. The
+    default columns are unchanged. Ignored for ``text`` and ``sarif``. See
+    :ref:`score-components`.
+
 ``-j <N>``, ``--jobs <N>``
     Number of parallel analysis threads when processing multiple files.
     ``0`` (the default) auto-detects available CPU cores via

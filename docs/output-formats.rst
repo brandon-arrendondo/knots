@@ -25,7 +25,7 @@ Pretty-printed JSON array of per-function records:
     knots --format json src/main.c > metrics.json
     knots -r --format json src/ > metrics.json
 
-Each record contains all 15 fields:
+Each record contains these 17 fields:
 
 .. code-block:: json
 
@@ -45,6 +45,7 @@ Each record contains all 15 fields:
       "aird": 87,
       "aicp": 72,
       "external_calls": 14,
+      "file_ce": 0,
       "unreachable_blocks": 0
     }
 
@@ -84,6 +85,18 @@ field order.
     knots --format csv src/ > metrics.csv
 
 Import directly into spreadsheets, pandas, or any SQL tool.
+
+Score components
+----------------
+
+Add ``--score-components`` to any of ``json``, ``ndjson`` or ``csv`` to get
+AIRD's and AICP's per-term contributions and pre-clamp values as extra
+fields (CSV: extra columns after the default ones). See
+:ref:`score-components` for the column list.
+
+::
+
+    knots -r --format csv --score-components src/ > metrics.csv
 
 SARIF (VS Code / GitHub Code Scanning)
 ---------------------------------------

@@ -44,19 +44,13 @@ pub(crate) fn format_aird_breakdown(func: &FunctionMetrics) -> String {
 }
 
 fn aird_component_line(func: &FunctionMetrics) -> String {
-    let cognitive_contrib = (func.cognitive as f64 / 75.0).min(1.0) * 55.0;
-    let sloc_contrib = (func.sloc as f64 / 200.0).min(1.0) * 15.0;
-    let nesting_contrib = (func.nesting as f64 / 8.0).min(1.0) * 15.0;
-    let test_contrib = (func.test_scoring.total_score.max(0) as f64 / 20.0).min(1.0) * 15.0;
-    let doc_contrib = (func.test_scoring.documentation_score.max(0) as f64 / 10.0).min(1.0) * 15.0;
-    let coupling_contrib = (func.state_coupling as f64 / 12.0).min(1.0) * 10.0;
-
-    let cog = aird_term("cognitive", cognitive_contrib, 55.0, " [capped]");
-    let sloc = aird_term("sloc", sloc_contrib, 15.0, " [capped]");
-    let nest = aird_term("nesting", nesting_contrib, 15.0, " [capped]");
-    let test = aird_term("test", test_contrib, 15.0, " [capped]");
-    let doc = format!("doc: -{:.1}/15", doc_contrib);
-    let coup = format!("coupling: +{:.1}/10", coupling_contrib);
+    let c = func.aird_components();
+    let cog = aird_term("cognitive", c.cognitive, 55.0, " [capped]");
+    let sloc = aird_term("sloc", c.sloc, 15.0, " [capped]");
+    let nest = aird_term("nesting", c.nesting, 15.0, " [capped]");
+    let test = aird_term("test", c.test, 15.0, " [capped]");
+    let doc = format!("doc: -{:.1}/15", -c.doc);
+    let coup = format!("coupling: +{:.1}/10", c.coupling);
 
     format!(
         "    {}, {}, {}, {}, {}, {}",
@@ -95,33 +89,13 @@ fn file_ce_suffix(func: &FunctionMetrics) -> String {
 }
 
 pub(crate) fn aird_drivers(func: &FunctionMetrics, top_n: usize) -> Vec<(&'static str, i64)> {
-    let test_score = func.test_scoring.total_score.max(0);
+    let c = func.aird_components();
     let mut comps: [(&'static str, i64, f64); 5] = [
-        (
-            "cognitive",
-            func.cognitive as i64,
-            (func.cognitive as f64 / 75.0).min(1.0) * 55.0,
-        ),
-        (
-            "sloc",
-            func.sloc as i64,
-            (func.sloc as f64 / 200.0).min(1.0) * 15.0,
-        ),
-        (
-            "nesting",
-            func.nesting as i64,
-            (func.nesting as f64 / 8.0).min(1.0) * 15.0,
-        ),
-        (
-            "test",
-            test_score as i64,
-            (test_score as f64 / 20.0).min(1.0) * 15.0,
-        ),
-        (
-            "coupling",
-            func.state_coupling as i64,
-            (func.state_coupling as f64 / 12.0).min(1.0) * 10.0,
-        ),
+        ("cognitive", func.cognitive as i64, c.cognitive),
+        ("sloc", func.sloc as i64, c.sloc),
+        ("nesting", func.nesting as i64, c.nesting),
+        ("test", func.test_scoring.total_score.max(0) as i64, c.test),
+        ("coupling", func.state_coupling as i64, c.coupling),
     ];
     comps.sort_by(|a, b| b.2.total_cmp(&a.2));
     comps
@@ -436,30 +410,97 @@ pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics]) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
+/// One function's JSON/NDJSON record. With `components` (`--score-components`)
+/// it also carries the [`SCORE_COMPONENT_COLUMNS`].
+fn function_record(f: &FunctionMetrics, components: bool) -> serde_json::Value {
+    let mut record = json!({
+        "file": f.file_path,
+        "function": f.name,
+        "start_line": f.start_line,
+        "end_line": f.end_line,
+        "mccabe": f.mccabe,
+        "cognitive": f.cognitive,
+        "nesting": f.nesting,
+        "sloc": f.sloc,
+        "abc_magnitude": f.abc_magnitude,
+        "return_count": f.return_count,
+        "test_score": f.test_scoring.total_score,
+        "doc_score": f.test_scoring.documentation_score,
+        "aird": f.aird,
+        "aicp": f.aicp,
+        "external_calls": f.external_calls,
+        "file_ce": f.file_ce,
+        "unreachable_blocks": f.unreachable_blocks
+    });
+    if components {
+        if let Some(obj) = record.as_object_mut() {
+            for (key, value) in SCORE_COMPONENT_COLUMNS
+                .iter()
+                .zip(score_component_values(f))
+            {
+                obj.insert((*key).to_string(), value);
+            }
+        }
+    }
+    record
+}
+
+/// Extra columns `--score-components` adds to JSON, NDJSON and CSV, in CSV
+/// order after the default columns. Documented in docs/metrics-reference.rst
+/// ("Score components").
+pub(crate) const SCORE_COMPONENT_COLUMNS: [&str; 15] = [
+    "state_coupling",
+    "aird_cognitive",
+    "aird_sloc",
+    "aird_nesting",
+    "aird_test",
+    "aird_doc",
+    "aird_coupling",
+    "aird_raw",
+    "aird_uncapped_raw",
+    "aird_base",
+    "aird_file_ce_multiplier",
+    "aicp_external_calls",
+    "aicp_sloc",
+    "aicp_doc",
+    "aicp_raw",
+];
+
+/// Values for [`SCORE_COMPONENT_COLUMNS`], in the same order.
+fn score_component_values(f: &FunctionMetrics) -> [serde_json::Value; 15] {
+    let aird = f.aird_components();
+    let aicp = f.aicp_components();
+    let uncapped = calculate_aird_raw(
+        f.cognitive,
+        f.sloc,
+        f.nesting,
+        f.test_scoring.total_score,
+        f.test_scoring.documentation_score,
+        f.state_coupling,
+    );
+    [
+        json!(f.state_coupling),
+        json!(aird.cognitive),
+        json!(aird.sloc),
+        json!(aird.nesting),
+        json!(aird.test),
+        json!(aird.doc),
+        json!(aird.coupling),
+        json!(aird.raw),
+        json!(uncapped),
+        json!(aird.base),
+        json!(aird_file_ce_multiplier(f.file_ce)),
+        json!(aicp.external_calls),
+        json!(aicp.sloc),
+        json!(aicp.doc),
+        json!(aicp.raw),
+    ]
+}
+
+pub(crate) fn emit_json(all_metrics: &[FunctionMetrics], components: bool) -> Result<()> {
     let records: Vec<_> = all_metrics
         .iter()
-        .map(|f| {
-            json!({
-                "file": f.file_path,
-                "function": f.name,
-                "start_line": f.start_line,
-                "end_line": f.end_line,
-                "mccabe": f.mccabe,
-                "cognitive": f.cognitive,
-                "nesting": f.nesting,
-                "sloc": f.sloc,
-                "abc_magnitude": f.abc_magnitude,
-                "return_count": f.return_count,
-                "test_score": f.test_scoring.total_score,
-                "doc_score": f.test_scoring.documentation_score,
-                "aird": f.aird,
-                "aicp": f.aicp,
-                "external_calls": f.external_calls,
-                "file_ce": f.file_ce,
-                "unreachable_blocks": f.unreachable_blocks
-            })
-        })
+        .map(|f| function_record(f, components))
         .collect();
 
     let stdout = std::io::stdout();
@@ -469,73 +510,91 @@ pub(crate) fn emit_json(all_metrics: &[FunctionMetrics]) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn emit_ndjson(all_metrics: &[FunctionMetrics]) -> Result<()> {
+pub(crate) fn emit_ndjson(all_metrics: &[FunctionMetrics], components: bool) -> Result<()> {
     let stdout = std::io::stdout();
     let mut handle = stdout.lock();
     for f in all_metrics {
-        let record = json!({
-            "file": f.file_path,
-            "function": f.name,
-            "start_line": f.start_line,
-            "end_line": f.end_line,
-            "mccabe": f.mccabe,
-            "cognitive": f.cognitive,
-            "nesting": f.nesting,
-            "sloc": f.sloc,
-            "abc_magnitude": f.abc_magnitude,
-            "return_count": f.return_count,
-            "test_score": f.test_scoring.total_score,
-            "doc_score": f.test_scoring.documentation_score,
-            "aird": f.aird,
-            "aicp": f.aicp,
-            "external_calls": f.external_calls,
-            "file_ce": f.file_ce,
-            "unreachable_blocks": f.unreachable_blocks
-        });
+        let record = function_record(f, components);
         serde_json::to_writer(&mut handle, &record).context("Failed to write NDJSON")?;
         writeln!(handle)?;
     }
     Ok(())
 }
 
-pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics]) -> Result<()> {
+pub(crate) fn emit_csv(all_metrics: &[FunctionMetrics], components: bool) -> Result<()> {
     let stdout = std::io::stdout();
     let mut handle = stdout.lock();
+    write_csv(&mut handle, all_metrics, components)
+}
 
-    writeln!(
-        handle,
-        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aird,aicp,external_calls,file_ce,unreachable_blocks"
-    )?;
-
+pub(crate) fn write_csv(
+    out: &mut impl Write,
+    all_metrics: &[FunctionMetrics],
+    components: bool,
+) -> Result<()> {
+    writeln!(out, "{}", csv_header(components))?;
     for f in all_metrics {
-        let name = if f.name.contains(',') {
-            format!("\"{}\"", f.name.replace('"', "\"\""))
-        } else {
-            f.name.clone()
-        };
-        writeln!(
-            handle,
-            "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{},{},{},{}",
-            f.file_path,
-            name,
-            f.start_line,
-            f.end_line,
-            f.mccabe,
-            f.cognitive,
-            f.nesting,
-            f.sloc,
-            f.abc_magnitude,
-            f.return_count,
-            f.test_scoring.total_score,
-            f.test_scoring.documentation_score,
-            f.aird,
-            f.aicp,
-            f.external_calls,
-            f.file_ce,
-            f.unreachable_blocks
-        )?;
+        write_csv_row(out, f)?;
+        if components {
+            for value in score_component_values(f) {
+                write!(out, ",{}", csv_component_value(&value))?;
+            }
+        }
+        writeln!(out)?;
     }
     Ok(())
+}
+
+fn csv_header(components: bool) -> String {
+    let mut header = String::from(
+        "file,function,start_line,end_line,mccabe,cognitive,nesting,sloc,abc_magnitude,return_count,test_score,doc_score,aird,aicp,external_calls,file_ce,unreachable_blocks",
+    );
+    if components {
+        for column in SCORE_COMPONENT_COLUMNS {
+            header.push(',');
+            header.push_str(column);
+        }
+    }
+    header
+}
+
+/// The default columns of one CSV row, without the trailing newline.
+fn write_csv_row(out: &mut impl Write, f: &FunctionMetrics) -> Result<()> {
+    let name = if f.name.contains(',') {
+        format!("\"{}\"", f.name.replace('"', "\"\""))
+    } else {
+        f.name.clone()
+    };
+    write!(
+        out,
+        "{},{},{},{},{},{},{},{},{:.4},{},{},{},{},{},{},{},{}",
+        f.file_path,
+        name,
+        f.start_line,
+        f.end_line,
+        f.mccabe,
+        f.cognitive,
+        f.nesting,
+        f.sloc,
+        f.abc_magnitude,
+        f.return_count,
+        f.test_scoring.total_score,
+        f.test_scoring.documentation_score,
+        f.aird,
+        f.aicp,
+        f.external_calls,
+        f.file_ce,
+        f.unreachable_blocks
+    )?;
+    Ok(())
+}
+
+/// Fractional component values to four decimals, as `abc_magnitude`; integers as-is.
+fn csv_component_value(value: &serde_json::Value) -> String {
+    match value.as_f64() {
+        Some(x) if value.is_f64() => format!("{:.4}", x),
+        _ => value.to_string(),
+    }
 }
 
 pub(crate) fn write_detailed_report(

@@ -295,6 +295,25 @@ needs to safely modify a function. Higher = harder for an AI to modify.
 
     AIRD = (cognitive/75 × 55) + (sloc/200 × 15) + (nesting/8 × 15)
          + (test_score/20 × 15) - (doc_score/10 × 15)
+         + (state_coupling/12 × 10)
+
+Each ratio is capped at 1 before it is weighted (a negative ``test_score`` or
+``doc_score`` counts as 0), and the sum is rounded and clamped to 0–100.
+``state_coupling`` is the explicit parameter count plus the number of
+distinct ``self``/``this`` fields the function touches.
+
+With ``--recursive``, the clamped score is then multiplied by a file-level
+coupling factor and rounded and clamped again:
+
+.. code-block:: text
+
+    multiplier = 1 + min(file_ce/10, 1) × 0.20        (1.0 to 1.2)
+    AIRD       = clamp(round(AIRD_base × multiplier), 0, 100)
+
+``file_ce`` is the number of corpus-internal files the function's file
+imports. Outside ``--recursive`` it is 0, the multiplier is 1.0, and AIRD is
+the base score. ``--score-components`` reports every term (see
+`Score components`_).
 
 Ceiling values (p99 of observed distribution across 32,205 functions from
 mosquitto, SQLite, curl, hostap, Lua, libcrc):
@@ -353,3 +372,53 @@ External call breadth is the primary driver. The p99 ceiling of 20 external
 calls is consistent across all 6 corpora.
 
 - Threshold flag: ``--aicp-threshold``
+
+
+.. _score-components:
+
+Score components
+----------------
+
+AIRD and AICP each report only their final, clamped score, and in
+``--recursive`` mode AIRD also includes the file-level multiplier. To
+decompose a score, for example to test one term against SLOC or cognitive
+complexity, or to see how far a saturated score overshoots 100, pass
+``--score-components`` with ``--format json``, ``ndjson`` or ``csv``. It
+appends these columns after the default ones, which stay as they are:
+
+=============================  =====================================================
+Column                         Meaning
+=============================  =====================================================
+``state_coupling``             Input to the AIRD coupling term (parameters + fields)
+``aird_cognitive``             ``min(cognitive/75, 1) × 55``
+``aird_sloc``                  ``min(sloc/200, 1) × 15``
+``aird_nesting``               ``min(nesting/8, 1) × 15``
+``aird_test``                  ``min(max(test_score, 0)/20, 1) × 15``
+``aird_doc``                   ``-min(max(doc_score, 0)/10, 1) × 15`` (≤ 0)
+``aird_coupling``              ``min(state_coupling/12, 1) × 10``
+``aird_raw``                   Sum of the six ``aird_*`` terms, before rounding and
+                               the 0–100 clamp; can be negative or above 100
+``aird_uncapped_raw``          As ``aird_raw`` but with the cognitive and SLOC ratios
+                               uncapped, floored at 0: the "raw AIRD (uncapped)" the
+                               text breakdown prints for large functions
+``aird_base``                  ``aird_raw`` rounded and clamped to 0–100: AIRD before
+                               the file-level multiplier
+``aird_file_ce_multiplier``    ``1 + min(file_ce/10, 1) × 0.20``; 1.0 outside
+                               ``--recursive``
+``aicp_external_calls``        ``min(external_calls/20, 1) × 60``
+``aicp_sloc``                  ``min(sloc/200, 1) × 40``
+``aicp_doc``                   ``-min(max(doc_score, 0)/10, 1) × 15`` (≤ 0)
+``aicp_raw``                   Sum of the three ``aicp_*`` terms, before rounding and
+                               the 0–100 clamp
+=============================  =====================================================
+
+These identities hold for every row:
+
+.. code-block:: text
+
+    aird = clamp(round(aird_base × aird_file_ce_multiplier), 0, 100)
+    aird_base = clamp(round(aird_raw), 0, 100)
+    aicp = clamp(round(aicp_raw), 0, 100)
+
+CSV writes the fractional columns to four decimal places; JSON and NDJSON
+keep full precision.

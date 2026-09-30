@@ -1438,6 +1438,53 @@ pub fn calculate_aird(
     doc_score: i32,
     state_coupling: u32,
 ) -> u32 {
+    aird_components(
+        cognitive,
+        sloc,
+        nesting,
+        test_score,
+        doc_score,
+        state_coupling,
+    )
+    .base
+}
+
+/// AIRD broken into its weighted terms, for output that lets a study separate
+/// them (`--score-components`) and for the human-readable breakdown.
+///
+/// Each term is the input's normalized, per-input-capped value times its
+/// weight. `doc` is negative (documentation lowers AIRD), so the six terms
+/// sum to `raw`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AirdComponents {
+    /// `min(cognitive / 75, 1) × 55`.
+    pub cognitive: f64,
+    /// `min(sloc / 200, 1) × 15`.
+    pub sloc: f64,
+    /// `min(nesting / 8, 1) × 15`.
+    pub nesting: f64,
+    /// `min(max(test_score, 0) / 20, 1) × 15`.
+    pub test: f64,
+    /// `-(min(max(doc_score, 0) / 10, 1) × 15)`.
+    pub doc: f64,
+    /// `min(state_coupling / 12, 1) × 10`.
+    pub coupling: f64,
+    /// Sum of the six terms, before rounding and the 0-100 clamp.
+    pub raw: f64,
+    /// `raw` rounded and clamped to 0-100: the AIRD score before the
+    /// file-level Ce multiplier (`--recursive` only) is applied.
+    pub base: u32,
+}
+
+/// Computes [`AirdComponents`]; `calculate_aird` is its `base`.
+pub fn aird_components(
+    cognitive: u32,
+    sloc: u32,
+    nesting: u32,
+    test_score: i32,
+    doc_score: i32,
+    state_coupling: u32,
+) -> AirdComponents {
     let cognitive_norm = (cognitive as f64 / 75.0).min(1.0);
     let sloc_norm = (sloc as f64 / 200.0).min(1.0);
     let nesting_norm = (nesting as f64 / 8.0).min(1.0);
@@ -1447,12 +1494,25 @@ pub fn calculate_aird(
     // Weight 10 dampens mechanical splits without inverting genuine wins.
     let coupling_norm = (state_coupling as f64 / 12.0).min(1.0);
 
-    let raw =
-        (cognitive_norm * 55.0) + (sloc_norm * 15.0) + (nesting_norm * 15.0) + (test_norm * 15.0)
-            - (doc_norm * 15.0)
-            + (coupling_norm * 10.0);
+    let cognitive = cognitive_norm * 55.0;
+    let sloc = sloc_norm * 15.0;
+    let nesting = nesting_norm * 15.0;
+    let test = test_norm * 15.0;
+    // `0.0 -` rather than negation, so an undocumented function reports 0, not -0.
+    let doc = 0.0 - doc_norm * 15.0;
+    let coupling = coupling_norm * 10.0;
+    let raw = cognitive + sloc + nesting + test + doc + coupling;
 
-    raw.round().clamp(0.0, 100.0) as u32
+    AirdComponents {
+        cognitive,
+        sloc,
+        nesting,
+        test,
+        doc,
+        coupling,
+        raw,
+        base: raw.round().clamp(0.0, 100.0) as u32,
+    }
 }
 
 /// Same formula as `calculate_aird` but without the per-input `.min(1.0)` caps.
@@ -1493,13 +1553,44 @@ pub fn calculate_aird_raw(
 ///   sloc           - raw function size (context volume)
 ///   doc_score      - documentation reduces load (negative contributor)
 pub fn calculate_aicp(external_calls: u32, sloc: u32, doc_score: i32) -> u32 {
+    aicp_components(external_calls, sloc, doc_score).score
+}
+
+/// AICP broken into its weighted terms, as [`AirdComponents`] is for AIRD.
+/// `doc` is negative, so the three terms sum to `raw`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AicpComponents {
+    /// `min(external_calls / 20, 1) × 60`.
+    pub external_calls: f64,
+    /// `min(sloc / 200, 1) × 40`.
+    pub sloc: f64,
+    /// `-(min(max(doc_score, 0) / 10, 1) × 15)`.
+    pub doc: f64,
+    /// Sum of the three terms, before rounding and the 0-100 clamp.
+    pub raw: f64,
+    /// `raw` rounded and clamped to 0-100: the AICP score.
+    pub score: u32,
+}
+
+/// Computes [`AicpComponents`]; `calculate_aicp` is its `score`.
+pub fn aicp_components(external_calls: u32, sloc: u32, doc_score: i32) -> AicpComponents {
     let ext_norm = (external_calls as f64 / 20.0).min(1.0);
     let sloc_norm = (sloc as f64 / 200.0).min(1.0);
     let doc_norm = (doc_score.max(0) as f64 / 10.0).min(1.0);
 
-    let raw = (ext_norm * 60.0) + (sloc_norm * 40.0) - (doc_norm * 15.0);
+    let external_calls = ext_norm * 60.0;
+    let sloc = sloc_norm * 40.0;
+    // `0.0 -` rather than negation, so an undocumented function reports 0, not -0.
+    let doc = 0.0 - doc_norm * 15.0;
+    let raw = external_calls + sloc + doc;
 
-    raw.round().clamp(0.0, 100.0) as u32
+    AicpComponents {
+        external_calls,
+        sloc,
+        doc,
+        raw,
+        score: raw.round().clamp(0.0, 100.0) as u32,
+    }
 }
 
 /// Normalization cap for file-level Ce (efferent coupling) in the AIRD
@@ -2080,6 +2171,50 @@ mod aird_tests {
             capped,
             raw
         );
+    }
+
+    #[test]
+    fn test_aird_components_sum_to_raw_and_round_to_score() {
+        for &(cog, sloc, nest, test, doc, coup) in &[
+            (0, 0, 0, 0, 0, 0),
+            (1, 5, 1, 2, 8, 0),
+            (30, 80, 2, 8, 3, 4),
+            (80, 200, 7, 15, 0, 13),
+            (1000, 1000, 1000, 1000, 0, 1000),
+            (0, 0, 0, 0, 10, 0),
+            (5, 3, 0, -4, 10, 0),
+        ] {
+            let c = aird_components(cog, sloc, nest, test, doc, coup);
+            let sum = c.cognitive + c.sloc + c.nesting + c.test + c.doc + c.coupling;
+            assert!((sum - c.raw).abs() < 1e-9, "terms must sum to raw: {c:?}");
+            assert_eq!(c.base, calculate_aird(cog, sloc, nest, test, doc, coup));
+        }
+        // Pre-clamp raw keeps what the 0-100 clamp throws away, at both ends.
+        assert!(aird_components(1000, 1000, 1000, 1000, 0, 1000).raw > 100.0);
+        assert!(aird_components(0, 0, 0, 0, 10, 0).raw < 0.0);
+    }
+
+    #[test]
+    fn test_aird_components_undocumented_doc_term_is_positive_zero() {
+        let c = aird_components(10, 10, 1, 1, 0, 0);
+        assert!(c.doc == 0.0 && c.doc.is_sign_positive());
+        let a = aicp_components(3, 10, 0);
+        assert!(a.doc == 0.0 && a.doc.is_sign_positive());
+    }
+
+    #[test]
+    fn test_aicp_components_sum_to_raw_and_round_to_score() {
+        for &(ext, sloc, doc) in &[
+            (0, 0, 0),
+            (3, 14, 0),
+            (20, 200, 0),
+            (50, 900, 4),
+            (0, 10, 10),
+        ] {
+            let c = aicp_components(ext, sloc, doc);
+            assert!((c.external_calls + c.sloc + c.doc - c.raw).abs() < 1e-9);
+            assert_eq!(c.score, calculate_aicp(ext, sloc, doc));
+        }
     }
 }
 
