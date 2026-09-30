@@ -12,10 +12,11 @@
 //! pick, since a wrong edge is worse than a missing one.
 //!
 //! Rust is the exception: a `use` names an item or a group far more often
-//! than a module, so `.rs` files placed in a crate resolve through
+//! than a module, so [`build_import_graph_with_rust_uses`] resolves `.rs`
+//! files under a `Cargo.toml` through
 //! [`crate::rust_modules::RustModuleIndex`], which follows the crate's module
-//! tree instead of matching stems. A `.rs` file under no crate falls back to
-//! the stem heuristic.
+//! tree instead of matching stems. A `.rs` file under no `Cargo.toml` keeps
+//! the stem heuristic on its raw imports.
 //!
 //! Imports that don't resolve to any corpus file (third-party libraries,
 //! stdlib, unresolvable dynamic `require`s) contribute no edge — Ce/Ca
@@ -53,23 +54,71 @@ pub struct ImportGraph {
 
 /// Phase 1: resolve each file's raw import strings (as extracted by
 /// `lang_parsing_substrate::import_sources`) to other files in the same
-/// corpus, building the graph phase 2 derives metrics from.
+/// corpus, building the graph phase 2 derives metrics from. Every file,
+/// Rust included, resolves by stem; see [`build_import_graph_with_rust_uses`]
+/// for Rust's module-tree resolution.
 pub fn build_import_graph<'a>(
     files: impl IntoIterator<Item = (&'a str, &'a [String])>,
 ) -> ImportGraph {
-    let known_extensions = known_source_extensions();
-    let files: Vec<(&str, &[String])> = files.into_iter().collect();
-    let (key_counts, key_owner) = index_module_keys(&files);
-    let rust = RustModuleIndex::build(files.iter().map(|(path, _)| *path));
+    build_import_graph_with_rust_uses(files, &HashMap::new())
+}
 
-    let mut edges: HashMap<String, HashSet<String>> = HashMap::new();
-    for (path, imports) in &files {
-        let targets = rust.resolve(path, imports).unwrap_or_else(|| {
-            resolve_targets(path, imports, &known_extensions, &key_counts, &key_owner)
-        });
-        edges.insert(path.to_string(), targets);
-    }
+/// [`build_import_graph`], except that a Rust file with an entry in
+/// `rust_uses` (its expanded `use` paths, from
+/// [`crate::rust_modules::rust_use_paths`]) and a place in a crate resolves
+/// through the crate's module tree. Every other file, including a `.rs`
+/// file under no `Cargo.toml`, resolves its raw imports by stem exactly as
+/// `build_import_graph` does.
+pub fn build_import_graph_with_rust_uses<'a>(
+    files: impl IntoIterator<Item = (&'a str, &'a [String])>,
+    rust_uses: &HashMap<String, Vec<String>>,
+) -> ImportGraph {
+    let files: Vec<(&str, &[String])> = files.into_iter().collect();
+    let resolver = Resolver::new(&files, rust_uses);
+    let edges = files
+        .iter()
+        .map(|(path, imports)| (path.to_string(), resolver.targets(path, imports)))
+        .collect();
     ImportGraph { edges }
+}
+
+/// Everything phase 1 resolves against: the corpus's stem index for the
+/// name match, and the Rust module tree for files that have `rust_uses`.
+struct Resolver<'a> {
+    known_extensions: HashSet<&'static str>,
+    key_counts: HashMap<String, u32>,
+    key_owner: HashMap<String, &'a str>,
+    rust: RustModuleIndex,
+    rust_uses: &'a HashMap<String, Vec<String>>,
+}
+
+impl<'a> Resolver<'a> {
+    fn new(files: &[(&'a str, &[String])], rust_uses: &'a HashMap<String, Vec<String>>) -> Self {
+        let (key_counts, key_owner) = index_module_keys(files);
+        Resolver {
+            known_extensions: known_source_extensions(),
+            key_counts,
+            key_owner,
+            rust: RustModuleIndex::build(rust_uses.keys().map(String::as_str)),
+            rust_uses,
+        }
+    }
+
+    fn targets(&self, path: &str, imports: &[String]) -> HashSet<String> {
+        self.by_module_tree(path).unwrap_or_else(|| {
+            resolve_targets(
+                path,
+                imports,
+                &self.known_extensions,
+                &self.key_counts,
+                &self.key_owner,
+            )
+        })
+    }
+
+    fn by_module_tree(&self, path: &str) -> Option<HashSet<String>> {
+        self.rust.resolve(path, self.rust_uses.get(path)?)
+    }
 }
 
 fn known_source_extensions() -> HashSet<&'static str> {

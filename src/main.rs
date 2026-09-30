@@ -1566,36 +1566,60 @@ fn compute_and_apply_file_coupling(
 /// Phase 2 (`ImportGraph::coupling`) resolves those into corpus-internal
 /// edges and derives the metrics.
 fn collect_import_graph(files: &[PathBuf]) -> knots::ImportGraph {
-    let per_file: Vec<(String, Vec<String>)> = files
+    let per_file: Vec<FileImports> = files
         .par_iter()
         .filter_map(|file| extract_file_imports(file))
         .collect();
-
-    let refs: Vec<(&str, &[String])> = per_file
-        .iter()
-        .map(|(path, imports)| (path.as_str(), imports.as_slice()))
-        .collect();
-    knots::build_import_graph(refs)
+    knots::build_import_graph_with_rust_uses(import_refs(&per_file), &rust_use_map(&per_file))
 }
 
-/// Parses one file and extracts its raw import list, or `None` if it can't
-/// be read, parsed, or matched to a compiled-in language — mirroring
+fn import_refs(per_file: &[FileImports]) -> Vec<(&str, &[String])> {
+    per_file
+        .iter()
+        .map(|f| (f.path.as_str(), f.imports.as_slice()))
+        .collect()
+}
+
+fn rust_use_map(per_file: &[FileImports]) -> HashMap<String, Vec<String>> {
+    per_file
+        .iter()
+        .filter_map(|f| Some((f.path.clone(), f.rust_uses.clone()?)))
+        .collect()
+}
+
+/// One file's imports: the substrate's raw import strings, and for Rust
+/// also its expanded `use` paths (see `knots::rust_modules`), which the
+/// raw per-statement text can't be resolved against a module tree without.
+struct FileImports {
+    path: String,
+    imports: Vec<String>,
+    rust_uses: Option<Vec<String>>,
+}
+
+impl FileImports {
+    fn from_tree(file: &Path, tree: &Tree, source: &[u8], key: &str) -> Self {
+        FileImports {
+            path: file.to_str().unwrap_or("").to_string(),
+            imports: lang_parsing_substrate::import_sources(tree, source, key),
+            rust_uses: (key == "rust").then(|| knots::rust_use_paths(tree, source)),
+        }
+    }
+}
+
+/// Parses one file and extracts its imports, or `None` if it can't be
+/// read, parsed, or matched to a compiled-in language — mirroring
 /// `collect_all_metrics`'s skip-on-failure behavior, but silently, since
 /// that function already warns about the same files.
-fn extract_file_imports(file: &Path) -> Option<(String, Vec<String>)> {
+fn extract_file_imports(file: &Path) -> Option<FileImports> {
     let source_code = fs::read_to_string(file).ok()?;
     let (tree, source_code) = parse_file(file, &source_code).ok()?;
     let key = language_info_for_file(file)?.key;
-    let path = file.to_str().unwrap_or("").to_string();
-    // Rust's `use` trees are expanded (and made relative to the file's own
-    // module) here, because the substrate's per-statement text can't be
-    // resolved against a module tree; see `knots::rust_modules`.
-    let imports = if key == "rust" {
-        knots::rust_use_paths(&tree, source_code.as_bytes())
-    } else {
-        lang_parsing_substrate::import_sources(&tree, source_code.as_bytes(), key)
-    };
-    Some((path, imports))
+    Some(FileImports::from_tree(
+        file,
+        &tree,
+        source_code.as_bytes(),
+        key,
+    ))
 }
 
 /// Gates the duplicate-function-detection pass behind `--find-duplicates`

@@ -342,9 +342,7 @@ library's name and the declared ``[lib]`` and ``[[bin]]`` paths: no build
 and no ``cargo metadata``. Cargo's defaults add ``src/lib.rs``,
 ``src/main.rs`` and every file directly in ``src/bin``, ``tests``,
 ``examples`` or ``benches`` (or a ``main.rs`` one directory below them). A
-file under no ``Cargo.toml`` is rooted at the nearest directory holding a
-corpus ``lib.rs`` or ``main.rs``, and failing that falls back to the name
-match above.
+``.rs`` file under no ``Cargo.toml`` keeps the name match above.
 
 What does not count: a ``mod`` declaration (it builds the tree; counting it
 would give every ``lib.rs`` a Ce equal to its submodule count), ``std`` and

@@ -20,8 +20,8 @@
 //! The crate a file belongs to is found through the nearest `Cargo.toml`,
 //! which is read only for the library's name and the declared library and
 //! binary paths; `src/bin`, `tests`, `examples` and `benches` roots follow
-//! Cargo's defaults. A file under no `Cargo.toml` falls back to the nearest
-//! directory holding a corpus `lib.rs` or `main.rs`. A `mod` declaration is
+//! Cargo's defaults. A file under no `Cargo.toml` is not placed, and the
+//! caller keeps the stem match for it. A `mod` declaration is
 //! not itself an edge — it defines the tree, it does not use it — and
 //! `#[path]` attributes are not followed.
 
@@ -386,9 +386,8 @@ fn crate_root(file: PathBuf) -> CrateRoot {
     CrateRoot { file, dir }
 }
 
-/// Places every corpus file: under its package's roots when it has a
-/// `Cargo.toml`, otherwise under the nearest directory holding a corpus
-/// `lib.rs` or `main.rs`.
+/// Places every corpus file under a `Cargo.toml` among its package's
+/// roots. A file under none is left unplaced.
 fn place_files(
     files: &HashMap<PathBuf, String>,
     packages: &HashMap<PathBuf, Package>,
@@ -404,23 +403,24 @@ fn place_file(
     files: &HashMap<PathBuf, String>,
     packages: &HashMap<PathBuf, Package>,
 ) -> Option<Placement> {
-    let package = file
-        .ancestors()
-        .skip(1)
-        .find_map(|dir| Some((dir, packages.get(dir)?)));
-    let roots: Vec<CrateRoot> = match package {
-        Some((dir, pkg)) => package_roots_for(file, dir, pkg, files),
-        None => loose_roots_for(file, files),
-    }
-    .into_iter()
-    .filter(|r| files.contains_key(&r.file))
-    .collect();
-    if let Some(own) = roots.iter().find(|r| r.file == file) {
-        return placement_under(file, own.clone());
-    }
+    let (pkg_dir, pkg) = package_of(file, packages)?;
+    let mut roots = package_roots_for(file, pkg_dir, pkg, files);
+    roots.retain(|r| files.contains_key(&r.file));
+    // A file that is itself a crate root is that root, not a module of a
+    // shallower one.
+    roots.sort_by_key(|r| r.file != file);
     roots
         .into_iter()
         .find_map(|root| placement_under(file, root))
+}
+
+fn package_of<'p>(
+    file: &'p Path,
+    packages: &'p HashMap<PathBuf, Package>,
+) -> Option<(&'p Path, &'p Package)> {
+    file.ancestors()
+        .skip(1)
+        .find_map(|dir| Some((dir, packages.get(dir)?)))
 }
 
 /// The package's roots plus the implicit ones Cargo discovers for `file`
@@ -478,15 +478,6 @@ fn sub_dir_of(file: &Path, dir: &Path) -> Option<PathBuf> {
     rel.components()
         .next()
         .map(|c| PathBuf::from(c.as_os_str()))
-}
-
-fn loose_roots_for(file: &Path, files: &HashMap<PathBuf, String>) -> Vec<CrateRoot> {
-    file.ancestors()
-        .skip(1)
-        .flat_map(|dir| ["lib.rs", "main.rs"].map(|n| crate_root(dir.join(n))))
-        .filter(|r| files.contains_key(&r.file))
-        .take(2)
-        .collect()
 }
 
 /// `file`'s module path under `root`, if `root`'s directory contains it.
@@ -575,30 +566,12 @@ mod tests {
     }
 
     #[test]
-    fn a_file_under_no_crate_is_not_placed() {
-        let index = RustModuleIndex::build(["/nonexistent/knots-fixture/loose.rs"]);
-        let got = index.resolve(
-            "/nonexistent/knots-fixture/loose.rs",
-            &["crate::x".to_string()],
-        );
-        assert_eq!(got, None);
-    }
-
-    #[test]
-    fn a_crate_without_a_manifest_is_rooted_at_its_lib_rs() {
+    fn a_file_under_no_cargo_toml_is_not_placed_even_beside_a_lib_rs() {
         let files = [
             "/nonexistent/knots-fixture/src/lib.rs",
             "/nonexistent/knots-fixture/src/a.rs",
-            "/nonexistent/knots-fixture/src/a/b.rs",
         ];
         let index = RustModuleIndex::build(files);
-        let got = index
-            .resolve(
-                files[2],
-                &["super::Thing".to_string(), "crate::Root".to_string()],
-            )
-            .unwrap();
-        let want: HashSet<String> = [files[1], files[0]].map(String::from).into();
-        assert_eq!(got, want);
+        assert_eq!(index.resolve(files[1], &["crate::Root".to_string()]), None);
     }
 }

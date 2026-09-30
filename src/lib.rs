@@ -36,7 +36,10 @@ pub use complexity::{
 
 // File-level Ce/Ca/Instability coupling metrics, built on the substrate's
 // syntactic import extraction.
-pub use coupling::{apply_file_ce_to_aird, build_import_graph, FileCoupling, ImportGraph};
+pub use coupling::{
+    apply_file_ce_to_aird, build_import_graph, build_import_graph_with_rust_uses, FileCoupling,
+    ImportGraph,
+};
 pub use rust_modules::{rust_use_paths, RustModuleIndex};
 
 // Re-export tree-sitter core (a direct knots dep) plus every grammar. Grammars
