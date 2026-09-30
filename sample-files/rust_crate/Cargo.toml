@@ -1,0 +1,7 @@
+# Fixture for knots' Rust file-coupling resolution: never built. Each file's
+# expected Ce is stated in its header comment and asserted by
+# `rust_fixture_crate_file_ce` in src/main.rs.
+[package]
+name = "fixture-crate"
+version = "0.0.0"
+edition = "2021"

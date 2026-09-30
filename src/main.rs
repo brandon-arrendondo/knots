@@ -1587,10 +1587,15 @@ fn extract_file_imports(file: &Path) -> Option<(String, Vec<String>)> {
     let (tree, source_code) = parse_file(file, &source_code).ok()?;
     let key = language_info_for_file(file)?.key;
     let path = file.to_str().unwrap_or("").to_string();
-    Some((
-        path,
-        lang_parsing_substrate::import_sources(&tree, source_code.as_bytes(), key),
-    ))
+    // Rust's `use` trees are expanded (and made relative to the file's own
+    // module) here, because the substrate's per-statement text can't be
+    // resolved against a module tree; see `knots::rust_modules`.
+    let imports = if key == "rust" {
+        knots::rust_use_paths(&tree, source_code.as_bytes())
+    } else {
+        lang_parsing_substrate::import_sources(&tree, source_code.as_bytes(), key)
+    };
+    Some((path, imports))
 }
 
 /// Gates the duplicate-function-detection pass behind `--find-duplicates`
@@ -3728,6 +3733,42 @@ class C {
             "main.c's #include \"util.h\" should resolve to a real corpus file now that \
              recursive mode includes headers"
         );
+    }
+
+    /// The Rust fixture crate under `sample-files/rust_crate` states each
+    /// file's expected Ce in its header comment: `crate`/`self`/`super`
+    /// paths, groups, globs, aliases, edition-2018 relative paths, a binary
+    /// reaching its library by crate name, and `src/bin`/`tests` roots all
+    /// resolve to the module file they name, while `mod` declarations,
+    /// `std` and external crates add no edge.
+    #[test]
+    fn rust_fixture_crate_file_ce() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("sample-files/rust_crate");
+        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
+        let coupling = collect_import_graph(&files).coupling();
+        let ce: HashMap<String, u32> = coupling
+            .iter()
+            .map(|c| {
+                let rel = Path::new(&c.file_path).strip_prefix(&dir).unwrap();
+                (rel.to_string_lossy().replace('\\', "/"), c.ce)
+            })
+            .collect();
+        let expected: HashMap<String, u32> = [
+            ("src/lib.rs", 1),
+            ("src/a.rs", 1),
+            ("src/b.rs", 2),
+            ("src/net/mod.rs", 2),
+            ("src/net/tcp.rs", 3),
+            ("src/main.rs", 3),
+            ("src/cli.rs", 1),
+            ("src/bin/tool.rs", 1),
+            ("tests/integration.rs", 2),
+            ("tests/common/mod.rs", 1),
+        ]
+        .into_iter()
+        .map(|(f, n)| (f.to_string(), n))
+        .collect();
+        assert_eq!(ce, expected);
     }
 }
 

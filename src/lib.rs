@@ -23,6 +23,7 @@ use std::path::Path;
 use tree_sitter::{Node, Tree, TreeCursor};
 pub mod complexity;
 pub mod coupling;
+pub mod rust_modules;
 
 // Re-export complexity functions for use by workspace members and for internal use
 pub use complexity::{
@@ -36,6 +37,7 @@ pub use complexity::{
 // File-level Ce/Ca/Instability coupling metrics, built on the substrate's
 // syntactic import extraction.
 pub use coupling::{apply_file_ce_to_aird, build_import_graph, FileCoupling, ImportGraph};
+pub use rust_modules::{rust_use_paths, RustModuleIndex};
 
 // Re-export tree-sitter core (a direct knots dep) plus every grammar. Grammars
 // now live behind the substrate, so knots carries no direct grammar deps; these

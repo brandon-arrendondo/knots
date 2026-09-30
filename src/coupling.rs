@@ -11,6 +11,12 @@
 //! `utils.py` and `utils.js` — resolve to no edge rather than an arbitrary
 //! pick, since a wrong edge is worse than a missing one.
 //!
+//! Rust is the exception: a `use` names an item or a group far more often
+//! than a module, so `.rs` files placed in a crate resolve through
+//! [`crate::rust_modules::RustModuleIndex`], which follows the crate's module
+//! tree instead of matching stems. A `.rs` file under no crate falls back to
+//! the stem heuristic.
+//!
 //! Imports that don't resolve to any corpus file (third-party libraries,
 //! stdlib, unresolvable dynamic `require`s) contribute no edge — Ce/Ca
 //! measure coupling *within the analyzed corpus*, the same scope the
@@ -23,6 +29,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::complexity::apply_aird_ce_multiplier;
+use crate::rust_modules::RustModuleIndex;
 use crate::FunctionMetrics;
 
 /// Ce, Ca, and Instability for one file in the corpus.
@@ -53,10 +60,13 @@ pub fn build_import_graph<'a>(
     let known_extensions = known_source_extensions();
     let files: Vec<(&str, &[String])> = files.into_iter().collect();
     let (key_counts, key_owner) = index_module_keys(&files);
+    let rust = RustModuleIndex::build(files.iter().map(|(path, _)| *path));
 
     let mut edges: HashMap<String, HashSet<String>> = HashMap::new();
     for (path, imports) in &files {
-        let targets = resolve_targets(path, imports, &known_extensions, &key_counts, &key_owner);
+        let targets = rust.resolve(path, imports).unwrap_or_else(|| {
+            resolve_targets(path, imports, &known_extensions, &key_counts, &key_owner)
+        });
         edges.insert(path.to_string(), targets);
     }
     ImportGraph { edges }
