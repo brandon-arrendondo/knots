@@ -355,8 +355,10 @@ roots' ``mod`` lines are read.
 
 A ``.rs`` file keeps the name match above when it is under no
 ``Cargo.toml``, when its crate root is not among the analyzed files (so
-``knots -r crate/src/subdir`` resolves by name, as before), or when it is the
-package's build script, which is a crate of its own.
+``knots -r crate/src/subdir`` resolves by name, as before), when it sits
+under a ``Cargo.toml`` but outside every crate root's directory (e.g.
+``pkg/scripts/x.rs``), or when it is the package's build script, which is a
+crate of its own.
 
 What counts: every ``use`` in the file, including those in its
 ``#[cfg(test)] mod tests`` block, as a C ``#include`` under ``#ifdef TEST``

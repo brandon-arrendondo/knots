@@ -22,7 +22,8 @@
 //! binary paths and the build script; `src/bin`, `tests`, `examples` and
 //! `benches` roots follow Cargo's defaults. A file is left unplaced, and the
 //! caller keeps the stem match for it, when it is under no `Cargo.toml`, its
-//! crate root is not in the corpus, or it is the build script. A `mod`
+//! crate root is not in the corpus, it is outside every crate root's
+//! directory, or it is the build script. A `mod`
 //! declaration is not itself an edge — it defines the tree, it does not use
 //! it — and is read only to give a module `main.rs` alone declares to the
 //! binary when `lib.rs` shares its directory. `#[path]` attributes are not
@@ -340,18 +341,25 @@ fn unique_lib_names(
     packages: &HashMap<PathBuf, Package>,
     files: &HashMap<PathBuf, String>,
 ) -> HashMap<String, CrateRoot> {
-    libs_by_name(packages)
+    libs_by_name(packages, files)
         .into_iter()
         .filter_map(|(name, libs)| Some((name, only(libs)?)))
-        .filter(|(_, lib)| files.contains_key(&lib.file))
         .collect()
 }
 
-fn libs_by_name(packages: &HashMap<PathBuf, Package>) -> HashMap<String, Vec<CrateRoot>> {
+/// Each library name with the libraries claiming it, counting only a
+/// library whose root file is in the corpus, so a binary-only package's
+/// default `src/lib.rs` entry can't make a real library's name ambiguous.
+fn libs_by_name(
+    packages: &HashMap<PathBuf, Package>,
+    files: &HashMap<PathBuf, String>,
+) -> HashMap<String, Vec<CrateRoot>> {
     let mut by_name: HashMap<String, Vec<CrateRoot>> = HashMap::new();
     for pkg in packages.values() {
         if let (Some(name), Some(lib)) = (&pkg.lib_name, &pkg.lib) {
-            by_name.entry(name.clone()).or_default().push(lib.clone());
+            if files.contains_key(&lib.file) {
+                by_name.entry(name.clone()).or_default().push(lib.clone());
+            }
         }
     }
     by_name
@@ -439,14 +447,15 @@ fn package_roots(dir: &Path, manifest: &toml::Value, lib: &CrateRoot) -> Vec<Cra
     roots
 }
 
-/// `[package] build`, else Cargo's default `build.rs`; `build = false`
-/// means none.
+/// `[package] build`: a path, `false` for none, or (`true` or absent)
+/// Cargo's default `build.rs`.
 fn build_script(dir: &Path, manifest: &toml::Value) -> Option<PathBuf> {
-    match manifest.get("package").and_then(|p| p.get("build")) {
-        Some(toml::Value::String(path)) => Some(normalize(&dir.join(path))),
-        Some(_) => None,
-        None => Some(normalize(&dir.join("build.rs"))),
-    }
+    let path = match manifest.get("package").and_then(|p| p.get("build")) {
+        Some(toml::Value::String(path)) => path.as_str(),
+        Some(toml::Value::Boolean(false)) => return None,
+        _ => "build.rs",
+    };
+    Some(normalize(&dir.join(path)))
 }
 
 /// For each binary root sharing the library's directory, the top-level
@@ -827,6 +836,39 @@ mod tests {
         let got = resolve_in(&dir, &files, "user/src/lib.rs", &["same::S1"]);
         fs::remove_dir_all(&dir).ok();
         assert_eq!(got, Some(vec![]));
+    }
+
+    #[test]
+    fn a_bin_only_package_does_not_shadow_a_library_of_its_name() {
+        let files = [
+            ("tool/Cargo.toml", "[package]\nname = \"foo\"\n"),
+            ("tool/src/main.rs", "fn main() {}\n"),
+            ("lib/Cargo.toml", "[package]\nname = \"foo\"\n"),
+            ("lib/src/lib.rs", ""),
+            ("user/Cargo.toml", "[package]\nname = \"user\"\n"),
+            ("user/src/lib.rs", ""),
+        ];
+        let dir = write_tree("bin-only-name", &files);
+        let got = resolve_in(&dir, &files, "user/src/lib.rs", &["foo::F"]);
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(got, Some(vec!["lib/src/lib.rs".to_string()]));
+    }
+
+    #[test]
+    fn build_true_is_the_default_build_script() {
+        let files = [
+            (
+                "Cargo.toml",
+                "[package]\nname = \"bt\"\nbuild = true\n[lib]\npath = \"lib.rs\"\n",
+            ),
+            ("lib.rs", "pub mod k;\n"),
+            ("k.rs", ""),
+            ("build.rs", "fn main() {}\n"),
+        ];
+        let dir = write_tree("build-true", &files);
+        let got = resolve_in(&dir, &files, "build.rs", &["crate::k::Z"]);
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(got, None);
     }
 
     #[test]
