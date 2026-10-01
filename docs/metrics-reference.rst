@@ -333,23 +333,40 @@ each path resolves to the deepest *module file* it passes through:
 ``crate::coupling::FileCoupling`` counts ``coupling.rs``, and
 ``crate::Root`` counts the crate root (``lib.rs``). A path may start with
 ``crate``, ``self``, ``super``, a child module (edition 2018), or the
-library crate's own name, which is how ``main.rs`` or a test reaches its
-library. Module ``a::b`` is ``a/b.rs`` or ``a/b/mod.rs`` below the crate
-root's directory.
+library name of any analyzed package, which is how ``main.rs`` or a test
+reaches its library and one workspace member reaches another. A library
+name two analyzed packages share (vendored copies, fixtures) names
+neither. Module ``a::b`` is ``a/b.rs`` or ``a/b/mod.rs`` below the crate
+root's directory, and a file there counts as the module whether or not a
+``mod b;`` declares it. Another crate's root file (``tests/x.rs``,
+``src/bin/x.rs``) never counts as a module.
 
 Crate roots come from the nearest ``Cargo.toml``, read only for the
-library's name and the declared ``[lib]`` and ``[[bin]]`` paths: no build
-and no ``cargo metadata``. Cargo's defaults add ``src/lib.rs``,
-``src/main.rs`` and every file directly in ``src/bin``, ``tests``,
-``examples`` or ``benches`` (or a ``main.rs`` one directory below them). A
-``.rs`` file under no ``Cargo.toml`` keeps the name match above.
+library's name, the declared ``[lib]`` and ``[[bin]]`` paths and the build
+script: no build and no ``cargo metadata``. Cargo's defaults add
+``src/lib.rs``, ``src/main.rs`` and every file directly in ``src/bin``,
+``tests``, ``examples`` or ``benches`` (or a ``main.rs`` one directory below
+them). A file below one of those directories with no ``main.rs`` of its own
+(``tests/common/mod.rs``) is a module the target's roots share, so a path
+from it reaches the shared modules but never a single test's root. When
+``lib.rs`` and ``main.rs`` share ``src/``, a module only ``main.rs``
+declares (``mod cli;``) belongs to the binary; that is the one place the
+roots' ``mod`` lines are read.
 
-What does not count: a ``mod`` declaration (it builds the tree; counting it
-would give every ``lib.rs`` a Ce equal to its submodule count), ``std`` and
-other external crates, and a file's own inline modules, so ``use super::*``
-in a ``#[cfg(test)] mod tests`` block is the file itself. ``#[path]``
-attributes are not followed, and an inline ``mod x { ... }`` has no file of
-its own to count.
+A ``.rs`` file keeps the name match above when it is under no
+``Cargo.toml``, when its crate root is not among the analyzed files (so
+``knots -r crate/src/subdir`` resolves by name, as before), or when it is the
+package's build script, which is a crate of its own.
+
+What counts: every ``use`` in the file, including those in its
+``#[cfg(test)] mod tests`` block, as a C ``#include`` under ``#ifdef TEST``
+counts. What does not: a ``mod`` declaration (it builds the tree; counting
+it would give every ``lib.rs`` a Ce equal to its submodule count), ``std``
+and other external crates, and the file's own inline modules, so
+``use super::*`` in that test block is the file itself. ``#[path]``
+attributes are not followed, an inline ``mod x { ... }`` has no file of its
+own to count, and edition-2015 paths (``use y::Thing`` meaning
+``crate::y::Thing``) are not modelled, so they add no edge.
 
 Ceiling values (p99 of observed distribution across 32,205 functions from
 mosquitto, SQLite, curl, hostap, Lua, libcrc):

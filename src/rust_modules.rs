@@ -18,12 +18,15 @@
 //!    path to the deepest module *file* it passes through.
 //!
 //! The crate a file belongs to is found through the nearest `Cargo.toml`,
-//! which is read only for the library's name and the declared library and
-//! binary paths; `src/bin`, `tests`, `examples` and `benches` roots follow
-//! Cargo's defaults. A file under no `Cargo.toml` is not placed, and the
-//! caller keeps the stem match for it. A `mod` declaration is
-//! not itself an edge — it defines the tree, it does not use it — and
-//! `#[path]` attributes are not followed.
+//! which is read only for the library's name, the declared library and
+//! binary paths and the build script; `src/bin`, `tests`, `examples` and
+//! `benches` roots follow Cargo's defaults. A file is left unplaced, and the
+//! caller keeps the stem match for it, when it is under no `Cargo.toml`, its
+//! crate root is not in the corpus, or it is the build script. A `mod`
+//! declaration is not itself an edge — it defines the tree, it does not use
+//! it — and is read only to give a module `main.rs` alone declares to the
+//! binary when `lib.rs` shares its directory. `#[path]` attributes are not
+//! followed, and an edition-2015 crate-relative path adds no edge.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -132,7 +135,10 @@ fn rebase_inline(segs: Vec<String>, inline_depth: usize) -> Vec<String> {
     let mut rest = segs[supers..].to_vec();
     let head: Vec<String> = match (supers, rest.first().map(String::as_str)) {
         (s, _) if s > inline_depth => vec!["super".to_string(); s - inline_depth],
-        (s, _) if s > 0 => vec!["self".to_string()],
+        (s, _) if s == inline_depth => vec!["self".to_string()],
+        // Climbing out of only some inline modules lands in one that is
+        // still in this file.
+        (s, _) if s > 0 => return vec!["self".to_string()],
         (_, Some("crate")) | (_, Some("")) => Vec::new(),
         (_, Some("self")) => return vec!["self".to_string()],
         _ => vec![String::new()],
@@ -143,11 +149,14 @@ fn rebase_inline(segs: Vec<String>, inline_depth: usize) -> Vec<String> {
 
 /// Where one crate's module tree lives: its root file (`lib.rs`,
 /// `main.rs`, a `src/bin` file, ...) and the directory its top-level
-/// modules sit in (the root file's directory).
-#[derive(Debug, Clone)]
+/// modules sit in (the root file's directory). A `shared` root is a
+/// directory of modules several crate roots include (`tests/common`); it
+/// has no root file, so nothing resolves to the crate root from it.
+#[derive(Debug, Clone, PartialEq)]
 struct CrateRoot {
     file: PathBuf,
     dir: PathBuf,
+    shared: bool,
 }
 
 /// A file's place in a crate: which crate root owns it, the module path
@@ -165,6 +174,11 @@ struct Package {
     lib_name: Option<String>,
     lib: Option<CrateRoot>,
     roots: Vec<CrateRoot>,
+    /// The build script, its own crate, never a module of the library.
+    build_script: Option<PathBuf>,
+    /// Top-level modules only a binary root sharing the library's
+    /// directory declares (`main.rs: mod cli;`), and that root.
+    bin_mods: HashMap<String, CrateRoot>,
 }
 
 /// The corpus's Rust files placed in their crates' module trees, able to
@@ -173,6 +187,7 @@ struct Package {
 pub struct RustModuleIndex {
     files: HashMap<PathBuf, String>,
     placements: HashMap<PathBuf, Placement>,
+    root_files: HashSet<PathBuf>,
     crates_by_name: HashMap<String, CrateRoot>,
 }
 
@@ -180,22 +195,14 @@ impl RustModuleIndex {
     /// Indexes every `.rs` path in `paths` (others are ignored), reading
     /// the nearest `Cargo.toml` of each for crate names and roots.
     pub fn build<'a>(paths: impl IntoIterator<Item = &'a str>) -> Self {
-        let files: HashMap<PathBuf, String> = paths
-            .into_iter()
-            .filter(|p| p.ends_with(".rs"))
-            .map(|p| (normalize(Path::new(p)), p.to_string()))
-            .collect();
+        let files = rust_files(paths);
         let packages = discover_packages(files.keys());
         let placements = place_files(&files, &packages);
-        let crates_by_name = packages
-            .values()
-            .filter_map(|pkg| Some((pkg.lib_name.clone()?, pkg.lib.clone()?)))
-            .filter(|(_, lib)| files.contains_key(&lib.file))
-            .collect();
         RustModuleIndex {
+            crates_by_name: unique_lib_names(&packages, &files),
+            root_files: root_files(&placements),
             files,
             placements,
-            crates_by_name,
         }
     }
 
@@ -283,18 +290,76 @@ impl RustModuleIndex {
         found
     }
 
+    /// The corpus file holding `module` under `root`. Another crate's
+    /// root file (`tests/x.rs`, `src/bin/x.rs`) is never a module.
     fn module_file(&self, root: &CrateRoot, module: &[String]) -> Option<&PathBuf> {
         if module.is_empty() {
-            return self.files.get_key_value(&root.file).map(|(k, _)| k);
+            return self.corpus_key(&root.file);
         }
-        let mut dir = root.dir.clone();
-        dir.extend(module);
-        let flat = dir.with_extension("rs");
-        let nested = dir.join("mod.rs");
-        [flat, nested]
+        module_candidates(root, module)
             .into_iter()
-            .find_map(|f| self.files.get_key_value(&f).map(|(k, _)| k))
+            .filter(|f| !self.root_files.contains(f))
+            .find_map(|f| self.corpus_key(&f))
     }
+
+    /// `file` as the index stores it, if it is in the corpus.
+    fn corpus_key(&self, file: &Path) -> Option<&PathBuf> {
+        self.files.get_key_value(file).map(|(k, _)| k)
+    }
+}
+
+/// `module`'s two possible files under `root`: `a/b.rs` and `a/b/mod.rs`.
+fn module_candidates(root: &CrateRoot, module: &[String]) -> [PathBuf; 2] {
+    let mut dir = root.dir.clone();
+    dir.extend(module);
+    [dir.with_extension("rs"), dir.join("mod.rs")]
+}
+
+/// Every `.rs` path in `paths`, keyed by its normalized form.
+fn rust_files<'a>(paths: impl IntoIterator<Item = &'a str>) -> HashMap<PathBuf, String> {
+    paths
+        .into_iter()
+        .filter(|p| p.ends_with(".rs"))
+        .map(|p| (normalize(Path::new(p)), p.to_string()))
+        .collect()
+}
+
+/// The files placed as a crate root (with an empty module path).
+fn root_files(placements: &HashMap<PathBuf, Placement>) -> HashSet<PathBuf> {
+    placements
+        .iter()
+        .filter(|(_, p)| p.module.is_empty())
+        .map(|(f, _)| f.clone())
+        .collect()
+}
+
+/// Each library name exactly one package with its library in the corpus
+/// claims. A name two packages share (vendored copies, fixtures) names
+/// neither, as an ambiguous stem does in the generic resolver.
+fn unique_lib_names(
+    packages: &HashMap<PathBuf, Package>,
+    files: &HashMap<PathBuf, String>,
+) -> HashMap<String, CrateRoot> {
+    libs_by_name(packages)
+        .into_iter()
+        .filter_map(|(name, libs)| Some((name, only(libs)?)))
+        .filter(|(_, lib)| files.contains_key(&lib.file))
+        .collect()
+}
+
+fn libs_by_name(packages: &HashMap<PathBuf, Package>) -> HashMap<String, Vec<CrateRoot>> {
+    let mut by_name: HashMap<String, Vec<CrateRoot>> = HashMap::new();
+    for pkg in packages.values() {
+        if let (Some(name), Some(lib)) = (&pkg.lib_name, &pkg.lib) {
+            by_name.entry(name.clone()).or_default().push(lib.clone());
+        }
+    }
+    by_name
+}
+
+/// The single element of `items`, if there is exactly one.
+fn only<T>(mut items: Vec<T>) -> Option<T> {
+    (items.len() == 1).then(|| items.remove(0))
 }
 
 /// `path` with `.` components removed, so `./src/a.rs` and `src/a.rs`
@@ -309,9 +374,9 @@ fn normalize(path: &Path) -> PathBuf {
 /// found through each file's nearest `Cargo.toml`.
 fn discover_packages<'a>(files: impl Iterator<Item = &'a PathBuf>) -> HashMap<PathBuf, Package> {
     let mut packages: HashMap<PathBuf, Package> = HashMap::new();
-    let mut seen_dirs: HashSet<PathBuf> = HashSet::new();
+    let mut has_manifest: HashMap<PathBuf, bool> = HashMap::new();
     for file in files {
-        let Some(dir) = nearest_manifest_dir(file, &mut seen_dirs) else {
+        let Some(dir) = nearest_manifest_dir(file, &mut has_manifest) else {
             continue;
         };
         packages
@@ -321,13 +386,17 @@ fn discover_packages<'a>(files: impl Iterator<Item = &'a PathBuf>) -> HashMap<Pa
     packages
 }
 
-fn nearest_manifest_dir(file: &Path, seen: &mut HashSet<PathBuf>) -> Option<PathBuf> {
-    let found = file
-        .ancestors()
+/// The nearest ancestor of `file` holding a `Cargo.toml`, remembering the
+/// answer for every directory it checks.
+fn nearest_manifest_dir(file: &Path, has_manifest: &mut HashMap<PathBuf, bool>) -> Option<PathBuf> {
+    file.ancestors()
         .skip(1)
-        .find(|dir| seen.contains(*dir) || manifest_path(dir).is_file())?;
-    seen.insert(found.to_path_buf());
-    Some(found.to_path_buf())
+        .find(|dir| {
+            *has_manifest
+                .entry(dir.to_path_buf())
+                .or_insert_with(|| manifest_path(dir).is_file())
+        })
+        .map(Path::to_path_buf)
 }
 
 fn manifest_path(dir: &Path) -> PathBuf {
@@ -338,24 +407,102 @@ fn manifest_path(dir: &Path) -> PathBuf {
     }
 }
 
-/// Reads the library name and the declared library/binary paths from
-/// `dir/Cargo.toml`, filling in Cargo's defaults. A manifest that does
-/// not parse yields a package with only the default roots.
+/// Reads the library name, the declared library/binary paths and the build
+/// script from `dir/Cargo.toml`, filling in Cargo's defaults. A manifest
+/// that does not parse yields a package with only the default roots.
 fn read_package(dir: &Path) -> Package {
-    let manifest: toml::Value = fs::read_to_string(manifest_path(dir))
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(toml::Value::Table(Default::default()));
+    let manifest = read_manifest(dir);
     let lib_path = table_str(&manifest, "lib", "path").unwrap_or("src/lib.rs");
     let lib = crate_root(dir.join(lib_path));
-    let mut roots = vec![lib.clone()];
-    roots.extend(declared_bin_roots(dir, &manifest));
-    roots.push(crate_root(dir.join("src/main.rs")));
+    let roots = package_roots(dir, &manifest, &lib);
     Package {
         lib_name: lib_name(&manifest),
+        bin_mods: bin_only_mods(&lib, &roots),
+        build_script: build_script(dir, &manifest),
         lib: Some(lib),
         roots,
     }
+}
+
+fn read_manifest(dir: &Path) -> toml::Value {
+    fs::read_to_string(manifest_path(dir))
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(toml::Value::Table(Default::default()))
+}
+
+/// The library, the declared binaries, then the default `src/main.rs`.
+fn package_roots(dir: &Path, manifest: &toml::Value, lib: &CrateRoot) -> Vec<CrateRoot> {
+    let mut roots = vec![lib.clone()];
+    roots.extend(declared_bin_roots(dir, manifest));
+    roots.push(crate_root(dir.join("src/main.rs")));
+    roots
+}
+
+/// `[package] build`, else Cargo's default `build.rs`; `build = false`
+/// means none.
+fn build_script(dir: &Path, manifest: &toml::Value) -> Option<PathBuf> {
+    match manifest.get("package").and_then(|p| p.get("build")) {
+        Some(toml::Value::String(path)) => Some(normalize(&dir.join(path))),
+        Some(_) => None,
+        None => Some(normalize(&dir.join("build.rs"))),
+    }
+}
+
+/// For each binary root sharing the library's directory, the top-level
+/// modules it declares and the library does not. Read from the two root
+/// files' `mod name;` lines only to decide which root owns a file both
+/// could; a module either both or neither declare stays the library's.
+fn bin_only_mods(lib: &CrateRoot, roots: &[CrateRoot]) -> HashMap<String, CrateRoot> {
+    let lib_mods = declared_mods(&lib.file);
+    let mut out = HashMap::new();
+    for bin in bins_beside(lib, roots) {
+        for name in declared_mods(&bin.file).difference(&lib_mods) {
+            out.entry(name.clone()).or_insert_with(|| bin.clone());
+        }
+    }
+    out
+}
+
+fn bins_beside<'r>(
+    lib: &'r CrateRoot,
+    roots: &'r [CrateRoot],
+) -> impl Iterator<Item = &'r CrateRoot> {
+    roots
+        .iter()
+        .filter(move |r| r.dir == lib.dir && r.file != lib.file)
+}
+
+/// The names of `file`'s top-level `mod name;` declarations (not inline
+/// `mod name { ... }`), or none when it can't be read or parsed.
+fn declared_mods(file: &Path) -> HashSet<String> {
+    let Ok(source) = fs::read_to_string(file) else {
+        return HashSet::new();
+    };
+    parse_rust(&source)
+        .map(|tree| mod_declaration_names(tree.root_node(), source.as_bytes()))
+        .unwrap_or_default()
+}
+
+fn parse_rust(source: &str) -> Option<Tree> {
+    let mut parser = tree_sitter::Parser::new();
+    let language: tree_sitter::Language = crate::tree_sitter_rust::LANGUAGE.into();
+    parser.set_language(&language).ok()?;
+    parser.parse(source, None)
+}
+
+fn mod_declaration_names(root: Node, source: &[u8]) -> HashSet<String> {
+    let mut cursor = root.walk();
+    root.named_children(&mut cursor)
+        .filter(is_mod_declaration)
+        .filter_map(|n| n.child_by_field_name("name"))
+        .map(|n| node_text(n, source).to_string())
+        .collect()
+}
+
+/// `mod name;`, as opposed to an inline `mod name { ... }`.
+fn is_mod_declaration(node: &Node) -> bool {
+    node.kind() == "mod_item" && node.child_by_field_name("body").is_none()
 }
 
 fn table_str<'v>(manifest: &'v toml::Value, table: &str, key: &str) -> Option<&'v str> {
@@ -383,7 +530,20 @@ fn declared_bin_roots(dir: &Path, manifest: &toml::Value) -> Vec<CrateRoot> {
 fn crate_root(file: PathBuf) -> CrateRoot {
     let file = normalize(&file);
     let dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
-    CrateRoot { file, dir }
+    CrateRoot {
+        file,
+        dir,
+        shared: false,
+    }
+}
+
+fn shared_root(dir: PathBuf) -> CrateRoot {
+    let dir = normalize(&dir);
+    CrateRoot {
+        file: dir.clone(),
+        dir,
+        shared: true,
+    }
 }
 
 /// Places every corpus file under a `Cargo.toml` among its package's
@@ -404,14 +564,50 @@ fn place_file(
     packages: &HashMap<PathBuf, Package>,
 ) -> Option<Placement> {
     let (pkg_dir, pkg) = package_of(file, packages)?;
-    let mut roots = package_roots_for(file, pkg_dir, pkg, files);
-    roots.retain(|r| files.contains_key(&r.file));
-    // A file that is itself a crate root is that root, not a module of a
-    // shallower one.
+    if pkg.build_script.as_deref() == Some(file) {
+        return None;
+    }
+    let placement = candidate_roots(file, pkg_dir, pkg, files)
+        .into_iter()
+        .find_map(|root| placement_under(file, root))?;
+    Some(owned_by_bin(placement, pkg, files))
+}
+
+/// The roots that could own `file`, present in the corpus (or shared), in
+/// the order to try them. A file that is itself a crate root is that root,
+/// not a module of a shallower one, so its own root comes first.
+fn candidate_roots(
+    file: &Path,
+    pkg_dir: &Path,
+    pkg: &Package,
+    files: &HashMap<PathBuf, String>,
+) -> Vec<CrateRoot> {
+    let mut roots = package_roots_for(file, pkg_dir, pkg);
+    roots.retain(|r| r.shared || files.contains_key(&r.file));
     roots.sort_by_key(|r| r.file != file);
     roots
-        .into_iter()
-        .find_map(|root| placement_under(file, root))
+}
+
+/// Moves a library-placed file to the binary root that alone declares its
+/// top-level module, when the two roots share a directory.
+fn owned_by_bin(
+    placement: Placement,
+    pkg: &Package,
+    files: &HashMap<PathBuf, String>,
+) -> Placement {
+    let bin = placement
+        .module
+        .first()
+        .filter(|_| pkg.lib.as_ref() == Some(&placement.root))
+        .and_then(|top| pkg.bin_mods.get(top))
+        .filter(|bin| files.contains_key(&bin.file));
+    match bin {
+        Some(bin) => Placement {
+            root: bin.clone(),
+            module: placement.module,
+        },
+        None => placement,
+    }
 }
 
 fn package_of<'p>(
@@ -427,13 +623,8 @@ fn package_of<'p>(
 /// (see [`implicit_roots_for`]), deepest module directory first so the
 /// closest root owns a file; a library root precedes a binary root that
 /// shares its directory.
-fn package_roots_for(
-    file: &Path,
-    pkg_dir: &Path,
-    pkg: &Package,
-    files: &HashMap<PathBuf, String>,
-) -> Vec<CrateRoot> {
-    let mut roots = implicit_roots_for(file, pkg_dir, files);
+fn package_roots_for(file: &Path, pkg_dir: &Path, pkg: &Package) -> Vec<CrateRoot> {
+    let mut roots = implicit_roots_for(file, pkg_dir);
     roots.extend(pkg.roots.iter().cloned());
     roots.sort_by_key(|r| std::cmp::Reverse(r.dir.components().count()));
     roots
@@ -442,34 +633,26 @@ fn package_roots_for(
 /// Cargo's per-target roots: a file directly in `src/bin`, `tests`,
 /// `examples` or `benches` is a crate root, and so is `main.rs` in a
 /// directory directly below one of them. A deeper file with no such
-/// `main.rs` is a module the target directory's own roots share (e.g.
-/// `tests/common/mod.rs`), so the first of those, by name, owns it.
-fn implicit_roots_for(
-    file: &Path,
-    pkg_dir: &Path,
-    files: &HashMap<PathBuf, String>,
-) -> Vec<CrateRoot> {
-    let mut roots = Vec::new();
-    for target in ["src/bin", "tests", "examples", "benches"].map(|t| pkg_dir.join(t)) {
-        let Some(first) = sub_dir_of(file, &target) else {
-            continue;
-        };
-        if file.parent() == Some(target.as_path()) {
-            roots.push(crate_root(file.to_path_buf()));
-            continue;
-        }
-        roots.push(crate_root(target.join(first).join("main.rs")));
-        roots.extend(first_direct_file(&target, files).map(crate_root));
-    }
-    roots
+/// `main.rs` (e.g. `tests/common/mod.rs`) is a module the target
+/// directory's roots share, under a shared root.
+fn implicit_roots_for(file: &Path, pkg_dir: &Path) -> Vec<CrateRoot> {
+    ["src/bin", "tests", "examples", "benches"]
+        .iter()
+        .flat_map(|t| target_roots(file, pkg_dir.join(t)))
+        .collect()
 }
 
-fn first_direct_file(dir: &Path, files: &HashMap<PathBuf, String>) -> Option<PathBuf> {
-    files
-        .keys()
-        .filter(|f| f.parent() == Some(dir))
-        .min()
-        .cloned()
+fn target_roots(file: &Path, target: PathBuf) -> Vec<CrateRoot> {
+    let Some(first) = sub_dir_of(file, &target) else {
+        return Vec::new();
+    };
+    if file.parent() == Some(target.as_path()) {
+        return vec![crate_root(file.to_path_buf())];
+    }
+    vec![
+        crate_root(target.join(first).join("main.rs")),
+        shared_root(target),
+    ]
 }
 
 /// The first path component of `file` below `dir`, if `file` is under it.
@@ -563,6 +746,159 @@ mod tests {
                 "::serde::Serialize"
             ]
         );
+    }
+
+    #[test]
+    fn a_super_that_stays_inside_the_inline_modules_is_this_file() {
+        let got = uses(
+            "mod outer {\n\
+                 pub mod helper {}\n\
+                 mod inner {\n\
+                     use super::helper::X;\n\
+                     use super::super::sibling::Y;\n\
+                 }\n\
+             }",
+        );
+        assert_eq!(got, ["self", "self::sibling::Y"]);
+    }
+
+    /// Writes `files` (path, contents) under a fresh temp directory.
+    fn write_tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
+        let dir = fresh_temp_dir(name);
+        for (rel, body) in files {
+            let path = dir.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, body).unwrap();
+        }
+        dir
+    }
+
+    fn fresh_temp_dir(name: &str) -> PathBuf {
+        let id = std::process::id();
+        let dir = std::env::temp_dir().join(format!("knots-rust-modules-{name}-{id}"));
+        let _ = fs::remove_dir_all(&dir);
+        dir
+    }
+
+    /// Resolves `uses` from `from` over every `.rs` file in `files`, as
+    /// paths relative to `dir`, sorted; `None` when `from` is unplaced.
+    fn resolve_in(
+        dir: &Path,
+        files: &[(&str, &str)],
+        from: &str,
+        uses: &[&str],
+    ) -> Option<Vec<String>> {
+        let index = index_over(dir, files);
+        let uses: Vec<String> = uses.iter().map(|u| u.to_string()).collect();
+        let targets = index.resolve(&joined(dir, from), &uses)?;
+        Some(relative_sorted(dir, targets))
+    }
+
+    fn index_over(dir: &Path, files: &[(&str, &str)]) -> RustModuleIndex {
+        let paths: Vec<String> = files.iter().map(|(f, _)| joined(dir, f)).collect();
+        RustModuleIndex::build(paths.iter().map(String::as_str))
+    }
+
+    fn joined(dir: &Path, rel: &str) -> String {
+        dir.join(rel).to_string_lossy().into_owned()
+    }
+
+    fn relative_sorted(dir: &Path, targets: HashSet<String>) -> Vec<String> {
+        let mut out: Vec<String> = targets
+            .iter()
+            .map(|t| Path::new(t).strip_prefix(dir).unwrap())
+            .map(|t| t.to_string_lossy().into_owned())
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn a_lib_name_two_packages_share_names_neither() {
+        let files = [
+            ("c1/Cargo.toml", "[package]\nname = \"same\"\n"),
+            ("c1/src/lib.rs", ""),
+            ("c2/Cargo.toml", "[package]\nname = \"same\"\n"),
+            ("c2/src/lib.rs", ""),
+            ("user/Cargo.toml", "[package]\nname = \"user\"\n"),
+            ("user/src/lib.rs", ""),
+        ];
+        let dir = write_tree("dup", &files);
+        let got = resolve_in(&dir, &files, "user/src/lib.rs", &["same::S1"]);
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(got, Some(vec![]));
+    }
+
+    #[test]
+    fn a_module_only_main_rs_declares_belongs_to_main() {
+        let files = [
+            ("Cargo.toml", "[package]\nname = \"pkg\"\n"),
+            ("src/lib.rs", "pub mod m;\npub struct Root;\n"),
+            ("src/main.rs", "mod cli;\nstruct MainThing;\nfn main() {}\n"),
+            ("src/cli.rs", ""),
+            ("src/m.rs", ""),
+        ];
+        let dir = write_tree("bin-mod", &files);
+        let cli = resolve_in(
+            &dir,
+            &files,
+            "src/cli.rs",
+            &["crate::MainThing", "super::MainThing"],
+        );
+        let m = resolve_in(&dir, &files, "src/m.rs", &["crate::Root"]);
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(cli, Some(vec!["src/main.rs".to_string()]));
+        assert_eq!(m, Some(vec!["src/lib.rs".to_string()]));
+    }
+
+    #[test]
+    fn a_build_script_is_not_a_library_module() {
+        let files = [
+            (
+                "Cargo.toml",
+                "[package]\nname = \"nb\"\n[lib]\npath = \"lib.rs\"\n",
+            ),
+            ("lib.rs", "pub mod k;\n"),
+            ("k.rs", ""),
+            ("build.rs", "fn main() {}\n"),
+        ];
+        let dir = write_tree("build-rs", &files);
+        let got = resolve_in(&dir, &files, "build.rs", &["crate::k::Z"]);
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn a_shared_test_module_reaches_no_single_test_crate() {
+        let files = [
+            ("Cargo.toml", "[package]\nname = \"tc\"\n"),
+            ("src/lib.rs", ""),
+            ("tests/a_first.rs", "mod common;\n"),
+            ("tests/b_second.rs", "mod common;\npub struct Shared;\n"),
+            ("tests/common/mod.rs", ""),
+            ("tests/common/util.rs", ""),
+        ];
+        let dir = write_tree("tests-common", &files);
+        let got = resolve_in(
+            &dir,
+            &files,
+            "tests/common/mod.rs",
+            &[
+                "crate::Shared",
+                "super::Shared",
+                "crate::b_second",
+                "self::util::U",
+            ],
+        );
+        let first = resolve_in(
+            &dir,
+            &files,
+            "tests/a_first.rs",
+            &["common::X", "crate::b_second"],
+        );
+        fs::remove_dir_all(&dir).ok();
+        assert_eq!(got, Some(vec!["tests/common/util.rs".to_string()]));
+        assert_eq!(first, Some(vec!["tests/common/mod.rs".to_string()]));
     }
 
     #[test]

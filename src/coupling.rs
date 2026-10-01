@@ -15,8 +15,9 @@
 //! than a module, so [`build_import_graph_with_rust_uses`] resolves `.rs`
 //! files under a `Cargo.toml` through
 //! [`crate::rust_modules::RustModuleIndex`], which follows the crate's module
-//! tree instead of matching stems. A `.rs` file under no `Cargo.toml` keeps
-//! the stem heuristic on its raw imports.
+//! tree instead of matching stems. A `.rs` file the index can't place (under
+//! no `Cargo.toml`, with its crate root outside the corpus, or a build
+//! script) keeps the stem heuristic on its raw imports.
 //!
 //! Imports that don't resolve to any corpus file (third-party libraries,
 //! stdlib, unresolvable dynamic `require`s) contribute no edge — Ce/Ca
@@ -67,8 +68,8 @@ pub fn build_import_graph<'a>(
 /// `rust_uses` (its expanded `use` paths, from
 /// [`crate::rust_modules::rust_use_paths`]) and a place in a crate resolves
 /// through the crate's module tree. Every other file, including a `.rs`
-/// file under no `Cargo.toml`, resolves its raw imports by stem exactly as
-/// `build_import_graph` does.
+/// file the index can't place (see the module docs), resolves its raw
+/// imports by stem exactly as `build_import_graph` does.
 pub fn build_import_graph_with_rust_uses<'a>(
     files: impl IntoIterator<Item = (&'a str, &'a [String])>,
     rust_uses: &HashMap<String, Vec<String>>,
