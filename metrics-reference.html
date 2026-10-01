@@ -60,7 +60,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#test-scoring">Test Scoring</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#external-calls">External Calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#unreachable-blocks">Unreachable Blocks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#aird-ai-reasoning-difficulty">AIRD — AI Reasoning Difficulty</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#aird-ai-reasoning-difficulty">AIRD — AI Reasoning Difficulty</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#how-an-import-becomes-a-file">How an import becomes a file</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#aicp-ai-context-pressure">AICP — AI Context Pressure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#score-components">Score components</a></li>
 </ul>
@@ -413,6 +416,55 @@ AIRD       = clamp(round(AIRD_base × multiplier), 0, 100)
 imports. Outside <code class="docutils literal notranslate"><span class="pre">--recursive</span></code> it is 0, the multiplier is 1.0, and AIRD is
 the base score. <code class="docutils literal notranslate"><span class="pre">--score-components</span></code> reports every term (see
 <a class="reference internal" href="#id1">Score components</a>).</p>
+<section id="how-an-import-becomes-a-file">
+<h3>How an import becomes a file<a class="headerlink" href="#how-an-import-becomes-a-file" title="Link to this heading"></a></h3>
+<p>For most languages an import resolves by name: its path prefix, a known
+source extension and any <code class="docutils literal notranslate"><span class="pre">::</span></code>/<code class="docutils literal notranslate"><span class="pre">.</span></code> qualifier are stripped, and what is
+left must match the stem of exactly one corpus file (<code class="docutils literal notranslate"><span class="pre">#include</span> <span class="pre">&quot;util.h&quot;</span></code>
+finds <code class="docutils literal notranslate"><span class="pre">util.h</span></code>; <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">com.example.Helper</span></code> finds <code class="docutils literal notranslate"><span class="pre">Helper.java</span></code>). A
+name two corpus files share, or none, adds no edge, and neither does a
+library outside the corpus.</p>
+<p>Rust resolves through the crate’s module tree instead, because a <code class="docutils literal notranslate"><span class="pre">use</span></code>
+usually names an item or a group (<code class="docutils literal notranslate"><span class="pre">use</span> <span class="pre">crate::a::{B,</span> <span class="pre">c::D}</span></code>), not a
+module, and every <code class="docutils literal notranslate"><span class="pre">mod.rs</span></code> shares one stem. Each <code class="docutils literal notranslate"><span class="pre">use</span></code> is expanded to
+one path per imported name (an alias or a glob counts as its path), and
+each path resolves to the deepest <em>module file</em> it passes through:
+<code class="docutils literal notranslate"><span class="pre">crate::coupling::FileCoupling</span></code> counts <code class="docutils literal notranslate"><span class="pre">coupling.rs</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">crate::Root</span></code> counts the crate root (<code class="docutils literal notranslate"><span class="pre">lib.rs</span></code>). A path may start with
+<code class="docutils literal notranslate"><span class="pre">crate</span></code>, <code class="docutils literal notranslate"><span class="pre">self</span></code>, <code class="docutils literal notranslate"><span class="pre">super</span></code>, a child module (edition 2018), or the
+library name of any analyzed package, which is how <code class="docutils literal notranslate"><span class="pre">main.rs</span></code> or a test
+reaches its library and one workspace member reaches another. A library
+name two analyzed packages share (vendored copies, fixtures) names
+neither. Module <code class="docutils literal notranslate"><span class="pre">a::b</span></code> is <code class="docutils literal notranslate"><span class="pre">a/b.rs</span></code> or <code class="docutils literal notranslate"><span class="pre">a/b/mod.rs</span></code> below the crate
+root’s directory, and a file there counts as the module whether or not a
+<code class="docutils literal notranslate"><span class="pre">mod</span> <span class="pre">b;</span></code> declares it. Another crate’s root file (<code class="docutils literal notranslate"><span class="pre">tests/x.rs</span></code>,
+<code class="docutils literal notranslate"><span class="pre">src/bin/x.rs</span></code>) never counts as a module.</p>
+<p>Crate roots come from the nearest <code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code>, read only for the
+library’s name, the declared <code class="docutils literal notranslate"><span class="pre">[lib]</span></code> and <code class="docutils literal notranslate"><span class="pre">[[bin]]</span></code> paths and the build
+script: no build and no <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">metadata</span></code>. Cargo’s defaults add
+<code class="docutils literal notranslate"><span class="pre">src/lib.rs</span></code>, <code class="docutils literal notranslate"><span class="pre">src/main.rs</span></code> and every file directly in <code class="docutils literal notranslate"><span class="pre">src/bin</span></code>,
+<code class="docutils literal notranslate"><span class="pre">tests</span></code>, <code class="docutils literal notranslate"><span class="pre">examples</span></code> or <code class="docutils literal notranslate"><span class="pre">benches</span></code> (or a <code class="docutils literal notranslate"><span class="pre">main.rs</span></code> one directory below
+them). A file below one of those directories with no <code class="docutils literal notranslate"><span class="pre">main.rs</span></code> of its own
+(<code class="docutils literal notranslate"><span class="pre">tests/common/mod.rs</span></code>) is a module the target’s roots share, so a path
+from it reaches the shared modules but never a single test’s root. When
+<code class="docutils literal notranslate"><span class="pre">lib.rs</span></code> and <code class="docutils literal notranslate"><span class="pre">main.rs</span></code> share <code class="docutils literal notranslate"><span class="pre">src/</span></code>, a module only <code class="docutils literal notranslate"><span class="pre">main.rs</span></code>
+declares (<code class="docutils literal notranslate"><span class="pre">mod</span> <span class="pre">cli;</span></code>) belongs to the binary; that is the one place the
+roots’ <code class="docutils literal notranslate"><span class="pre">mod</span></code> lines are read.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">.rs</span></code> file keeps the name match above when it is under no
+<code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code>, when its crate root is not among the analyzed files (so
+<code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">-r</span> <span class="pre">crate/src/subdir</span></code> resolves by name, as before), when it sits
+under a <code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code> but outside every crate root’s directory (e.g.
+<code class="docutils literal notranslate"><span class="pre">pkg/scripts/x.rs</span></code>), or when it is the package’s build script, which is a
+crate of its own.</p>
+<p>What counts: every <code class="docutils literal notranslate"><span class="pre">use</span></code> in the file, including those in its
+<code class="docutils literal notranslate"><span class="pre">#[cfg(test)]</span> <span class="pre">mod</span> <span class="pre">tests</span></code> block, as a C <code class="docutils literal notranslate"><span class="pre">#include</span></code> under <code class="docutils literal notranslate"><span class="pre">#ifdef</span> <span class="pre">TEST</span></code>
+counts. What does not: a <code class="docutils literal notranslate"><span class="pre">mod</span></code> declaration (it builds the tree; counting
+it would give every <code class="docutils literal notranslate"><span class="pre">lib.rs</span></code> a Ce equal to its submodule count), <code class="docutils literal notranslate"><span class="pre">std</span></code>
+and other external crates, and the file’s own inline modules, so
+<code class="docutils literal notranslate"><span class="pre">use</span> <span class="pre">super::*</span></code> in that test block is the file itself. <code class="docutils literal notranslate"><span class="pre">#[path]</span></code>
+attributes are not followed, an inline <code class="docutils literal notranslate"><span class="pre">mod</span> <span class="pre">x</span> <span class="pre">{</span> <span class="pre">...</span> <span class="pre">}</span></code> has no file of its
+own to count, and edition-2015 paths (<code class="docutils literal notranslate"><span class="pre">use</span> <span class="pre">y::Thing</span></code> meaning
+<code class="docutils literal notranslate"><span class="pre">crate::y::Thing</span></code>) are not modelled, so they add no edge.</p>
 <p>Ceiling values (p99 of observed distribution across 32,205 functions from
 mosquitto, SQLite, curl, hostap, Lua, libcrc):</p>
 <table class="docutils align-default">
@@ -455,6 +507,7 @@ traditional human-maintainability axis (McCabe/Cognitive). The thresholds
 above are a reasonable starting point; tighten them incrementally as the
 codebase improves.</p>
 </div>
+</section>
 </section>
 <section id="aicp-ai-context-pressure">
 <h2>AICP — AI Context Pressure<a class="headerlink" href="#aicp-ai-context-pressure" title="Link to this heading"></a></h2>
