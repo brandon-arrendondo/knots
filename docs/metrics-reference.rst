@@ -165,14 +165,16 @@ Counts the number of linearly independent paths through a function.
 - **Formula**: decision points + 1
 - **Decision points**: ``if``/``elif``, ``while``, ``for``, ``do``,
   ``case``/``match`` arms, ternary, logical operators (``&&``/``||``,
-  Python ``and``/``or``), ``except`` (Python and C++)
+  Python ``and``/``or``), each exception handler (``except``, ``catch``).
+  knots 1.18.0 and earlier didn't count ``catch`` in C++, Java, C# or
+  JavaScript/TypeScript
 - **switch**: one decision per non-default ``case`` label, as in McCabe's
   definition (the SonarSource whitepaper's ``getWords``: three cases and a
-  ``default`` give 4), in C, C++ and PHP. knots 1.18.0 and earlier counted a
-  C ``switch`` once (pmccabe's "modified" column). Ada counts each ``when``
-  alternative except ``when others``. **Known limitation:** the switch forms
-  of JavaScript/TypeScript, Java, C#, Go, Kotlin, Swift and Scala still count
-  1 per switch until they have definition probes
+  ``default`` give 4), in C, C++, PHP and JavaScript/TypeScript. knots 1.18.0
+  and earlier counted a ``switch`` once (pmccabe's "modified" column). Ada
+  counts each ``when`` alternative except ``when others``. **Known
+  limitation:** the switch forms of Java, C#, Go, Kotlin, Swift and Scala
+  still count 1 per switch until they have definition probes
 - **Rust** ``match``: one decision per arm but the last (arms are tried in
   order and the match is exhaustive, so four arms are three tests, as in
   ``getWords``), plus one per guard (``if`` after a pattern) and one per
