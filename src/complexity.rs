@@ -152,10 +152,11 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
             mccabe_logical_op(node, source_code, valid_ops, complexity);
         }
 
-        // Every other decision point: flat +1.
+        // Every other decision point: flat +1. Unconditional transfers (goto,
+        // throw/raise) are not decisions under McCabe's definition and add nothing.
         // Covers all control-flow structures across all supported languages.
         //
-        // C/C++: if/while/do/for/switch/goto/throw
+        // C/C++: if/while/do/for/switch
         // Rust: if_expression, loop variants, match_expression, conditional_expression
         // Python: elif, except, match_statement, ternary (conditional_expression)
         // JS/TS: for_in_statement, optional_chain, ternary_expression
@@ -166,7 +167,7 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         // C#: foreach_statement, conditional_access_expression
         // Kotlin: do_while_statement, when_expression, catch_block
         // Swift: guard_statement, repeat_while_statement
-        // PHP: else_if_clause, throw_expression, nullsafe_member_access_expression
+        // PHP: else_if_clause, nullsafe_member_access_expression
         // Lua: elseif_statement, repeat_statement
         // Fortran: elseif_clause, select_case/rank/type, where_statement,
         //          elsewhere_clause, arithmetic_if_statement
@@ -175,9 +176,6 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         | "do_statement"
         | "for_statement"
         | "for_range_loop"
-        | "throw_statement"
-        | "raise_statement"
-        | "raise_expression"
         | "switch_statement"
         | "if_expression"
         | "while_expression"
@@ -187,7 +185,6 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         | "match_expression"
         | "conditional_expression"
         | "ternary_expression"
-        | "goto_statement"
         | "elif_clause"
         | "except_clause"
         | "match_statement"
@@ -215,7 +212,6 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         | "guard_statement"
         | "repeat_while_statement"
         | "else_if_clause"
-        | "throw_expression"
         | "nullsafe_member_access_expression"
         | "elseif_statement"
         | "repeat_statement"
@@ -2795,8 +2791,24 @@ mod tests {
         "#;
         let tree = parse_cpp_function(code);
         let node = tree.root_node();
-        // base 1 + 1 if + 1 throw = 3
-        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+        // base 1 + 1 if = 2; an unconditional throw is not a decision
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_c_goto_mccabe_matches_pmccabe() {
+        // pmccabe gives 2: goto is an unconditional jump, not a decision
+        let code = r#"
+        int f(int x) {
+            if (x) goto out;
+            x++;
+        out:
+            return x;
+        }
+        "#;
+        let tree = parse_c_function(code);
+        let node = tree.root_node();
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
     }
 
     #[test]
@@ -3829,11 +3841,11 @@ mod tests {
 
     #[test]
     fn test_ada_raise_statement_mccabe() {
-        // raise adds +1 like throw; base = 1 → total 2
+        // an unconditional raise is not a decision; base = 1 → total 1
         let code = "procedure P is begin raise Constraint_Error; end P;";
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
-        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 1);
     }
 
     #[test]
