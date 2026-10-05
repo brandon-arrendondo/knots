@@ -28,8 +28,8 @@ Extension to the Cyclomatic Measure of Program Complexity", SIGPLAN Notices
 whitepaper, version 1.7, 29 August 2023; Park, *Software Size Measurement*,
 CMU/SEI-92-TR-20, 1992.
 
-Coverage today: C (14 probes) and Ada (5). Other languages follow the same
-pattern.
+Coverage today: C (14 probes), Ada (5) and Rust (14). Other languages follow
+the same pattern.
 
 ## Across tools
 
@@ -38,7 +38,11 @@ pmccabe (both its columns), lizard (default and `-m`), clang-tidy's
 `readability-function-cognitive-complexity`, and rust-code-analysis, and
 writes `TOOLS.md`: each tool's value beside the definition's, with
 differences in bold. It's generated, so regenerate it rather than editing
-it, and commit it with the tool versions it records. For the Ada probes it uses
+it, and commit it with the tool versions it records. For the Rust probes it
+uses lizard and rust-code-analysis, and clippy's `cognitive_complexity` lint
+for information only: that lint starts every function at 1 and isn't
+Campbell's algorithm. Where the Rust Reference's semantics are needed to read a
+definition (match arms, guards) the probe cites it. For the Ada probes it uses
 AdaCore's gnatmetric (cyclomatic complexity). multimetric reports per file
 only, so it isn't included.
 

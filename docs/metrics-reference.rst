@@ -154,6 +154,14 @@ Counts the number of linearly independent paths through a function.
   alternative except ``when others``. **Known limitation:** the switch forms
   of JavaScript/TypeScript, Java, C#, Go, Kotlin, Swift and Scala still count
   1 per switch until they have definition probes
+- **Rust** ``match``: one decision per arm but the last (arms are tried in
+  order and the match is exhaustive, so four arms are three tests, as in
+  ``getWords``), plus one per guard (``if`` after a pattern) and one per
+  ``|`` alternative in an arm's pattern, as ``case 1: case 2:`` is two in C.
+  ``let ... else`` is one decision and ``?`` one. A bare ``loop`` has no test
+  and adds nothing (the ``if`` that breaks out of it is the decision), as
+  for Ada's bare ``loop``. knots 1.18.0 and earlier counted a ``match`` once
+  and a ``loop`` as a decision, and didn't count ``let ... else``
 - **Not decision points**: unconditional transfers (``goto``, ``throw``,
   ``raise``) add nothing, as in McCabe's definition and pmccabe
 - **Preprocessor**: decisions in every ``#if``/``#ifdef`` arm are counted
@@ -196,8 +204,17 @@ specification is listed, with its reason, in
 
 - **Recursion**: +1 for each function in a recursion cycle, direct or
   indirect (Appendix B1), once per function, not per call. Cycles are found
-  among the functions of one file by name; a cycle through another file or
-  through a receiver-qualified call (``self.f()``) is not seen.
+  among the functions of one file, from the call syntax alone: a bare call
+  ``f()``, a call through ``self``/``this``, and in Rust ``Self::f`` or
+  ``Type::f`` inside ``Type``'s impl (called or passed as a value). A method
+  called on any other receiver (``child.depth()``) is not followed, since
+  its type isn't known; following it by name scored a third of Rust
+  functions as recursive, almost all of them delegations like
+  ``self.0.fmt(f)``. A cycle through another file is not seen either. In
+  Rust a bare call resolves through the enclosing ``fn`` and ``mod``
+  scopes, so same-named functions in different modules are kept apart.
+- **break/continue to a label** (Rust ``break 'outer``): +1 (Appendix B1).
+  A plain ``break`` or ``continue`` adds nothing.
 - **throw/raise**: no increment (Appendix B1; Appendix C scores every
   ``throw`` 0). ``goto`` keeps its +1.
 
@@ -207,7 +224,9 @@ Compared against Mozilla's
 11,365 Rust functions scanned (285k lines; the corpus was not pinned by
 commit), measured before knots added the recursion increment, which
 rust-code-analysis omits. Agreement with another implementation is
-evidence, not ground truth.
+evidence, not ground truth: on the Rust probes rust-code-analysis also
+scores the whitepaper's own logical-operator example 5 instead of 4 and a
+bare ``loop`` with a nested ``if`` 1 instead of 3 (``validation/probes/TOOLS.md``).
 
 Nesting Depth
 -------------

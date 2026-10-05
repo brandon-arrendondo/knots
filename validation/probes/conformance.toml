@@ -27,3 +27,18 @@ definition = 1
 knots = 2
 status = "decision pending"
 reason = "Same cause as the McCabe entry for this probe: every #if arm is counted."
+
+[[departure]]
+probe = "rust/recursion.rs"
+function = "depth"
+metric = "cognitive"
+definition = 2
+knots = 1
+status = "deliberate"
+reason = """depth recurses only through `c.depth()`, a method call on a receiver whose
+type knots can't see without type inference. Matching such calls by name alone
+scored 4,554 of 13,882 functions in twelve crates.io crates as recursive (knots
+e645961), nearly all delegations such as `self.0.fmt(f)` and `self.inner.hash(h)`;
+with the edge dropped, 110 change against 1.18.0, and the sample checked were
+real cycles or labeled jumps. Counted: bare calls, `self.name()`, `Self::name`
+and `Type::name` (see src/recursion.rs)."""

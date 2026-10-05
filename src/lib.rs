@@ -17,12 +17,13 @@ use anyhow::{Context, Result};
 use globset::Glob;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use tree_sitter::{Node, Tree, TreeCursor};
 pub mod complexity;
 pub mod coupling;
+mod recursion;
 pub mod rust_modules;
 
 // Re-export complexity functions for use by workspace members and for internal use
@@ -533,24 +534,16 @@ fn get_c_name(node: Node, source_code: &str) -> Option<String> {
 /// [`collect_function_metrics`] may still record under a synthetic
 /// `<anonymous>@line:col` name when `count_anonymous_closures` is set.
 pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
-    match node.kind() {
-        "function_item"
-        | "method_definition"
-        | "generator_function_declaration"
-        | "generator_function"
-        | "method_declaration"
-        | "constructor_declaration"
-        | "local_function_statement" => name_field(node, source_code),
-
-        "function_declaration" => name_field(node, source_code).or_else(|| {
-            let mut cursor = node.walk();
-            let found = node
-                .children(&mut cursor)
-                .find(|c| c.kind() == "simple_identifier");
-            found
-                .and_then(|c| c.utf8_text(source_code.as_bytes()).ok())
-                .map(|s| s.to_string())
-        }),
+    let kind = node.kind();
+    if NAME_FIELD_FUNCTIONS.contains(&kind) {
+        return name_field(node, source_code);
+    }
+    if let Some((_, header)) = FORTRAN_HEADERS.iter().find(|(k, _)| *k == kind) {
+        return name_in_child(node, header, source_code);
+    }
+    match kind {
+        "function_declaration" => name_field(node, source_code)
+            .or_else(|| child_text_of_kind(node, "simple_identifier", source_code)),
 
         "function_definition" => name_field(node, source_code)
             .or_else(|| get_c_name(node, source_code))
@@ -565,46 +558,73 @@ pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
 
         "func_literal" => None,
 
-        "subprogram_body" | "expression_function_declaration" => {
-            let mut cursor = node.walk();
-            let spec = node.children(&mut cursor).find(|c| {
-                matches!(
-                    c.kind(),
-                    "function_specification" | "procedure_specification"
-                )
-            })?;
-            name_field(spec, source_code)
-        }
+        "subprogram_body" | "expression_function_declaration" => ada_name(node, source_code),
 
-        "task_body" => {
-            let mut cursor = node.walk();
-            let found = node
-                .children(&mut cursor)
-                .find(|c| c.kind() == "identifier");
-            found
-                .and_then(|c| c.utf8_text(source_code.as_bytes()).ok())
-                .map(|s| s.to_string())
-        }
+        "task_body" => child_text_of_kind(node, "identifier", source_code),
 
-        "function" => name_in_child(node, "function_statement", source_code),
-        "subroutine" => name_in_child(node, "subroutine_statement", source_code),
-        "module_procedure" => name_in_child(node, "module_procedure_statement", source_code),
-
-        "program" => {
-            let mut cursor = node.walk();
-            let stmt = node
-                .children(&mut cursor)
-                .find(|c| c.kind() == "program_statement")?;
-            let mut inner = stmt.walk();
-            let first_named = stmt.named_children(&mut inner).next();
-            first_named
-                .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-                .map(|s| s.to_string())
-                .or_else(|| Some("program".to_string()))
-        }
+        "program" => fortran_program_name(node, source_code),
 
         _ => get_c_name(node, source_code),
     }
+}
+
+/// Function kinds whose name is in a `name` field.
+const NAME_FIELD_FUNCTIONS: &[&str] = &[
+    "function_item",
+    "method_definition",
+    "generator_function_declaration",
+    "generator_function",
+    "method_declaration",
+    "constructor_declaration",
+    "local_function_statement",
+];
+
+/// Fortran subprogram kinds and the header statement that holds the name.
+const FORTRAN_HEADERS: &[(&str, &str)] = &[
+    ("function", "function_statement"),
+    ("subroutine", "subroutine_statement"),
+    ("module_procedure", "module_procedure_statement"),
+];
+
+fn child_text_of_kind(node: Node, kind: &str, source_code: &str) -> Option<String> {
+    let mut cursor = node.walk();
+    let found = node.children(&mut cursor).find(|c| c.kind() == kind);
+    found
+        .and_then(|c| c.utf8_text(source_code.as_bytes()).ok())
+        .map(|s| s.to_string())
+}
+
+/// Ada: the name is in the function or procedure specification.
+fn ada_name(node: Node, source_code: &str) -> Option<String> {
+    let mut cursor = node.walk();
+    let spec = node.children(&mut cursor).find(|c| {
+        matches!(
+            c.kind(),
+            "function_specification" | "procedure_specification"
+        )
+    })?;
+    name_field(spec, source_code)
+}
+
+/// Fortran main program: the name in `program NAME`, else "program".
+fn fortran_program_name(node: Node, source_code: &str) -> Option<String> {
+    // Other grammars' root node is also `program`; only Fortran's has a
+    // program_statement, and that is the only case with a name.
+    let statement = child_of_kind(node, "program_statement")?;
+    let text = first_named_child(statement).and_then(|n| n.utf8_text(source_code.as_bytes()).ok());
+    Some(text.unwrap_or("program").to_string())
+}
+
+fn child_of_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
+    let mut cursor = node.walk();
+    let found = node.children(&mut cursor).find(|c| c.kind() == kind);
+    found
+}
+
+fn first_named_child(node: Node) -> Option<Node> {
+    let mut cursor = node.walk();
+    let first = node.named_children(&mut cursor).next();
+    first
 }
 
 // Iterative, not recursive: C's declarator grammar wraps at most one
@@ -668,43 +688,24 @@ pub fn collect_local_names(root: Node, source_code: &str) -> HashSet<String> {
 fn collect_local_names_recursive(root: Node, source_code: &str, names: &mut HashSet<String>) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        match node.kind() {
-            "function_definition"
-            | "function_item"
-            | "function_declaration"
-            | "function_expression"
-            | "arrow_function"
-            | "method_definition"
-            | "generator_function_declaration"
-            | "generator_function"
-            | "subprogram_body"
-            | "expression_function_declaration"
-            | "task_body"
-            | "method_declaration"
-            | "func_literal"
-            | "constructor_declaration"
-            | "local_function_statement"
-            | "init_declaration"
-            | "function"
-            | "subroutine"
-            | "module_procedure"
-            | "program" => {
-                if let Some(name) = get_function_name(node, source_code) {
-                    names.insert(name);
-                }
-            }
-            "preproc_def" | "preproc_function_def" => {
-                if let Some(name_node) = node.child_by_field_name("name") {
-                    if let Ok(name) = name_node.utf8_text(source_code.as_bytes()) {
-                        names.insert(name.to_string());
-                    }
-                }
-            }
-            _ => {}
-        }
+        names.extend(local_name(node, source_code));
         let mut cursor = node.walk();
         stack.extend(node.children(&mut cursor));
     }
+}
+
+/// The name a function or a C macro defines, if `node` is one.
+fn local_name(node: Node, source_code: &str) -> Option<String> {
+    if is_function_kind(node.kind()) {
+        return get_function_name(node, source_code);
+    }
+    if !matches!(node.kind(), "preproc_def" | "preproc_function_def") {
+        return None;
+    }
+    let name = node.child_by_field_name("name")?;
+    name.utf8_text(source_code.as_bytes())
+        .ok()
+        .map(str::to_string)
 }
 
 fn handle_call_node(
@@ -1014,64 +1015,18 @@ fn suppressed_metrics_for(
     out
 }
 
-/// The file's own call graph: each function name to the names it calls.
-fn local_call_graph(root: Node, source_code: &str) -> HashMap<String, HashSet<String>> {
-    let no_locals = HashSet::new();
-    let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
-    let mut cursor = root.walk();
-    visit_functions(&mut cursor, source_code, &mut |node, src| {
-        if let Some(name) = get_function_name(node, src) {
-            graph
-                .entry(name)
-                .or_default()
-                .extend(collect_external_call_names(node, src, &no_locals));
-        }
-    });
-    graph
-}
-
-/// Whether `start` can reach itself through calls among the graph's functions.
-fn reaches_itself(graph: &HashMap<String, HashSet<String>>, start: &str) -> bool {
-    let mut stack: Vec<&str> = vec![start];
-    let mut seen: HashSet<&str> = HashSet::new();
-    while let Some(name) = stack.pop() {
-        for callee in graph.get(name).into_iter().flatten() {
-            if callee == start {
-                return true;
-            }
-            if graph.contains_key(callee) && seen.insert(callee) {
-                stack.push(callee);
-            }
-        }
-    }
-    false
-}
-
-/// Functions in this file that sit in a call cycle among the file's own
-/// functions, direct or indirect: Cognitive Complexity gives each "method in
-/// a recursion cycle" +1 (whitepaper 1.7, Appendix B1). Matched by name, so
-/// cycles through another file or through a receiver-qualified call
-/// (`self.f()`) are not seen.
-fn recursive_function_names(root: Node, source_code: &str) -> HashSet<String> {
-    let graph = local_call_graph(root, source_code);
-    graph
-        .keys()
-        .filter(|name| reaches_itself(&graph, name))
-        .cloned()
-        .collect()
-}
-
-/// Names defined in the file, and the subset that is recursive.
-fn file_call_context(root: Node, source_code: &str) -> (HashSet<String>, HashSet<String>) {
+/// Names defined in the file, and the node ids of its functions that are in
+/// a call cycle (see `recursion`).
+fn file_call_context(root: Node, source_code: &str) -> (HashSet<String>, HashSet<usize>) {
     (
         collect_local_names(root, source_code),
-        recursive_function_names(root, source_code),
+        recursion::recursive_functions(root, source_code),
     )
 }
 
 /// Cognitive Complexity of one function, including the recursion increment.
-fn cognitive_for(node: Node, src: &str, name: &str, recursive: &HashSet<String>) -> u32 {
-    calculate_cognitive_complexity(node, src.as_bytes()) + u32::from(recursive.contains(name))
+fn cognitive_for(node: Node, src: &str, recursive: &HashSet<usize>) -> u32 {
+    calculate_cognitive_complexity(node, src.as_bytes()) + u32::from(recursive.contains(&node.id()))
 }
 
 /// Parse-tree entry point of the library: walk `tree` via [`visit_functions`]
@@ -1113,7 +1068,7 @@ pub fn collect_function_metrics(
         });
         if let Some(name) = name_opt {
             let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
-            let cognitive = cognitive_for(node, src, &name, &recursive);
+            let cognitive = cognitive_for(node, src, &recursive);
             let nesting = calculate_nesting_depth(node);
             let sloc = {
                 let raw = match sloc_mode {
@@ -1189,6 +1144,7 @@ pub fn collect_function_metrics(
 #[cfg(test)]
 mod recursion_tests {
     use super::*;
+    use std::collections::HashMap;
 
     fn c_cognitive(source: &str) -> HashMap<String, u32> {
         let mut parser = tree_sitter::Parser::new();
@@ -1227,6 +1183,80 @@ mod recursion_tests {
         assert_eq!(m["is_even"], 2);
         assert_eq!(m["is_odd"], 2);
         assert_eq!(m["leaf"], 0, "calls into a cycle without being in it");
+    }
+
+    fn rust_rows(source: &str) -> Vec<FunctionMetrics> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        collect_function_metrics(&tree, source, "f.rs", &None, &None, false)
+    }
+
+    fn rust_cognitive(source: &str) -> HashMap<String, u32> {
+        rust_rows(source)
+            .into_iter()
+            .map(|m| (m.name, m.cognitive))
+            .collect()
+    }
+
+    #[test]
+    fn rust_self_paths_and_self_receiver_are_recursion() {
+        let m = rust_cognitive(
+            "struct T(Vec<T>);\n\
+             impl T {\n\
+                 fn count(t: &T) -> usize { t.0.iter().map(Self::count).sum() }\n\
+                 fn size(t: &T) -> usize { t.0.iter().map(|c| T::size(c)).sum() }\n\
+                 fn next(&mut self) -> usize { self.next() }\n\
+             }",
+        );
+        assert_eq!(m["count"], 1, "Self::count passed as a value");
+        assert_eq!(m["size"], 1, "T::size inside impl T");
+        assert_eq!(m["next"], 1, "self.next()");
+    }
+
+    #[test]
+    fn rust_delegation_to_another_receiver_is_not_recursion() {
+        let m = rust_cognitive(
+            "struct W(u8);\n\
+             impl std::fmt::Display for W {\n\
+                 fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { self.0.fmt(f) }\n\
+             }",
+        );
+        assert_eq!(m["fmt"], 0);
+    }
+
+    #[test]
+    fn rust_overloaded_trait_methods_are_not_resolved() {
+        // From<u8> and From<u16> both define `from`; Self::from(x) reaches the other.
+        let m = rust_cognitive(
+            "struct S;\n\
+             impl From<u8> for S { fn from(x: u8) -> S { Self::from(u16::from(x)) } }\n\
+             impl From<u16> for S { fn from(_: u16) -> S { S } }",
+        );
+        assert_eq!(m["from"], 0);
+    }
+
+    #[test]
+    fn rust_bare_calls_resolve_by_lexical_scope() {
+        // Each mod's `iadd` is its own function: only large::iadd is in the
+        // cycle with add. The trait method `fold` calling the free `fold` is
+        // not calling itself.
+        let rows = rust_rows(
+            "mod small { pub fn iadd() {} }\n\
+             mod large { pub fn iadd() { add(); } fn add() { iadd(); } }\n\
+             trait F { fn fold(&self) { fold(); } }\n\
+             fn fold() {}",
+        );
+        let cognitive = |name: &str| -> Vec<u32> {
+            rows.iter()
+                .filter(|m| m.name == name)
+                .map(|m| m.cognitive)
+                .collect()
+        };
+        assert_eq!(cognitive("iadd"), vec![0, 1]);
+        assert_eq!(cognitive("fold"), vec![0, 0]);
     }
 
     #[test]

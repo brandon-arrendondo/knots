@@ -137,14 +137,52 @@ fn case_label(node: Node, parent: Node, source_code: &[u8]) -> Option<bool> {
     (loose && matches!(text, "case" | "default")).then_some(text == "case")
 }
 
-fn mccabe_logical_op(node: Node, source_code: &[u8], valid_ops: &[&str], complexity: &mut u32) {
-    if let Some(op) = node.child_by_field_name("operator") {
-        if let Ok(op_text) = op.utf8_text(source_code) {
-            if valid_ops.contains(&op_text) {
-                *complexity += 1;
-            }
-        }
+/// McCabe decisions of a Rust match. Arms are tried in order and the match is
+/// exhaustive, so n arms are n - 1 tests (the whitepaper's getWords, CC 4 for
+/// four alternatives); each guard is one more condition, and each `|`
+/// alternative in an arm's pattern one more, as `case 1: case 2:` is two in C.
+/// A grammar without Rust's `match_block` keeps the older count of 1.
+fn match_decisions(node: Node) -> u32 {
+    let Some(arms) = match_arms(node) else {
+        return 1;
+    };
+    let extra: u32 = arms.iter().map(|arm| arm_conditions(*arm)).sum();
+    arms.len().saturating_sub(1) as u32 + extra
+}
+
+/// The arms of a Rust match, or `None` for another grammar's match.
+fn match_arms(node: Node) -> Option<Vec<Node>> {
+    let body = node.child_by_field_name("body")?;
+    let mut cursor = body.walk();
+    let arms = body
+        .named_children(&mut cursor)
+        .filter(|c| c.kind() == "match_arm");
+    (body.kind() == "match_block").then(|| arms.collect())
+}
+
+/// Guard and or-pattern alternatives of one match arm.
+fn arm_conditions(arm: Node) -> u32 {
+    let Some(pattern) = arm.child_by_field_name("pattern") else {
+        return 0;
+    };
+    let guard = pattern.child_by_field_name("condition");
+    u32::from(guard.is_some()) + or_alternatives(pattern, guard)
+}
+
+/// `or_pattern` nodes under `pattern`, not counting inside the guard. The
+/// grammar nests them pairwise, so `1 | 2 | 3` is two.
+fn or_alternatives(pattern: Node, guard: Option<Node>) -> u32 {
+    let mut count = 0;
+    let mut stack = vec![pattern];
+    while let Some(node) = stack.pop() {
+        count += u32::from(node.kind() == "or_pattern");
+        let mut cursor = node.walk();
+        stack.extend(
+            node.named_children(&mut cursor)
+                .filter(|c| Some(*c) != guard),
+        );
     }
+    count
 }
 
 // Iterative (explicit stack), not recursive: a real-world file with a
@@ -169,138 +207,164 @@ fn visit_node_mccabe(root: Node, source_code: &[u8], complexity: &mut u32) {
 }
 
 fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
-    match node.kind() {
-        // Rust ? operator / Swift try? — both use "try_expression".
-        // No try_operator child → Rust ? (always a branch) or Scala/Kotlin try-block (skip).
-        // try_operator child text "try?" → Swift short-circuit; "try"/"try!" → no branch.
-        "try_expression" => *complexity += mccabe_try_expression(node, source_code),
+    *complexity += mccabe_decisions(node, source_code);
+}
 
-        // Ada: logical operators as unnamed keyword children (and / or / xor).
-        // Each occurrence is a separate branch point (unlike cognitive, which chain-counts).
-        "expression" => {
-            let mut cursor = node.walk();
-            let count = node
-                .children(&mut cursor)
-                .filter(|c| !c.is_named() && matches!(c.kind(), "and" | "or" | "xor"))
-                .count() as u32;
-            *complexity += count;
-        }
+/// Nodes that are exactly one decision wherever they occur. Unconditional
+/// transfers (goto, throw/raise) are not decisions under McCabe's definition
+/// and are absent.
+///
+/// C/C++: if/while/do/for. Rust: if_expression, while/for (a bare `loop` has
+/// no test). Python: elif, except, match_statement, conditional_expression.
+/// JS/TS: for_in_statement, optional_chain, ternary_expression. Ada: elsif,
+/// exception_handler, select_alternative, guard, timed/conditional/
+/// asynchronous select. Go: expression/type switch, select. Java:
+/// enhanced_for_statement, switch_expression. C#: foreach_statement,
+/// conditional_access_expression. Kotlin: do_while_statement,
+/// when_expression, catch_block. Swift: guard_statement,
+/// repeat_while_statement. PHP: else_if_clause,
+/// nullsafe_member_access_expression. Lua: elseif_statement,
+/// repeat_statement. Fortran: elseif_clause, select case/rank/type,
+/// where_statement, elsewhere_clause, arithmetic_if_statement.
+const MCCABE_FLAT_DECISIONS: &[&str] = &[
+    "if_statement",
+    "while_statement",
+    "do_statement",
+    "for_statement",
+    "for_range_loop",
+    "if_expression",
+    "while_expression",
+    "for_expression",
+    "do_while_expression",
+    "conditional_expression",
+    "ternary_expression",
+    "elif_clause",
+    "except_clause",
+    "match_statement",
+    "for_in_statement",
+    "optional_chain",
+    "elsif_statement_item",
+    "exception_handler",
+    "select_alternative",
+    "guard",
+    "timed_entry_call",
+    "conditional_entry_call",
+    "asynchronous_select",
+    "expression_switch_statement",
+    "type_switch_statement",
+    "select_statement",
+    "enhanced_for_statement",
+    "switch_expression",
+    "foreach_statement",
+    "conditional_access_expression",
+    "do_while_statement",
+    "when_expression",
+    "catch_block",
+    "guard_statement",
+    "repeat_while_statement",
+    "else_if_clause",
+    "nullsafe_member_access_expression",
+    "elseif_statement",
+    "repeat_statement",
+    "elseif_clause",
+    "select_case_statement",
+    "select_rank_statement",
+    "select_type_statement",
+    "where_statement",
+    "elsewhere_clause",
+    "arithmetic_if_statement",
+];
 
-        // Ada: selective_accept `else` clause (unnamed keyword) adds one alternative path.
-        "selective_accept" => {
-            let mut cursor = node.walk();
-            if node
-                .children(&mut cursor)
-                .any(|c| !c.is_named() && c.kind() == "else")
-            {
-                *complexity += 1;
-            }
-        }
+type DecisionCounter = fn(Node, &[u8]) -> u32;
 
-        // Ada: exit when Condition — conditional loop exit is a branch; bare exit is not.
-        "exit_statement" => {
-            let mut cursor = node.walk();
-            if node
-                .children(&mut cursor)
-                .any(|c| !c.is_named() && c.kind() == "when")
-            {
-                *complexity += 1;
-            }
-        }
+/// Nodes whose decision count depends on their contents.
+const MCCABE_COUNTED: &[(&str, DecisionCounter)] = &[
+    // Rust ? and Swift try? (see mccabe_try_expression).
+    ("try_expression", mccabe_try_expression),
+    // Rust: one decision per arm but the last, plus guards and alternatives.
+    ("match_expression", mccabe_match),
+    // Rust let-else: the else is taken when the pattern fails.
+    ("let_declaration", mccabe_let_else),
+    // Ada: each and / or / xor (unnamed keyword children) is a decision.
+    ("expression", mccabe_ada_logical),
+    // Ada: a selective_accept `else` adds one alternative path.
+    ("selective_accept", mccabe_select_else),
+    // Ada: `exit when` is a decision; a bare exit is not.
+    ("exit_statement", mccabe_exit_when),
+    // C/C++/PHP: one decision per non-default case (see switch_decisions).
+    ("switch_statement", switch_decisions),
+    // Ada: loops and case alternatives are decisions only sometimes.
+    ("loop_statement", ada_decision),
+    ("case_statement_alternative", ada_decision),
+    // Logical operators in operator-field expressions: C/C++/Rust/PHP
+    // binary_expression, Python boolean_operator, Scala infix_expression,
+    // Fortran logical_expression.
+    ("binary_expression", logical_decision),
+    ("boolean_operator", logical_decision),
+    ("infix_expression", logical_decision),
+    ("logical_expression", logical_decision),
+];
 
-        // Logical operators in operator-field expressions.
-        // binary_expression: C/C++/Rust/PHP (&&, ||, ??, ?:, and, or)
-        // boolean_operator: Python (and, or)
-        // infix_expression: Scala (&&, ||)
-        // logical_expression: Fortran (.and., .or., .AND., .OR.)
-        "binary_expression" | "boolean_operator" | "infix_expression" | "logical_expression" => {
-            let valid_ops: &[&str] = match node.kind() {
-                "binary_expression" => &["&&", "||", "??", "?:", "and", "or"],
-                "boolean_operator" => &["and", "or"],
-                "infix_expression" => &["&&", "||"],
-                _ => &[".and.", ".or.", ".AND.", ".OR."],
-            };
-            mccabe_logical_op(node, source_code, valid_ops, complexity);
-        }
-
-        // Every other decision point: flat +1. Unconditional transfers (goto,
-        // throw/raise) are not decisions under McCabe's definition and add nothing.
-        // Covers all control-flow structures across all supported languages.
-        //
-        // C/C++: if/while/do/for/switch
-        // Rust: if_expression, loop variants, match_expression, conditional_expression
-        // Python: elif, except, match_statement, ternary (conditional_expression)
-        // JS/TS: for_in_statement, optional_chain, ternary_expression
-        // Ada: loop_statement, elsif, case_statement_alternative, exception_handler,
-        //      select_alternative, guard, timed/conditional/asynchronous select
-        // Go: expression_switch_statement, type_switch_statement, select_statement
-        // Java: enhanced_for_statement, switch_expression
-        // C#: foreach_statement, conditional_access_expression
-        // Kotlin: do_while_statement, when_expression, catch_block
-        // Swift: guard_statement, repeat_while_statement
-        // PHP: else_if_clause, nullsafe_member_access_expression
-        // Lua: elseif_statement, repeat_statement
-        // Fortran: elseif_clause, select_case/rank/type, where_statement,
-        //          elsewhere_clause, arithmetic_if_statement
-        // A switch is one decision per non-default case (see switch_decisions).
-        "switch_statement" => *complexity += switch_decisions(node, source_code),
-
-        // Ada: loops and case alternatives are decisions only sometimes.
-        "loop_statement" | "case_statement_alternative" => {
-            *complexity += ada_decision(node, source_code);
-        }
-
-        "if_statement"
-        | "while_statement"
-        | "do_statement"
-        | "for_statement"
-        | "for_range_loop"
-        | "if_expression"
-        | "while_expression"
-        | "for_expression"
-        | "loop_expression"
-        | "do_while_expression"
-        | "match_expression"
-        | "conditional_expression"
-        | "ternary_expression"
-        | "elif_clause"
-        | "except_clause"
-        | "match_statement"
-        | "for_in_statement"
-        | "optional_chain"
-        | "elsif_statement_item"
-        | "exception_handler"
-        | "select_alternative"
-        | "guard"
-        | "timed_entry_call"
-        | "conditional_entry_call"
-        | "asynchronous_select"
-        | "expression_switch_statement"
-        | "type_switch_statement"
-        | "select_statement"
-        | "enhanced_for_statement"
-        | "switch_expression"
-        | "foreach_statement"
-        | "conditional_access_expression"
-        | "do_while_statement"
-        | "when_expression"
-        | "catch_block"
-        | "guard_statement"
-        | "repeat_while_statement"
-        | "else_if_clause"
-        | "nullsafe_member_access_expression"
-        | "elseif_statement"
-        | "repeat_statement"
-        | "elseif_clause"
-        | "select_case_statement"
-        | "select_rank_statement"
-        | "select_type_statement"
-        | "where_statement"
-        | "elsewhere_clause"
-        | "arithmetic_if_statement" => *complexity += 1,
-
-        _ => {}
+fn mccabe_decisions(node: Node, source_code: &[u8]) -> u32 {
+    let kind = node.kind();
+    if MCCABE_FLAT_DECISIONS.contains(&kind) {
+        return 1;
     }
+    MCCABE_COUNTED
+        .iter()
+        .find(|(counted, _)| *counted == kind)
+        .map_or(0, |(_, count)| count(node, source_code))
+}
+
+fn mccabe_match(node: Node, _source_code: &[u8]) -> u32 {
+    match_decisions(node)
+}
+
+fn mccabe_let_else(node: Node, _source_code: &[u8]) -> u32 {
+    u32::from(node.child_by_field_name("alternative").is_some())
+}
+
+fn mccabe_ada_logical(node: Node, _source_code: &[u8]) -> u32 {
+    let mut cursor = node.walk();
+    let count = node
+        .children(&mut cursor)
+        .filter(|c| !c.is_named() && matches!(c.kind(), "and" | "or" | "xor"))
+        .count();
+    count as u32
+}
+
+fn mccabe_select_else(node: Node, _source_code: &[u8]) -> u32 {
+    u32::from(has_keyword_child(node, "else"))
+}
+
+fn mccabe_exit_when(node: Node, _source_code: &[u8]) -> u32 {
+    u32::from(has_keyword_child(node, "when"))
+}
+
+fn has_keyword_child(node: Node, keyword: &str) -> bool {
+    let mut cursor = node.walk();
+    let found = node
+        .children(&mut cursor)
+        .any(|c| !c.is_named() && c.kind() == keyword);
+    found
+}
+
+/// Operators that are decisions (McCabe, ABC conditions), per node kind that
+/// carries an `operator` field (`?:` is Kotlin's Elvis).
+fn logical_operators(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "binary_expression" => &["&&", "||", "??", "?:", "and", "or"],
+        "boolean_operator" => &["and", "or"],
+        "infix_expression" => &["&&", "||"],
+        _ => &[".and.", ".or.", ".AND.", ".OR."],
+    }
+}
+
+fn logical_decision(node: Node, source_code: &[u8]) -> u32 {
+    let op = node
+        .child_by_field_name("operator")
+        .and_then(|op| op.utf8_text(source_code).ok());
+    u32::from(op.is_some_and(|op| logical_operators(node.kind()).contains(&op)))
 }
 
 /// Calculates cognitive complexity for a function
@@ -309,28 +373,6 @@ pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
     let mut complexity = 0;
     walk_cognitive(node, source_code, 0, &mut complexity, None);
     complexity
-}
-
-// Handles binary/boolean/logical operator chain-counting for cognitive complexity.
-// Returns the matched operator text (to thread as the new `parent_binary_op`) if
-// `node` is a logical op of a recognized kind, or `None` if the caller should fall
-// through to the default per-node handling.
-fn handle_logical_op<'a>(
-    node: Node,
-    source_code: &'a [u8],
-    complexity: &mut u32,
-    parent_binary_op: Option<&str>,
-    valid_ops: &[&str],
-) -> Option<&'a str> {
-    let op = node.child_by_field_name("operator")?;
-    let op_text = op.utf8_text(source_code).ok()?;
-    if !valid_ops.contains(&op_text) {
-        return None;
-    }
-    if parent_binary_op != Some(op_text) {
-        *complexity += 1;
-    }
-    Some(op_text)
 }
 
 // Owns the explicit stack (not recursive: see visit_node_mccabe's comment) and
@@ -363,13 +405,10 @@ fn walk_cognitive<'a>(
     }
 }
 
-// The stack carries the per-node state (`nesting_level`, `parent_binary_op`) that
-// used to be threaded through recursive call arguments. Each match arm below
-// either pushes its own choice of node/state and `return`s (mirroring the
-// original function's early `return` after a specialized `visit_children_cognitive`
-// call), or falls through to the shared push at the bottom (mirroring the
-// original function's fallthrough to its own trailing `visit_children_cognitive`
-// call).
+// The stack carries the per-node state (`nesting_level`, `parent_binary_op`)
+// that a recursive walk would pass as arguments. Each node kind's role
+// (COGNITIVE_ROLES) decides its increment and what its children are pushed
+// with; a kind with no role adds nothing and passes its state through.
 fn visit_node_cognitive<'a>(
     node: Node<'a>,
     source_code: &'a [u8],
@@ -378,189 +417,265 @@ fn visit_node_cognitive<'a>(
     parent_binary_op: Option<&'a str>,
     stack: &mut Vec<(Node<'a>, u32, Option<&'a str>)>,
 ) {
-    // Every arm below only ever *overrides* what gets pushed for this node's
-    // children (target node / nesting / parent_binary_op); none of them need
-    // a different stack push callsite of their own. Threading the choice
-    // through these three locals lets the whole function fall through to a
-    // single trailing push_children_cognitive call (mirroring the original
-    // function's per-arm `continue` after its own specialized call, but
-    // without duplicating the callsite or adding early-return nodes).
-    let mut push_node = node;
-    let mut push_nesting = nesting_level;
-    let mut push_op = parent_binary_op;
+    let here = Push {
+        node,
+        nesting: nesting_level,
+        op: parent_binary_op,
+    };
+    let (increment, push) = match cognitive_role(node.kind()) {
+        Some(role) => cognitive_step(role, node, source_code, here),
+        None => (0, here),
+    };
+    *complexity += increment;
+    push_children_cognitive(stack, push.node, push.nesting, push.op);
+}
 
-    match node.kind() {
-        // if/else — special: Ada bare `else` keyword adds a flat +1.
-        "if_statement" | "if_expression" => {
-            *complexity += 1 + nesting_level;
-            let mut cur = node.walk();
-            if node
-                .children(&mut cur)
-                .any(|c| !c.is_named() && c.kind() == "else")
-            {
-                *complexity += 1;
-            }
-            push_nesting = nesting_level + 1;
-            push_op = None;
-        }
+/// What a node's children are pushed with: which node's children (an else
+/// clause hands over to its else-if), at what nesting, continuing which
+/// logical-operator sequence.
+#[derive(Clone, Copy)]
+struct Push<'a> {
+    node: Node<'a>,
+    nesting: u32,
+    op: Option<&'a str>,
+}
 
-        // else clause — flat +1; if it contains an else-if, recurse into that child directly.
-        "else_clause" => {
-            *complexity += 1;
-            let mut cursor = node.walk();
-            push_node = node
-                .children(&mut cursor)
-                .find(|c| matches!(c.kind(), "if_statement" | "if_expression"))
-                .unwrap_or(node);
-            push_op = None;
-        }
+/// How Cognitive Complexity treats a node kind (whitepaper 1.7, Appendix B).
+#[derive(Clone, Copy)]
+enum CognitiveRole {
+    /// if: +1 plus nesting, nests its children; Ada's bare `else` keyword +1.
+    If,
+    /// else: +1 flat; an else-if inside is scored as a continuation.
+    Else,
+    /// No increment, but a new logical-operator sequence starts below: try
+    /// (only catch is scored), and a negation (`a && !(b && c)` is two
+    /// sequences).
+    NewSequence,
+    /// Closures and lambdas: no increment of their own, nest their contents.
+    Lambda,
+    /// Loops, switch/match/select, catch/except, the conditional operator:
+    /// +1 plus nesting, nest their children.
+    Nesting,
+    /// elif/elsif/elseif/elsewhere: +1 flat.
+    FlatBranch,
+    /// goto, break/continue to a label, Ada guard, Fortran arithmetic-if:
+    /// +1 flat. throw/raise are absent (B1 omits them; Appendix C scores
+    /// every throw 0).
+    Jump,
+    /// &&, ||, ... in an operator field: +1 per new sequence.
+    Logical,
+    /// Ada and / or / xor as keyword children: +1 per new sequence.
+    AdaLogical,
+    /// Ada `exit when`: +1; a bare exit adds nothing.
+    ExitWhen,
+}
 
-        // try has NO cost and NO nesting increment; only catch/except gets the penalty.
-        "try_statement" => {
-            push_op = None;
-        }
+const COGNITIVE_ROLES: &[(CognitiveRole, &[&str])] = &[
+    (CognitiveRole::If, &["if_statement", "if_expression"]),
+    (CognitiveRole::Else, &["else_clause"]),
+    (
+        CognitiveRole::NewSequence,
+        &["try_statement", "unary_expression", "not_operator"],
+    ),
+    // C++/Rust, Python, JS/TS arrow functions, C# delegates and local
+    // functions, Kotlin lambdas, Go closures.
+    (
+        CognitiveRole::Lambda,
+        &[
+            "lambda_expression",
+            "closure_expression",
+            "lambda",
+            "arrow_function",
+            "anonymous_method_expression",
+            "local_function_statement",
+            "lambda_literal",
+            "anonymous_function",
+            "annotated_lambda",
+            "func_literal",
+        ],
+    ),
+    // case_statement here is only ever Ada's whole case block: walk_cognitive
+    // filters out C's per-arm case_statement first.
+    (
+        CognitiveRole::Nesting,
+        &[
+            "while_statement",
+            "do_statement",
+            "for_statement",
+            "for_range_loop",
+            "for_in_statement",
+            "conditional_expression",
+            "ternary_expression",
+            "while_expression",
+            "for_expression",
+            "loop_expression",
+            "do_while_expression",
+            "switch_statement",
+            "match_expression",
+            "match_statement",
+            "case_statement",
+            "catch_clause",
+            "except_clause",
+            "loop_statement",
+            "exception_handler",
+            "selective_accept",
+            "timed_entry_call",
+            "conditional_entry_call",
+            "asynchronous_select",
+            "expression_switch_statement",
+            "type_switch_statement",
+            "select_statement",
+            "enhanced_for_statement",
+            "switch_expression",
+            "foreach_statement",
+            "do_while_statement",
+            "when_expression",
+            "catch_block",
+            "guard_statement",
+            "repeat_while_statement",
+            "repeat_statement",
+            "select_case_statement",
+            "select_rank_statement",
+            "select_type_statement",
+            "where_statement",
+        ],
+    ),
+    // Python, Ada, PHP, Lua, Fortran.
+    (
+        CognitiveRole::FlatBranch,
+        &[
+            "elif_clause",
+            "elsif_statement_item",
+            "else_if_clause",
+            "elseif_statement",
+            "elseif_clause",
+            "elsewhere_clause",
+        ],
+    ),
+    (
+        CognitiveRole::Jump,
+        &[
+            "goto_statement",
+            "guard",
+            "arithmetic_if_statement",
+            "break_expression",
+            "continue_expression",
+        ],
+    ),
+    // C/C++/Rust/PHP, Python, Scala, Fortran.
+    (
+        CognitiveRole::Logical,
+        &[
+            "binary_expression",
+            "boolean_operator",
+            "infix_expression",
+            "logical_expression",
+        ],
+    ),
+    (CognitiveRole::AdaLogical, &["expression"]),
+    (CognitiveRole::ExitWhen, &["exit_statement"]),
+];
 
-        // Closures/lambdas: nesting +1, no base cost.
-        // Covers C++/Rust, Python, JS/TS arrow functions, C# delegates/local fns,
-        // Kotlin lambdas, Go closures.
-        "lambda_expression"
-        | "closure_expression"
-        | "lambda"
-        | "arrow_function"
-        | "anonymous_method_expression"
-        | "local_function_statement"
-        | "lambda_literal"
-        | "anonymous_function"
-        | "annotated_lambda"
-        | "func_literal" => {
-            push_nesting = nesting_level + 1;
-            push_op = None;
-        }
+fn cognitive_role(kind: &str) -> Option<CognitiveRole> {
+    COGNITIVE_ROLES
+        .iter()
+        .find(|(_, kinds)| kinds.contains(&kind))
+        .map(|(role, _)| *role)
+}
 
-        // Nesting structures: +1 + nesting_level, children at nesting+1.
-        // Covers loops, switch/match/select, catch/except across all supported languages.
-        // case_statement here is only ever Ada's whole case block (the guard
-        // above already filtered out C's per-arm case_statement).
-        "while_statement"
-        | "do_statement"
-        | "for_statement"
-        | "for_range_loop"
-        | "for_in_statement"
-        | "conditional_expression"
-        | "ternary_expression"
-        | "while_expression"
-        | "for_expression"
-        | "loop_expression"
-        | "do_while_expression"
-        | "switch_statement"
-        | "match_expression"
-        | "match_statement"
-        | "case_statement"
-        | "catch_clause"
-        | "except_clause"
-        | "loop_statement"
-        | "exception_handler"
-        | "selective_accept"
-        | "timed_entry_call"
-        | "conditional_entry_call"
-        | "asynchronous_select"
-        | "expression_switch_statement"
-        | "type_switch_statement"
-        | "select_statement"
-        | "enhanced_for_statement"
-        | "switch_expression"
-        | "foreach_statement"
-        | "do_while_statement"
-        | "when_expression"
-        | "catch_block"
-        | "guard_statement"
-        | "repeat_while_statement"
-        | "repeat_statement"
-        | "select_case_statement"
-        | "select_rank_statement"
-        | "select_type_statement"
-        | "where_statement" => {
-            *complexity += 1 + nesting_level;
-            push_nesting = nesting_level + 1;
-            push_op = None;
-        }
-
-        // Flat branches: +1, children at same nesting.
-        // elif/elsif/elseif/elsewhere across Python, Ada, PHP, Lua, Fortran.
-        "elif_clause"
-        | "elsif_statement_item"
-        | "else_if_clause"
-        | "elseif_statement"
-        | "elseif_clause"
-        | "elsewhere_clause" => {
-            *complexity += 1;
-            push_op = None;
-        }
-
-        // Flat +1: goto (spec Appendix B1), Ada guard, Fortran arithmetic-if.
-        // throw/raise get no increment: the spec's B1 list omits them and its
-        // Appendix C example scores every throw at 0.
-        "goto_statement" | "guard" | "arithmetic_if_statement" => {
-            *complexity += 1;
-        }
-
-        // Logical operator chains: +1 per distinct operator kind, not per operator in a sequence.
-        // binary_expression: C/C++/Rust/PHP (&&, ||, ??, and, or)
-        // boolean_operator: Python (and, or)
-        // infix_expression: Scala (&&, ||)
-        // logical_expression: Fortran (.and., .or., .AND., .OR.)
-        "binary_expression" | "boolean_operator" | "infix_expression" | "logical_expression" => {
-            let valid_ops: &[&str] = match node.kind() {
-                "binary_expression" => &["&&", "||", "??", "and", "or"],
-                "boolean_operator" => &["and", "or"],
-                "infix_expression" => &["&&", "||"],
-                _ => &[".and.", ".or.", ".AND.", ".OR."],
-            };
-            if let Some(op_text) =
-                handle_logical_op(node, source_code, complexity, parent_binary_op, valid_ops)
-            {
-                push_op = Some(op_text);
-            }
-        }
-
-        // Ada: logical operators (and / or / xor) as unnamed keyword children of expression.
-        // Count each new operator sequence, not each occurrence.
-        "expression" => {
-            let mut last_op: Option<&str> = None;
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if !child.is_named() && matches!(child.kind(), "and" | "or" | "xor") {
-                    let op = child.kind();
-                    if last_op != Some(op) {
-                        *complexity += 1;
-                        last_op = Some(op);
-                    }
-                }
-            }
-        }
-
-        // A negation starts a new operator sequence: the spec scores
-        // `a && !(b && c)` as two sequences (whitepaper 1.7, "Sequences of
-        // logical operators").
-        "unary_expression" | "not_operator" => {
-            push_op = None;
-        }
-
-        // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
-        "exit_statement" => {
-            let mut cur = node.walk();
-            if node
-                .children(&mut cur)
-                .any(|c| !c.is_named() && c.kind() == "when")
-            {
-                *complexity += 1;
-            }
-        }
-
-        _ => {}
+fn cognitive_step<'a>(
+    role: CognitiveRole,
+    node: Node<'a>,
+    source_code: &'a [u8],
+    here: Push<'a>,
+) -> (u32, Push<'a>) {
+    let fresh = Push { op: None, ..here };
+    let nested = Push {
+        nesting: here.nesting + 1,
+        ..fresh
+    };
+    match role {
+        CognitiveRole::If => (
+            1 + here.nesting + u32::from(has_keyword_child(node, "else")),
+            nested,
+        ),
+        CognitiveRole::Else => (
+            1,
+            Push {
+                node: else_if_child(node).unwrap_or(node),
+                ..fresh
+            },
+        ),
+        CognitiveRole::NewSequence => (0, fresh),
+        CognitiveRole::Lambda => (0, nested),
+        CognitiveRole::Nesting => (1 + here.nesting, nested),
+        CognitiveRole::FlatBranch => (1, fresh),
+        CognitiveRole::Jump => (flat_jump(node), here),
+        CognitiveRole::Logical => logical_step(node, source_code, here),
+        CognitiveRole::AdaLogical => (ada_sequences(node), here),
+        CognitiveRole::ExitWhen => (u32::from(has_keyword_child(node, "when")), here),
     }
+}
 
-    push_children_cognitive(stack, push_node, push_nesting, push_op);
+fn ada_operators(node: Node) -> Vec<&'static str> {
+    let mut cursor = node.walk();
+    let ops = node
+        .children(&mut cursor)
+        .filter(|c| !c.is_named() && matches!(c.kind(), "and" | "or" | "xor"))
+        .map(|c| c.kind())
+        .collect();
+    ops
+}
+
+fn else_if_child(node: Node) -> Option<Node> {
+    let mut cursor = node.walk();
+    let found = node
+        .children(&mut cursor)
+        .find(|c| matches!(c.kind(), "if_statement" | "if_expression"));
+    found
+}
+
+/// +1 when this operator starts a new sequence. Kotlin's Elvis `?:` is
+/// null-coalescing shorthand, which the spec doesn't score.
+fn logical_step<'a>(node: Node<'a>, source_code: &'a [u8], here: Push<'a>) -> (u32, Push<'a>) {
+    match sequence_operator(node, source_code) {
+        Some(op) => (
+            u32::from(here.op != Some(op)),
+            Push {
+                op: Some(op),
+                ..here
+            },
+        ),
+        None => (0, here),
+    }
+}
+
+/// Ada: one per new sequence of and / or / xor keywords.
+fn sequence_operator<'a>(node: Node, source_code: &'a [u8]) -> Option<&'a str> {
+    let op = node
+        .child_by_field_name("operator")?
+        .utf8_text(source_code)
+        .ok()?;
+    (op != "?:" && logical_operators(node.kind()).contains(&op)).then_some(op)
+}
+
+fn ada_sequences(node: Node) -> u32 {
+    let ops = ada_operators(node);
+    let changes = ops.windows(2).filter(|pair| pair[0] != pair[1]).count();
+    u32::from(!ops.is_empty()) + changes as u32
+}
+
+/// A plain break or continue adds nothing; only one to a label does.
+fn flat_jump(node: Node) -> u32 {
+    let plain = matches!(node.kind(), "break_expression" | "continue_expression")
+        && !has_child_kind(node, "label");
+    u32::from(!plain)
+}
+
+fn has_child_kind(node: Node, kind: &str) -> bool {
+    let mut cursor = node.walk();
+    let found = node.children(&mut cursor).any(|c| c.kind() == kind);
+    found
 }
 
 fn push_children_cognitive<'a>(
@@ -605,52 +720,83 @@ fn visit_node_nesting(root: Node, current_depth: u32, max_depth: &mut u32) {
 }
 
 fn visit_node_nesting_depth(node: Node, current_depth: u32, max_depth: &mut u32) -> u32 {
-    // Ada's whole case_statement nests like switch_statement; C's per-arm
-    // case_statement (same node-kind string) must not. See is_ada_case_statement.
-    if node.kind() == "case_statement" && !is_ada_case_statement(node) {
+    if !nests(node) {
         return current_depth;
     }
-    match node.kind() {
-        // C/C++ control structures
-        "if_statement" | "while_statement" | "do_statement" | "for_statement"
-        | "for_range_loop" | "switch_statement" | "catch_clause" | "lambda_expression"
-        // Rust control structures
-        | "if_expression" | "while_expression" | "for_expression" | "loop_expression"
-        | "match_expression" | "closure_expression"
-        // Python control structures
-        | "except_clause" | "match_statement" | "lambda"
-        // JavaScript control structures
-        | "for_in_statement" | "arrow_function"
-        // Ada control structures
-        | "loop_statement" | "case_statement" | "exception_handler"
-        // Go control structures
-        | "expression_switch_statement" | "type_switch_statement" | "select_statement"
-        | "func_literal"
-        // Java control structures
-        | "enhanced_for_statement" | "switch_expression"
-        // C# control structures
-        | "foreach_statement" | "anonymous_method_expression" | "local_function_statement"
-        // Kotlin control structures
-        | "do_while_statement" | "when_expression" | "catch_block"
-        | "lambda_literal" | "anonymous_function" | "annotated_lambda"
-        // Swift control structures
-        | "guard_statement" | "repeat_while_statement"
-        // Lua control structures
-        | "repeat_statement"
-        // Fortran control structures
-        | "do_loop" | "select_case_statement" | "select_rank_statement"
-        | "select_type_statement" | "where_statement"
-        // Scala: do_while_expression (while_expression and for_expression are already covered above)
-        | "do_while_expression" => {
-            let depth = current_depth + 1;
-            if depth > *max_depth {
-                *max_depth = depth;
-            }
-            depth
-        }
-        _ => current_depth,
-    }
+    let depth = current_depth + 1;
+    *max_depth = (*max_depth).max(depth);
+    depth
 }
+
+/// Ada's whole case_statement nests like switch_statement; C's per-arm
+/// case_statement (same node-kind string) must not. See is_ada_case_statement.
+fn nests(node: Node) -> bool {
+    let kind = node.kind();
+    NESTING_STRUCTURES.contains(&kind) && (kind != "case_statement" || is_ada_case_statement(node))
+}
+
+/// Control structures that add a level of nesting depth.
+const NESTING_STRUCTURES: &[&str] = &[
+    // C/C++
+    "if_statement",
+    "while_statement",
+    "do_statement",
+    "for_statement",
+    "for_range_loop",
+    "switch_statement",
+    "catch_clause",
+    "lambda_expression",
+    // Rust
+    "if_expression",
+    "while_expression",
+    "for_expression",
+    "loop_expression",
+    "match_expression",
+    "closure_expression",
+    // Python
+    "except_clause",
+    "match_statement",
+    "lambda",
+    // JavaScript
+    "for_in_statement",
+    "arrow_function",
+    // Ada
+    "loop_statement",
+    "case_statement",
+    "exception_handler",
+    // Go
+    "expression_switch_statement",
+    "type_switch_statement",
+    "select_statement",
+    "func_literal",
+    // Java
+    "enhanced_for_statement",
+    "switch_expression",
+    // C#
+    "foreach_statement",
+    "anonymous_method_expression",
+    "local_function_statement",
+    // Kotlin
+    "do_while_statement",
+    "when_expression",
+    "catch_block",
+    "lambda_literal",
+    "anonymous_function",
+    "annotated_lambda",
+    // Swift
+    "guard_statement",
+    "repeat_while_statement",
+    // Lua
+    "repeat_statement",
+    // Fortran
+    "do_loop",
+    "select_case_statement",
+    "select_rank_statement",
+    "select_type_statement",
+    "where_statement",
+    // Scala (while_expression and for_expression are above)
+    "do_while_expression",
+];
 
 /// Calculates Source Lines of Code (SLOC) - non-comment, non-blank lines (C/C++/Rust).
 pub fn calculate_sloc(node: Node, source_code: &[u8]) -> u32 {
@@ -889,13 +1035,6 @@ fn abc_try_expression(node: Node, source_code: &[u8], conditions: &mut u32) {
     }
 }
 
-fn abc_operator_is_condition(node: Node, source_code: &[u8], ops: &[&str]) -> bool {
-    node.child_by_field_name("operator")
-        .and_then(|op| op.utf8_text(source_code).ok())
-        .map(|text| ops.contains(&text))
-        .unwrap_or(false)
-}
-
 fn abc_expression_ada(node: Node, conditions: &mut u32) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -942,158 +1081,143 @@ fn visit_node_abc_one(
     branches: &mut u32,
     conditions: &mut u32,
 ) {
+    let kind = node.kind();
+    if ABC_ASSIGNMENTS.contains(&kind) {
+        *assignments += 1;
+    } else if ABC_BRANCHES.contains(&kind) {
+        *branches += 1;
+    } else if ABC_CONDITIONS.contains(&kind) {
+        *conditions += 1;
+    } else {
+        abc_counted_condition(node, source_code, conditions);
+    }
+}
+
+const ABC_ASSIGNMENTS: &[&str] = &[
+    // C/C++ (update_expression is ++ and --)
+    "assignment_expression",
+    "update_expression",
+    // Rust +=, -=, ...
+    "compound_assignment_expr",
+    // Python: =, +=, := (walrus)
+    "assignment",
+    "augmented_assignment",
+    "named_expression",
+    // JavaScript +=, -=, ...
+    "augmented_assignment_expression",
+    // Ada :=
+    "assignment_statement",
+    // Go :=
+    "short_var_declaration",
+    // Scala val/var
+    "val_definition",
+    "var_definition",
+];
+
+const ABC_BRANCHES: &[&str] = &[
+    // Calls: C/C++/Rust, Python, C#
+    "call_expression",
+    "call",
+    "invocation_expression",
+    // Ada procedure and function invocations; Lua function call
+    "procedure_call_statement",
+    "function_call",
+    // Fortran CALL
+    "subroutine_call",
+    // throw, new, delete (C/C++), raise (Python, Ada)
+    "throw_statement",
+    "new_expression",
+    "delete_expression",
+    "raise_statement",
+    "raise_expression",
+    // Java method invocations; Java and PHP object creation
+    "method_invocation",
+    "object_creation_expression",
+    // PHP calls, and PHP 8's throw used as a value
+    "function_call_expression",
+    "member_call_expression",
+    "nullsafe_member_call_expression",
+    "throw_expression",
+];
+
+const ABC_CONDITIONS: &[&str] = &[
+    // C/C++
+    "if_statement",
+    "while_statement",
+    "do_statement",
+    "for_statement",
+    "for_range_loop",
+    "switch_statement",
+    "conditional_expression",
+    // JavaScript
+    "for_in_statement",
+    "ternary_expression",
+    "optional_chain",
+    // Rust, and Scala do-while
+    "if_expression",
+    "while_expression",
+    "for_expression",
+    "loop_expression",
+    "match_expression",
+    "do_while_expression",
+    // Python
+    "elif_clause",
+    "match_statement",
+    // Ada. case_statement here is only ever Ada's whole case block: the
+    // caller filters out C's per-arm case_statement, which shares the name.
+    "elsif_statement_item",
+    "loop_statement",
+    "case_statement",
+    "exception_handler",
+    // Ada tasking
+    "select_alternative",
+    "guard",
+    "timed_entry_call",
+    "conditional_entry_call",
+    "asynchronous_select",
+    // Go
+    "expression_switch_statement",
+    "type_switch_statement",
+    "select_statement",
+    // Java
+    "enhanced_for_statement",
+    "switch_expression",
+    // C#
+    "foreach_statement",
+    "conditional_access_expression",
+    // Kotlin
+    "do_while_statement",
+    "when_expression",
+    // Swift
+    "guard_statement",
+    "repeat_while_statement",
+    // PHP elseif and null-safe access
+    "else_if_clause",
+    "nullsafe_member_access_expression",
+    // Fortran
+    "elseif_clause",
+    "select_case_statement",
+    "select_rank_statement",
+    "select_type_statement",
+    "where_statement",
+    "elsewhere_clause",
+    "arithmetic_if_statement",
+];
+
+/// ABC conditions that depend on a node's contents.
+fn abc_counted_condition(node: Node, source_code: &[u8], conditions: &mut u32) {
     match node.kind() {
-        // Assignments — C/C++
-        "assignment_expression" => *assignments += 1,
-        "update_expression" => *assignments += 1, // C/C++ ++ and --
-        // Assignments — Rust
-        "compound_assignment_expr" => *assignments += 1, // Rust +=, -=, *=, etc.
-        // Assignments — Python
-        "assignment" => *assignments += 1,           // x = value
-        "augmented_assignment" => *assignments += 1, // x += value
-        "named_expression" => *assignments += 1,     // x := value (walrus)
-        // Assignments — JavaScript (augmented_assignment_expression: +=, -=, etc.)
-        "augmented_assignment_expression" => *assignments += 1,
-
-        // Assignments — Ada (:= operator)
-        "assignment_statement" => *assignments += 1,
-
-        // Branches — function calls (C/C++/Rust use call_expression, Python uses call, C# uses invocation_expression)
-        "call_expression" | "call" | "invocation_expression" => *branches += 1,
-        // Ada: procedure and function invocations; Lua: function call
-        "procedure_call_statement" | "function_call" => *branches += 1,
-        // Fortran: CALL statement
-        "subroutine_call" => *branches += 1,
-
-        // Branches: throw, new, delete create control flow paths (C/C++)
-        "throw_statement" | "new_expression" | "delete_expression" | "raise_statement"
-        | "raise_expression" => *branches += 1,
-
-        // Conditions (C/C++)
-        "if_statement"
-        | "while_statement"
-        | "do_statement"
-        | "for_statement"
-        | "for_range_loop"
-        | "switch_statement"
-        | "conditional_expression" => *conditions += 1,
-
-        // Conditions (JavaScript)
-        "for_in_statement" | "ternary_expression" => *conditions += 1,
-
-        // Conditions (Rust + Scala do-while)
-        "if_expression"
-        | "while_expression"
-        | "for_expression"
-        | "loop_expression"
-        | "match_expression"
-        | "do_while_expression" => *conditions += 1,
-        // Rust ? / Swift try? — same grammar-level discrimination as visit_node_mccabe.
-        // Scala/Kotlin try-catch also uses try_expression; skip the try itself (catch adds conditions).
+        // Rust ? / Swift try?, as for McCabe; a Scala/Kotlin try block adds
+        // nothing (its catches do).
         "try_expression" => abc_try_expression(node, source_code, conditions),
-
-        // Conditions (Python)
-        "elif_clause" | "match_statement" => *conditions += 1,
-
-        // Conditions (Ada). case_statement here is only ever Ada's whole
-        // case_statement block (the top-of-function guard filters out C's
-        // per-arm case_statement, which shares the same node-kind string).
-        "elsif_statement_item" | "loop_statement" | "case_statement" | "exception_handler" => {
-            *conditions += 1
-        }
-        // Ada tasking conditions
-        "select_alternative"
-        | "guard"
-        | "timed_entry_call"
-        | "conditional_entry_call"
-        | "asynchronous_select" => *conditions += 1,
-
-        // Assignments (Go): short variable declaration `:=`
-        "short_var_declaration" => *assignments += 1,
-
-        // Conditions (Go)
-        "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
-            *conditions += 1
-        }
-
-        // Branches (Java): method invocations and object creation
-        // object_creation_expression also covers PHP `new Foo()`
-        "method_invocation" | "object_creation_expression" => *branches += 1,
-
-        // Branches (PHP): function/method call expressions
-        "function_call_expression"
-        | "member_call_expression"
-        | "nullsafe_member_call_expression" => *branches += 1,
-        // PHP 8: throw expression used as a value (rhs of ??, assignment, etc.)
-        "throw_expression" => *branches += 1,
-
-        // Conditions (Java)
-        "enhanced_for_statement" | "switch_expression" => *conditions += 1,
-
-        // Conditions (C#)
-        "foreach_statement" | "conditional_access_expression" => *conditions += 1,
-
-        // Conditions (Kotlin)
-        "do_while_statement" | "when_expression" => *conditions += 1,
-
-        // Scala: assignments (val/var declarations)
-        "val_definition" | "var_definition" => *assignments += 1,
-        // Scala: logical operators in infix_expression
-        "infix_expression" if abc_operator_is_condition(node, source_code, &["&&", "||"]) => {
-            *conditions += 1;
-        }
-
-        // Conditions (Swift)
-        "guard_statement" | "repeat_while_statement" => *conditions += 1,
-
-        // JS/TS optional chaining: a?.b
-        "optional_chain" => *conditions += 1,
-
-        // PHP: elseif clause and null-safe access
-        "else_if_clause" | "nullsafe_member_access_expression" => *conditions += 1,
-
-        // Fortran conditions
-        "elseif_clause"
-        | "select_case_statement"
-        | "select_rank_statement"
-        | "select_type_statement"
-        | "where_statement"
-        | "elsewhere_clause"
-        | "arithmetic_if_statement" => *conditions += 1,
-        // Fortran: logical operators .AND. / .OR. are condition branches
-        "logical_expression"
-            if abc_operator_is_condition(
-                node,
-                source_code,
-                &[".and.", ".or.", ".AND.", ".OR."],
-            ) =>
-        {
-            *conditions += 1;
-        }
-
-        // Logical operators (C/C++/Rust: &&/||; JS/TS/C#: ??; Kotlin Elvis: ?:; PHP: and/or)
-        "binary_expression"
-            if abc_operator_is_condition(
-                node,
-                source_code,
-                &["&&", "||", "??", "?:", "and", "or"],
-            ) =>
-        {
-            *conditions += 1;
-        }
-
-        // Logical operators (Python: and/or)
-        "boolean_operator" if abc_operator_is_condition(node, source_code, &["and", "or"]) => {
-            *conditions += 1;
-        }
-
-        // Logical operators (Ada: and then / or else / xor / and / or).
-        // Count each and/or/xor child as a condition branch point.
+        // Ada and / or / xor keywords, and `exit when`.
         "expression" => abc_expression_ada(node, conditions),
-
-        // Ada: exit when Condition — the `when` makes it a conditional branch.
         "exit_statement" => abc_exit_statement_ada(node, conditions),
-
+        // &&, ||, ??, Kotlin's ?:, PHP and/or, Python and/or, Scala &&/||,
+        // Fortran .and./.or.
+        "binary_expression" | "boolean_operator" | "infix_expression" | "logical_expression" => {
+            *conditions += logical_decision(node, source_code);
+        }
         _ => {}
     }
 }
@@ -1815,102 +1939,20 @@ fn count_ada_params(node: Node, source_code: &[u8]) -> u32 {
 }
 
 fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
-    match node.kind() {
+    let kind = node.kind();
+    if FIELD_PARAM_FUNCTIONS.contains(&kind) {
+        return count_params_in_field(node, FIELD_PARAM_KINDS);
+    }
+    if JS_FUNCTIONS.contains(&kind) {
+        return count_js_params(node);
+    }
+    match kind {
         // Rust: named 'parameters' field; 'self_parameter' is excluded (not a real arg).
         "function_item" => count_params_in_field(node, &["parameter"]),
-        // Python/PHP/Scala/C: Python and PHP have a 'parameters' field; C uses a declarator chain.
-        "function_definition" => {
-            if let Some(params) = node.child_by_field_name("parameters") {
-                count_python_params(params, source_code)
-            } else {
-                count_c_params_in_subtree(node)
-            }
-        }
-        // JS/TS/Go/Kotlin/Swift/C++: four layout variants tried in order.
-        "function_declaration" => {
-            // JS/TS/Go: direct 'parameters' field
-            if let Some(params) = node.child_by_field_name("parameters") {
-                return count_param_children(
-                    params,
-                    &[
-                        "identifier",
-                        "required_parameter",
-                        "optional_parameter",
-                        "rest_pattern",
-                        "assignment_pattern",
-                        "parameter_declaration",
-                        "variadic_parameter_declaration",
-                    ],
-                );
-            }
-            // Kotlin: wrapped in a 'function_value_parameters' child (no field name)
-            let mut cursor = node.walk();
-            for child in node.children(&mut cursor) {
-                if child.kind() == "function_value_parameters" {
-                    return count_param_children(child, &["parameter"]);
-                }
-            }
-            // Swift: 'parameter' nodes are direct children (no wrapper)
-            let swift_count = {
-                let mut cursor = node.walk();
-                node.children(&mut cursor)
-                    .filter(|c| c.kind() == "parameter")
-                    .count() as u32
-            };
-            if swift_count > 0 {
-                return swift_count;
-            }
-            // C/C++: no 'parameters' field; drill into the declarator chain
-            count_c_params_in_subtree(node)
-        }
+        "function_definition" => count_function_definition_params(node, source_code),
+        "function_declaration" => count_function_declaration_params(node),
         // Swift: init_declaration — same direct-children layout as function_declaration.
-        "init_declaration" => {
-            let mut cursor = node.walk();
-            node.children(&mut cursor)
-                .filter(|c| c.kind() == "parameter")
-                .count() as u32
-        }
-        // Go method/closure, Java method/constructor, C# method/constructor/local fn, PHP method.
-        "method_declaration"
-        | "func_literal"
-        | "constructor_declaration"
-        | "local_function_statement" => count_params_in_field(
-            node,
-            &[
-                "parameter_declaration",
-                "variadic_parameter_declaration",
-                "formal_parameter",
-                "spread_parameter",
-                "parameter",
-                "simple_parameter",
-                "variadic_parameter",
-                "property_promotion_parameter",
-            ],
-        ),
-        // JS/TS method/function/arrow/generator. PHP arrow `fn($x) => expr` uses arrow_function.
-        "method_definition"
-        | "function_expression"
-        | "arrow_function"
-        | "generator_function_declaration"
-        | "generator_function" => {
-            // Single unparenthesised arrow-function parameter uses the singular 'parameter' field.
-            if node.kind() == "arrow_function" && node.child_by_field_name("parameter").is_some() {
-                return 1;
-            }
-            count_params_in_field(
-                node,
-                &[
-                    "identifier",
-                    "required_parameter",
-                    "optional_parameter",
-                    "rest_pattern",
-                    "assignment_pattern",
-                    "simple_parameter",
-                    "variadic_parameter",
-                    "property_promotion_parameter",
-                ],
-            )
-        }
+        "init_declaration" => count_direct_parameters(node),
         // Fortran: each parameter is an identifier in the header statement's 'parameters' field.
         "function" => count_fortran_params(node, "function_statement"),
         "subroutine" => count_fortran_params(node, "subroutine_statement"),
@@ -1920,6 +1962,107 @@ fn count_explicit_params(node: Node, source_code: &[u8]) -> u32 {
         }
         _ => 0,
     }
+}
+
+/// Go method/closure, Java method/constructor, C# method/constructor/local
+/// fn, PHP method: parameters under a 'parameters' field.
+const FIELD_PARAM_FUNCTIONS: &[&str] = &[
+    "method_declaration",
+    "func_literal",
+    "constructor_declaration",
+    "local_function_statement",
+];
+
+const FIELD_PARAM_KINDS: &[&str] = &[
+    "parameter_declaration",
+    "variadic_parameter_declaration",
+    "formal_parameter",
+    "spread_parameter",
+    "parameter",
+    "simple_parameter",
+    "variadic_parameter",
+    "property_promotion_parameter",
+];
+
+/// JS/TS method/function/arrow/generator. PHP arrow `fn($x) => expr` uses arrow_function.
+const JS_FUNCTIONS: &[&str] = &[
+    "method_definition",
+    "function_expression",
+    "arrow_function",
+    "generator_function_declaration",
+    "generator_function",
+];
+
+fn count_js_params(node: Node) -> u32 {
+    // Single unparenthesised arrow-function parameter uses the singular 'parameter' field.
+    if node.kind() == "arrow_function" && node.child_by_field_name("parameter").is_some() {
+        return 1;
+    }
+    count_params_in_field(
+        node,
+        &[
+            "identifier",
+            "required_parameter",
+            "optional_parameter",
+            "rest_pattern",
+            "assignment_pattern",
+            "simple_parameter",
+            "variadic_parameter",
+            "property_promotion_parameter",
+        ],
+    )
+}
+
+/// Python/PHP/Scala/C: Python and PHP have a 'parameters' field; C uses a declarator chain.
+fn count_function_definition_params(node: Node, source_code: &[u8]) -> u32 {
+    match node.child_by_field_name("parameters") {
+        Some(params) => count_python_params(params, source_code),
+        None => count_c_params_in_subtree(node),
+    }
+}
+
+/// JS/TS/Go/Kotlin/Swift/C++: four layout variants tried in order.
+fn count_function_declaration_params(node: Node) -> u32 {
+    // JS/TS/Go: direct 'parameters' field
+    if let Some(params) = node.child_by_field_name("parameters") {
+        return count_param_children(
+            params,
+            &[
+                "identifier",
+                "required_parameter",
+                "optional_parameter",
+                "rest_pattern",
+                "assignment_pattern",
+                "parameter_declaration",
+                "variadic_parameter_declaration",
+            ],
+        );
+    }
+    // Kotlin: wrapped in a 'function_value_parameters' child (no field name)
+    if let Some(wrapper) = child_of_kind(node, "function_value_parameters") {
+        return count_param_children(wrapper, &["parameter"]);
+    }
+    // Swift: 'parameter' nodes are direct children (no wrapper);
+    // C/C++: no 'parameters' field, drill into the declarator chain.
+    match count_direct_parameters(node) {
+        0 => count_c_params_in_subtree(node),
+        swift => swift,
+    }
+}
+
+fn child_of_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
+    let mut cursor = node.walk();
+    let found = node.children(&mut cursor).find(|c| c.kind() == kind);
+    found
+}
+
+fn count_direct_parameters(node: Node) -> u32 {
+    let mut cursor = node.walk();
+    let count = node
+        .children(&mut cursor)
+        .filter(|c| c.kind() == "parameter")
+        .count();
+    count as u32
 }
 
 // Iterative, not recursive: see get_function_name_from_declarator's comment
@@ -3155,10 +3298,50 @@ mod tests {
     fn test_rust_loop_expression_mccabe() {
         let code = "fn f() { loop { break; } }";
         let tree = parse_rust(code);
-        // base 1 + 1 loop_expression = 2
+        // a bare loop has no test: base 1 only
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
+    }
+
+    #[test]
+    fn test_rust_match_arms_guards_and_alternatives_mccabe() {
+        let mccabe =
+            |code: &str| calculate_mccabe_complexity(parse_rust(code).root_node(), code.as_bytes());
+        // four arms: 3
+        assert_eq!(
+            mccabe("fn f(x: u8) { match x { 1 => (), 2 => (), 3 => (), _ => () } }"),
+            4
+        );
+        // three arms (2), one guard (1), one `|` alternative (1)
+        assert_eq!(
+            mccabe("fn f(x: u8) { match x { 1 | 2 => (), n if n > 9 => (), _ => () } }"),
+            5
+        );
+        // a single irrefutable arm is no decision
+        assert_eq!(mccabe("fn f(x: (u8, u8)) { match x { (a, b) => () } }"), 1);
+    }
+
+    #[test]
+    fn test_rust_let_else_mccabe() {
+        let code = "fn f(v: Option<u8>) -> u8 { let Some(x) = v else { return 0; }; let y = x; y }";
+        let tree = parse_rust(code);
+        // the else is taken when the pattern fails: 1 decision; the plain let adds none
         assert_eq!(
             calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
             2
+        );
+    }
+
+    #[test]
+    fn test_rust_labeled_jumps_cognitive() {
+        let code = "fn f() { 'a: loop { loop { break 'a; } } 'b: for _ in 0..2 { continue 'b; } }";
+        let tree = parse_rust(code);
+        // loop +1, nested loop +2, break 'a +1, for +1, continue 'b +1
+        assert_eq!(
+            calculate_cognitive_complexity(tree.root_node(), code.as_bytes()),
+            6
         );
     }
 
