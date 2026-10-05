@@ -24,9 +24,12 @@ functions differed.
    substitute for it.
 2. **Every departure from a definition is deliberate, named and documented**
    in `docs/metrics-reference.rst` and `validation/probes/conformance.toml`,
-   with its reason. Chosen means recorded: a sharp departure from the norm
-   with no recorded reason gets re-adjudicated as a bug, even if someone
-   remembers deciding it. `tests/probes.rs` enforces the list.
+   with its reason. Chosen means recorded: a departure with no recorded
+   reason is a bug, of one of two kinds. Either the implementation is wrong
+   (fix the code), or the reason exists but was never written down (fix the
+   record: cite it in `conformance.toml`). Remembering that a decision was
+   made doesn't settle which; find the reason or re-adjudicate.
+   `tests/probes.rs` enforces the list.
 3. **A published agreement figure names its corpus pins, the knots commit
    and the script that produced it** (`validation/`), and its sample size
    is the number of functions actually compared.

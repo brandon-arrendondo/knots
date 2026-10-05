@@ -3,7 +3,10 @@
 # probe in this directory and fails when knots disagrees with a definition that
 # is not listed here, or when a listed departure no longer occurs.
 #
-# status: "deliberate" (decided, with the reason below) or "decision pending".
+# A departure with no recorded reason is a bug: either in the implementation
+# (fix knots) or in the record (the reason exists but isn't written here; cite
+# it). status: "deliberate" (decided, with the reason below) or
+# "decision pending".
 
 [[departure]]
 probe = "c/preproc_arms.c"
