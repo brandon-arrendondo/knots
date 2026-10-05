@@ -21,14 +21,24 @@ aurora-lint oracle use:
 Check out each one detached at its commit before running. A drifted tree
 silently changes every figure.
 
+The Rust corpus is twelve crates.io releases, pinned by version (a published
+crate version never changes): regex 1.13.1, regex-syntax 0.8.11, serde_json
+1.0.151, syn 2.0.119, clap_builder 4.6.7, hashbrown 0.17.1, aho-corasick
+1.1.5, memchr 2.8.3, winnow 0.7.15, toml_edit 0.22.27, rayon-core 1.13.0 and
+itertools 0.13.0, 13,882 functions. Use the copies under
+`~/.cargo/registry/src/` once a build has fetched them (or unpack each
+`.crate` from crates.io with `tar`), and pass the directories with
+`--ext=.rs`.
+
 ## Scripts
 
 - `pmccabe_compare.py KNOTS_BIN OUT.json CORPUS...` compares knots' McCabe
   with pmccabe's "modified" count, function by function. It tags each
   mismatch with the constructs present (`goto`, `throw`, `#if`, ternary).
-- `compare_versions.py OLD_BIN NEW_BIN OUT.json CORPUS...` shows which
-  metrics moved between two knots builds, AIRD deltas, band changes, and
-  crossings of the 85 gate.
+- `compare_versions.py [--ext=.rs] OLD_BIN NEW_BIN OUT.json CORPUS...` shows
+  which metrics moved between two knots builds, AIRD deltas, band changes,
+  and crossings of the 85 gate. `--ext` picks the file extensions (default C
+  and C++).
 
 ## Results recorded 2026-10-05
 
@@ -109,3 +119,32 @@ functions):**
   cross the 85 gate, the same 20 as before the switch change, since McCabe
   reaches AIRD only through the capped test score.
 - The micro-pilot and the paper's exemplars are as above.
+
+**Rust probes (fifth change).** Fourteen Rust probes found five departures
+with no recorded reason, all fixed:
+- McCabe counted a `match` once; it is now one decision per arm but the last,
+  plus guards and `|` alternatives.
+- McCabe counted a bare `loop` as a decision, and didn't count `let ... else`.
+- Cognitive Complexity didn't count `break`/`continue` to a label.
+- Recursion through `Self::f` wasn't seen.
+
+The probes also exposed a fault in the second change. Cycles were found by
+matching callee names, so a method called on any receiver matched any
+function of that name. On the Rust corpus that scored 4,554 of 13,882
+functions as recursive, nearly all delegations (`clone`, `hash`, `fmt`,
+`next`). The graph now follows only calls whose target the syntax fixes (see
+`src/recursion.rs`). Recursion only through another receiver
+(`child.depth()`) is a recorded departure in `probes/conformance.toml`.
+Against the previous branch commit on the C corpora, this changes Cognitive
+Complexity in 172 functions, all down by 1: 170 C++ gmock delegations in
+mosquitto's tests, and two `#else` stubs (sqlite `sqlite3SelectDup`, curl
+`curl_formfree`) that had borrowed the recursion of the other definition of
+the same name.
+
+**Cumulative effect against 1.18.0, all changes on the branch:**
+- C (32,999 functions): McCabe 3,277 changed; Cognitive Complexity 3,408;
+  test score 2,092; AIRD 4,335 (3,646 up, 689 down); 510 band changes; the
+  same 20 functions cross the 85 gate.
+- Rust (13,882 functions): McCabe 923 changed; Cognitive Complexity 110;
+  test score 766; AIRD 626 (612 up, 14 down); 82 band changes; none crosses
+  the 85 gate.

@@ -1,4 +1,4 @@
-"""Run every C probe through knots and the other tools that compute the same metrics.
+"""Run every probe through knots and the other tools that compute the same metrics.
 
 Usage: run_tools.py KNOTS_BIN OUT.md [OUT.json]
 
@@ -109,6 +109,49 @@ def gnatmetric(binary, path):
     return out
 
 
+def clippy(binary, path):
+    """clippy's cognitive_complexity lint, threshold 0 so it reports every function.
+
+    Informative only: the lint scores each function from 1 and isn't Campbell's
+    algorithm (clippy documents it as a different, older measure).
+    """
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "clippy.toml").write_text("cognitive-complexity-threshold = 0\n")
+        r = subprocess.run([binary, "--edition", "2021", "--crate-type", "lib", "-A", "dead_code",
+                            "-W", "clippy::cognitive_complexity", "--error-format=json", "--emit=metadata",
+                            "-o", "/dev/null", str(path)], capture_output=True, text=True,
+                           env={**__import__("os").environ, "CLIPPY_CONF_DIR": tmp})
+    out = {}
+    for line in r.stderr.splitlines():
+        d = json.loads(line) if line.startswith("{") else {}
+        m = re.search(r"cognitive complexity of \((\d+)/", d.get("message", ""))
+        if m and d["spans"]:
+            t = d["spans"][0]["text"][0]
+            out[t["text"][t["highlight_start"] - 1:t["highlight_end"] - 1]] = int(m.group(1))
+    return out
+
+
+def rust_rows(tools, knots_bin):
+    rows = []
+    for path in sorted((HERE / "rust").glob("*.rs")):
+        k = knots(knots_bin, path)
+        lz = lizard(tools["lizard"], path, False) if tools["lizard"] else {}
+        rca = rust_code_analysis(tools["rust-code-analysis-cli"], path) if tools["rust-code-analysis-cli"] else {}
+        cl = clippy(tools["clippy-driver"], path) if tools["clippy-driver"] else {}
+        for function, metric, want in expectations(path):
+            row = {"probe": path.name, "function": function, "metric": metric, "definition": want,
+                   "knots": k.get(function, {}).get(metric), "language": "rust"}
+            if metric == "mccabe":
+                row["lizard"] = lz.get(function)
+                row["rust-code-analysis"] = rca.get(function, {}).get("cyclomatic")
+            elif metric == "cognitive":
+                row["rust-code-analysis"] = rca.get(function, {}).get("cognitive")
+                row["clippy (not Campbell)"] = cl.get(function)
+            rows.append(row)
+    return rows
+
+
 def version(cmd):
     return (run(cmd).strip().splitlines() or ["?"])[0]
 
@@ -119,7 +162,8 @@ def main():
     tools = {"gnatmetric": tool("gnatmetric") or (str(Path.home() / ".alire/bin/gnatmetric")
                                                   if (Path.home() / ".alire/bin/gnatmetric").exists() else None),
              "lizard": tool("lizard"), "clang-tidy": tool("clang-tidy"),
-             "rust-code-analysis-cli": tool("rust-code-analysis-cli"), "pmccabe": tool("pmccabe")}
+             "rust-code-analysis-cli": tool("rust-code-analysis-cli"), "pmccabe": tool("pmccabe"),
+             "clippy-driver": tool("clippy-driver")}
     commit = run(["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"]).strip()
     versions = {"knots": f"{version([knots_bin, '--version'])} (built from {commit})",
                 "lizard": tools["lizard"] and version([tools["lizard"], "--version"]),
@@ -127,7 +171,8 @@ def main():
                 "rust-code-analysis-cli": tools["rust-code-analysis-cli"]
                 and version([tools["rust-code-analysis-cli"], "--version"]),
                 "pmccabe": tools["pmccabe"] and "Debian package (no --version)",
-                "gnatmetric": tools["gnatmetric"] and "gnatmetric (libadalang_tools 25.0.0, GNAT 14.2.1 via Alire)"}
+                "gnatmetric": tools["gnatmetric"] and "gnatmetric (libadalang_tools 25.0.0, GNAT 14.2.1 via Alire)",
+                "clippy-driver": tools["clippy-driver"] and version([tools["clippy-driver"], "--version"])}
     rows = []
     for path in sorted((HERE / "c").glob("*.c")):
         k = knots(knots_bin, path)
@@ -160,9 +205,13 @@ def main():
             if metric == "mccabe":
                 row["gnatmetric"] = g.get(function)
             rows.append(row)
+    rows += rust_rows(tools, knots_bin)
     write_markdown(out_md, rows, versions)
     if out_json:
         out_json.write_text(json.dumps({"date": str(date.today()), "versions": versions, "rows": rows}, indent=1))
+
+
+LANGUAGE_NAMES = {"c": "C", "ada": "Ada", "rust": "Rust"}
 
 
 def cell(value, want):
@@ -181,8 +230,11 @@ def write_markdown(path, rows, versions):
                                                 "lizard -m", "rust-code-analysis"]),
                                ("c", "cognitive", ["knots", "clang-tidy", "rust-code-analysis"]),
                                ("ada", "mccabe", ["knots", "gnatmetric"]),
-                               ("ada", "cognitive", ["knots"])):
-        lines += [f"## {lang.upper() if lang == 'c' else 'Ada'}: {metric}", "",
+                               ("ada", "cognitive", ["knots"]),
+                               ("rust", "mccabe", ["knots", "lizard", "rust-code-analysis"]),
+                               ("rust", "cognitive", ["knots", "rust-code-analysis", "clippy (not Campbell)"]),
+                               ("rust", "sloc", ["knots"])):
+        lines += [f"## {LANGUAGE_NAMES[lang]}: {metric}", "",
                   "| probe | function | definition | " + " | ".join(cols) + " |",
                   "|---|---|---|" + "---|" * len(cols)]
         for r in (r for r in rows if r["metric"] == metric and r.get("language", "c") == lang):
