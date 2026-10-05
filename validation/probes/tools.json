@@ -1,0 +1,397 @@
+{
+ "date": "2026-10-05",
+ "versions": {
+  "knots": "knots 1.18.0 (built from b697fc6)",
+  "lizard": "1.23.0",
+  "clang-tidy": "Ubuntu LLVM version 18.1.3",
+  "rust-code-analysis-cli": "rust-code-analysis-cli 0.0.25",
+  "pmccabe": "Debian package (no --version)"
+ },
+ "rows": [
+  {
+   "probe": "base.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 1,
+   "knots": 1,
+   "pmccabe (modified)": 1,
+   "pmccabe (traditional)": 1,
+   "lizard": 1,
+   "lizard -m": 1,
+   "rust-code-analysis": 1
+  },
+  {
+   "probe": "base.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 0,
+   "knots": 0,
+   "clang-tidy": 0,
+   "rust-code-analysis": 0
+  },
+  {
+   "probe": "bool_sequences.c",
+   "function": "mixed",
+   "metric": "mccabe",
+   "definition": 7,
+   "knots": 7,
+   "pmccabe (modified)": 7,
+   "pmccabe (traditional)": 7,
+   "lizard": 7,
+   "lizard -m": 7,
+   "rust-code-analysis": 7
+  },
+  {
+   "probe": "bool_sequences.c",
+   "function": "mixed",
+   "metric": "cognitive",
+   "definition": 4,
+   "knots": 4,
+   "clang-tidy": 4,
+   "rust-code-analysis": 5
+  },
+  {
+   "probe": "bool_sequences.c",
+   "function": "negated",
+   "metric": "mccabe",
+   "definition": 4,
+   "knots": 4,
+   "pmccabe (modified)": 4,
+   "pmccabe (traditional)": 4,
+   "lizard": 4,
+   "lizard -m": 4,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "bool_sequences.c",
+   "function": "negated",
+   "metric": "cognitive",
+   "definition": 3,
+   "knots": 3,
+   "clang-tidy": 2,
+   "rust-code-analysis": 3
+  },
+  {
+   "probe": "else_if_nested.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 4,
+   "knots": 4,
+   "pmccabe (modified)": 4,
+   "pmccabe (traditional)": 4,
+   "lizard": 4,
+   "lizard -m": 4,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "else_if_nested.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 5,
+   "knots": 5,
+   "clang-tidy": 5,
+   "rust-code-analysis": 5
+  },
+  {
+   "probe": "get_words.c",
+   "function": "getWords",
+   "metric": "mccabe",
+   "definition": 4,
+   "knots": 2,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 4,
+   "lizard": 4,
+   "lizard -m": 2,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "get_words.c",
+   "function": "getWords",
+   "metric": "cognitive",
+   "definition": 1,
+   "knots": 1,
+   "clang-tidy": 1,
+   "rust-code-analysis": 1
+  },
+  {
+   "probe": "goto.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 2,
+   "knots": 2,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 2,
+   "lizard": 2,
+   "lizard -m": 2,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "goto.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 2,
+   "knots": 2,
+   "clang-tidy": 1,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "if_else_chain.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 3,
+   "knots": 3,
+   "pmccabe (modified)": 3,
+   "pmccabe (traditional)": 3,
+   "lizard": 3,
+   "lizard -m": 3,
+   "rust-code-analysis": 3
+  },
+  {
+   "probe": "if_else_chain.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 3,
+   "knots": 3,
+   "clang-tidy": 3,
+   "rust-code-analysis": 3
+  },
+  {
+   "probe": "jumps.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 5,
+   "knots": 5,
+   "pmccabe (modified)": 5,
+   "pmccabe (traditional)": 5,
+   "lizard": 5,
+   "lizard -m": 5,
+   "rust-code-analysis": 5
+  },
+  {
+   "probe": "jumps.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 7,
+   "knots": 7,
+   "clang-tidy": 7,
+   "rust-code-analysis": 7
+  },
+  {
+   "probe": "loops.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 4,
+   "knots": 4,
+   "pmccabe (modified)": 4,
+   "pmccabe (traditional)": 4,
+   "lizard": 4,
+   "lizard -m": 4,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "loops.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 4,
+   "knots": 4,
+   "clang-tidy": 4,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "nesting_increments.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 4,
+   "knots": 4,
+   "pmccabe (modified)": 4,
+   "pmccabe (traditional)": 4,
+   "lizard": 4,
+   "lizard -m": 4,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "nesting_increments.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 6,
+   "knots": 6,
+   "clang-tidy": 6,
+   "rust-code-analysis": 6
+  },
+  {
+   "probe": "preproc_arms.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 2,
+   "knots": 3,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 2,
+   "lizard": 4,
+   "lizard -m": 4,
+   "rust-code-analysis": 3
+  },
+  {
+   "probe": "preproc_arms.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 1,
+   "knots": 2,
+   "clang-tidy": 1,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "recursion.c",
+   "function": "fact",
+   "metric": "mccabe",
+   "definition": 2,
+   "knots": 2,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 2,
+   "lizard": 2,
+   "lizard -m": 2,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "recursion.c",
+   "function": "fact",
+   "metric": "cognitive",
+   "definition": 2,
+   "knots": 2,
+   "clang-tidy": 1,
+   "rust-code-analysis": 1
+  },
+  {
+   "probe": "recursion.c",
+   "function": "fib",
+   "metric": "mccabe",
+   "definition": 2,
+   "knots": 2,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 2,
+   "lizard": 2,
+   "lizard -m": 2,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "recursion.c",
+   "function": "fib",
+   "metric": "cognitive",
+   "definition": 2,
+   "knots": 2,
+   "clang-tidy": 1,
+   "rust-code-analysis": 1
+  },
+  {
+   "probe": "recursion.c",
+   "function": "is_even",
+   "metric": "mccabe",
+   "definition": 2,
+   "knots": 2,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 2,
+   "lizard": 2,
+   "lizard -m": 2,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "recursion.c",
+   "function": "is_even",
+   "metric": "cognitive",
+   "definition": 2,
+   "knots": 2,
+   "clang-tidy": 1,
+   "rust-code-analysis": 1
+  },
+  {
+   "probe": "recursion.c",
+   "function": "is_odd",
+   "metric": "mccabe",
+   "definition": 2,
+   "knots": 2,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 2,
+   "lizard": 2,
+   "lizard -m": 2,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "recursion.c",
+   "function": "is_odd",
+   "metric": "cognitive",
+   "definition": 2,
+   "knots": 2,
+   "clang-tidy": 1,
+   "rust-code-analysis": 1
+  },
+  {
+   "probe": "recursion.c",
+   "function": "leaf",
+   "metric": "mccabe",
+   "definition": 1,
+   "knots": 1,
+   "pmccabe (modified)": 1,
+   "pmccabe (traditional)": 1,
+   "lizard": 1,
+   "lizard -m": 1,
+   "rust-code-analysis": 1
+  },
+  {
+   "probe": "recursion.c",
+   "function": "leaf",
+   "metric": "cognitive",
+   "definition": 0,
+   "knots": 0,
+   "clang-tidy": 0,
+   "rust-code-analysis": 0
+  },
+  {
+   "probe": "sloc.c",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 5,
+   "knots": 5
+  },
+  {
+   "probe": "sum_of_primes.c",
+   "function": "sumOfPrimes",
+   "metric": "mccabe",
+   "definition": 4,
+   "knots": 4,
+   "pmccabe (modified)": 4,
+   "pmccabe (traditional)": 4,
+   "lizard": 4,
+   "lizard -m": 4,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "sum_of_primes.c",
+   "function": "sumOfPrimes",
+   "metric": "cognitive",
+   "definition": 7,
+   "knots": 7,
+   "clang-tidy": 7,
+   "rust-code-analysis": 7
+  },
+  {
+   "probe": "ternary.c",
+   "function": "f",
+   "metric": "mccabe",
+   "definition": 2,
+   "knots": 2,
+   "pmccabe (modified)": 2,
+   "pmccabe (traditional)": 2,
+   "lizard": 2,
+   "lizard -m": 2,
+   "rust-code-analysis": 2
+  },
+  {
+   "probe": "ternary.c",
+   "function": "f",
+   "metric": "cognitive",
+   "definition": 1,
+   "knots": 1,
+   "clang-tidy": 1,
+   "rust-code-analysis": 0
+  }
+ ]
+}

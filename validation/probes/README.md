@@ -30,3 +30,14 @@ CMU/SEI-92-TR-20, 1992.
 
 Coverage today: C (14 probes) and Ada (5). Other languages follow the same
 pattern.
+
+## Across tools
+
+`run_tools.py KNOTS_BIN TOOLS.md [tools.json]` runs the C probes through knots,
+pmccabe (both its columns), lizard (default and `-m`), clang-tidy's
+`readability-function-cognitive-complexity`, and rust-code-analysis, and
+writes `TOOLS.md`: each tool's value beside the definition's, with
+differences in bold. It's generated, so regenerate it rather than editing
+it, and commit it with the tool versions it records. multimetric reports per
+file only, and gnatmetric (Ada) needs a GNAT toolchain, so neither is in
+it yet.
