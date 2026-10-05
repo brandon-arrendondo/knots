@@ -39,10 +39,13 @@ functions differed.
   Agreement with pmccabe on the six pinned C corpora rose from 92.9% to 97.7%.
   The remaining differences are documented (preprocessor arms, and statements
   inside macro arguments).
-- **Two Cognitive Complexity departures are known and still open:** the
-  missing recursion increment, and the flat +1 for `throw`/`raise`, which the
-  specification does not give. Both feed AIRD's dominant term, so they are
-  decided deliberately (fix or document), not as a side effect.
+- **Cognitive Complexity now follows the specification on recursion and
+  `throw`.** The two known departures were closed together: +1 for each
+  function in a recursion cycle (whitepaper 1.7, Appendix B1), and no
+  increment for `throw`/`raise`. Both feed AIRD's dominant term, so the
+  change was measured on the calibration corpora before landing
+  (`validation/README.md`), and the AIRD paper's figures are re-measured at
+  the release that carries it.
 - This doesn't make agreement with other tools unimportant. It makes it
   evidence: a disagreement is investigated against the definition, and
   either side can turn out to be wrong.

@@ -84,9 +84,9 @@ the general-purpose rules do not cover:
   ``subprogram_body``.
 - **Exit statements**: ``exit when Condition`` is +1 to McCabe, Cognitive (flat),
   and ABC (a condition). A bare ``exit`` adds nothing.
-- **Raise**: ``raise`` statements and Ada 2012 raise expressions are +1
-  (flat) to Cognitive and one branch to ABC. They add nothing to McCabe: an
-  unconditional raise is not a decision.
+- **Raise**: ``raise`` statements and Ada 2012 raise expressions are one
+  branch to ABC. They add nothing to McCabe (an unconditional raise is not a
+  decision) or to Cognitive (the specification gives ``throw`` no increment).
 - **Tasking**: task bodies (``task_body``) are discovered as functions, and
   subprograms inside a protected body are discovered too. In a ``select``,
   each ``select_alternative`` is +1 to McCabe, each guard
@@ -171,13 +171,23 @@ Key differences from McCabe:
 - ``else``/``else if`` chains cost less than independent ``if`` chains
 - ``switch`` is a single increment regardless of arm count
 
+Follows the specification (whitepaper 1.7, 2023) on two points other
+implementations skip:
+
+- **Recursion**: +1 for each function in a recursion cycle, direct or
+  indirect (Appendix B1), once per function, not per call. Cycles are found
+  among the functions of one file by name; a cycle through another file or
+  through a receiver-qualified call (``self.f()``) is not seen.
+- **throw/raise**: no increment (Appendix B1; Appendix C scores every
+  ``throw`` 0). ``goto`` keeps its +1.
+
 Compared against Mozilla's
 `rust-code-analysis <https://github.com/mozilla/rust-code-analysis>`_: a
 1.004× mean ratio over **17 matched high-complexity functions**, drawn from
 11,365 Rust functions scanned (285k lines; the corpus was not pinned by
-commit). Agreement with another implementation is evidence, not ground
-truth. Both tools omit the specification's recursion increment, and knots
-adds a flat +1 for ``throw``/``raise``, which the specification does not.
+commit), measured before knots added the recursion increment, which
+rust-code-analysis omits. Agreement with another implementation is
+evidence, not ground truth.
 
 Nesting Depth
 -------------

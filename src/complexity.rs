@@ -419,15 +419,10 @@ fn visit_node_cognitive<'a>(
             push_op = None;
         }
 
-        // Flat jumps: +1, no recursion needed.
-        // goto/throw/raise across C/C++, Rust, Python, PHP (throw_expression); Ada guard; Fortran arithmetic-if.
-        "goto_statement"
-        | "throw_statement"
-        | "raise_statement"
-        | "raise_expression"
-        | "guard"
-        | "throw_expression"
-        | "arithmetic_if_statement" => {
+        // Flat +1: goto (spec Appendix B1), Ada guard, Fortran arithmetic-if.
+        // throw/raise get no increment: the spec's B1 list omits them and its
+        // Appendix C example scores every throw at 0.
+        "goto_statement" | "guard" | "arithmetic_if_statement" => {
             *complexity += 1;
         }
 
@@ -2820,8 +2815,8 @@ mod tests {
         "#;
         let tree = parse_cpp_function(code);
         let node = tree.root_node();
-        // throw: flat +1
-        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+        // throw gets no increment (spec Appendix B1; Appendix C scores throws 0)
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 0);
     }
 
     // ---- C++ new/delete ABC tests ----
@@ -3850,11 +3845,11 @@ mod tests {
 
     #[test]
     fn test_ada_raise_statement_cognitive() {
-        // raise adds +1 flat like goto/throw
+        // raise gets no increment, like throw (spec Appendix B1)
         let code = "procedure P is begin raise Constraint_Error; end P;";
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
-        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 0);
     }
 
     #[test]

@@ -17,7 +17,7 @@ use anyhow::{Context, Result};
 use globset::Glob;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use tree_sitter::{Node, Tree, TreeCursor};
@@ -1014,6 +1014,66 @@ fn suppressed_metrics_for(
     out
 }
 
+/// The file's own call graph: each function name to the names it calls.
+fn local_call_graph(root: Node, source_code: &str) -> HashMap<String, HashSet<String>> {
+    let no_locals = HashSet::new();
+    let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut cursor = root.walk();
+    visit_functions(&mut cursor, source_code, &mut |node, src| {
+        if let Some(name) = get_function_name(node, src) {
+            graph
+                .entry(name)
+                .or_default()
+                .extend(collect_external_call_names(node, src, &no_locals));
+        }
+    });
+    graph
+}
+
+/// Whether `start` can reach itself through calls among the graph's functions.
+fn reaches_itself(graph: &HashMap<String, HashSet<String>>, start: &str) -> bool {
+    let mut stack: Vec<&str> = vec![start];
+    let mut seen: HashSet<&str> = HashSet::new();
+    while let Some(name) = stack.pop() {
+        for callee in graph.get(name).into_iter().flatten() {
+            if callee == start {
+                return true;
+            }
+            if graph.contains_key(callee) && seen.insert(callee) {
+                stack.push(callee);
+            }
+        }
+    }
+    false
+}
+
+/// Functions in this file that sit in a call cycle among the file's own
+/// functions, direct or indirect: Cognitive Complexity gives each "method in
+/// a recursion cycle" +1 (whitepaper 1.7, Appendix B1). Matched by name, so
+/// cycles through another file or through a receiver-qualified call
+/// (`self.f()`) are not seen.
+fn recursive_function_names(root: Node, source_code: &str) -> HashSet<String> {
+    let graph = local_call_graph(root, source_code);
+    graph
+        .keys()
+        .filter(|name| reaches_itself(&graph, name))
+        .cloned()
+        .collect()
+}
+
+/// Names defined in the file, and the subset that is recursive.
+fn file_call_context(root: Node, source_code: &str) -> (HashSet<String>, HashSet<String>) {
+    (
+        collect_local_names(root, source_code),
+        recursive_function_names(root, source_code),
+    )
+}
+
+/// Cognitive Complexity of one function, including the recursion increment.
+fn cognitive_for(node: Node, src: &str, name: &str, recursive: &HashSet<String>) -> u32 {
+    calculate_cognitive_complexity(node, src.as_bytes()) + u32::from(recursive.contains(name))
+}
+
 /// Parse-tree entry point of the library: walk `tree` via [`visit_functions`]
 /// and return one [`FunctionMetrics`] per discovered function, with every
 /// metric in `complexity` computed and `include_rules`/`exclude_rules`
@@ -1029,7 +1089,7 @@ pub fn collect_function_metrics(
     count_anonymous_closures: bool,
 ) -> Vec<FunctionMetrics> {
     let root_node = tree.root_node();
-    let local_names = collect_local_names(root_node, source_code);
+    let (local_names, recursive) = file_call_context(root_node, source_code);
     let mut cursor = root_node.walk();
     let mut metrics = Vec::new();
 
@@ -1053,7 +1113,7 @@ pub fn collect_function_metrics(
         });
         if let Some(name) = name_opt {
             let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
-            let cognitive = calculate_cognitive_complexity(node, src.as_bytes());
+            let cognitive = cognitive_for(node, src, &name, &recursive);
             let nesting = calculate_nesting_depth(node);
             let sloc = {
                 let raw = match sloc_mode {
@@ -1125,6 +1185,59 @@ pub fn collect_function_metrics(
 // The language-registry tests moved to lang-parsing-substrate along with the
 // registry itself (`every_registered_extension_maps_to_its_grammar`,
 // `fixed_form_fortran_sloc_mode`, etc.).
+
+#[cfg(test)]
+mod recursion_tests {
+    use super::*;
+
+    fn c_cognitive(source: &str) -> HashMap<String, u32> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_c::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        collect_function_metrics(&tree, source, "f.c", &None, &None, false)
+            .into_iter()
+            .map(|m| (m.name, m.cognitive))
+            .collect()
+    }
+
+    #[test]
+    fn direct_recursion_adds_one() {
+        // if +1, recursion +1
+        let m = c_cognitive("int fact(int n) { if (n <= 1) return 1; return n * fact(n - 1); }");
+        assert_eq!(m["fact"], 2);
+    }
+
+    #[test]
+    fn recursion_counts_once_per_method_not_per_call() {
+        let m =
+            c_cognitive("int fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }");
+        assert_eq!(m["fib"], 2);
+    }
+
+    #[test]
+    fn indirect_recursion_adds_one_to_each_method_in_the_cycle() {
+        let m = c_cognitive(
+            "int is_odd(int n);\n\
+             int is_even(int n) { if (n == 0) return 1; return is_odd(n - 1); }\n\
+             int is_odd(int n) { if (n == 0) return 0; return is_even(n - 1); }\n\
+             int leaf(int n) { return is_even(n); }",
+        );
+        assert_eq!(m["is_even"], 2);
+        assert_eq!(m["is_odd"], 2);
+        assert_eq!(m["leaf"], 0, "calls into a cycle without being in it");
+    }
+
+    #[test]
+    fn no_recursion_no_increment() {
+        let m = c_cognitive(
+            "int g(int n) { return n + 1; } int f(int n) { if (n) return g(n); return 0; }",
+        );
+        assert_eq!(m["f"], 1);
+        assert_eq!(m["g"], 0);
+    }
+}
 
 #[cfg(test)]
 mod suppression_tests {

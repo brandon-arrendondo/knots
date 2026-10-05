@@ -50,3 +50,19 @@ every arm and pmccabe keeps the first.
 - Test score: 932 changed.
 - AIRD: 819 changed, each by −1 to −3. 58 functions moved down one band; none
   crossed the 85 gate.
+
+**Cognitive Complexity brought to the specification (branch, second change):**
++1 for each function in a recursion cycle, and no increment for
+`throw`/`raise` (whitepaper 1.7, Appendix B1). Against 1.18.0 on the same
+33,000 functions, combined with the McCabe change:
+- Cognitive Complexity: 603 functions changed. All C changes are the +1 for
+  recursion; spot-checked cycles in sqlite are real, e.g. `btreeNext` →
+  `sqlite3BtreeNext` → `btreeNext`.
+- AIRD: up 1 in 395 functions (recursion) and down 1–3 in about 813 (McCabe
+  via the test score). About 75 functions changed band in either direction;
+  none crossed the 85 gate.
+
+**AIRD validation study micro-pilot (32 tasks, `aird_validation_study`
+9118b81):** 30 keep the same AIRD and 2 move by 1 point. None changes
+Cognitive Complexity. McCabe drops sharply for `goto`-heavy tasks (e.g.
+mosquitto `handle__connect` from 68 to 44).
