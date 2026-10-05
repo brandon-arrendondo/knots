@@ -2,8 +2,8 @@
 
 Usage: pmccabe_compare.py KNOTS_BIN OUT.json CORPUS_DIR [CORPUS_DIR ...]
 
-pmccabe column 1 ("modified": a switch counts once) is the variant knots
-claims to match. Functions are matched by (file, start line). Each
+pmccabe column 2 ("traditional": each case counts) is McCabe's definition and
+what knots follows; column 1 ("modified": a switch counts once) is reported too. Functions are matched by (file, start line). Each
 mismatching function is classified by the constructs it contains, so a
 claimed "exact match" can be checked against what actually differs.
 """
@@ -71,7 +71,7 @@ def main():
         matched = sorted(set(k) & set(p))
         diffs, by_tag = [], Counter()
         for key in matched:
-            kv, pv = k[key]["mccabe"], p[key]["modified"]
+            kv, pv = k[key]["mccabe"], p[key]["traditional"]
             if kv != pv:
                 lines = (root / key[0]).read_text(errors="ignore").splitlines()
                 body = "\n".join(lines[key[1] - 1:k[key].get("end_line", key[1])])
@@ -79,7 +79,9 @@ def main():
                 by_tag[" + ".join(tags)] += 1
                 diffs.append({"file": key[0], "line": key[1], "function": k[key]["function"],
                               "knots": kv, "pmccabe": pv, "delta": kv - pv, "constructs": tags})
+        equal_modified = sum(1 for key in matched if k[key]["mccabe"] == p[key]["modified"])
         report["corpora"][root.name] = {
+            "equal_to_modified_column": equal_modified,
             "commit": commit, "knots_functions": len(k), "pmccabe_functions": len(p),
             "matched": len(matched), "equal": len(matched) - len(diffs), "differ": len(diffs),
             "differ_by_constructs": dict(by_tag.most_common()),

@@ -1,7 +1,7 @@
 {
  "date": "2026-10-05",
  "versions": {
-  "knots": "knots 1.18.0 (built from 150b9fb)",
+  "knots": "knots 1.18.0 (built from 2327dab)",
   "lizard": "1.23.0",
   "clang-tidy": "Ubuntu LLVM version 18.1.3",
   "rust-code-analysis-cli": "rust-code-analysis-cli 0.0.25",
@@ -98,7 +98,7 @@
    "function": "getWords",
    "metric": "mccabe",
    "definition": 4,
-   "knots": 2,
+   "knots": 4,
    "pmccabe (modified)": 2,
    "pmccabe (traditional)": 4,
    "lizard": 4,

@@ -6,21 +6,6 @@
 # status: "deliberate" (decided, with the reason below) or "decision pending".
 
 [[departure]]
-probe = "c/get_words.c"
-function = "getWords"
-metric = "mccabe"
-definition = 4
-knots = 2
-status = "decision pending"
-reason = """In C, knots counts a switch once and its case labels not at all (pmccabe's
-"modified" column). McCabe and the SonarSource whitepaper count each case. knots'
-Ada counts each case alternative, so the same metric name follows different rules
-in C and Ada. Choose one rule for every language, or name the difference.
-Evidence (validation/probes/TOOLS.md): pmccabe's traditional column, lizard's
-default and rust-code-analysis count each case (4); pmccabe's modified column and
-lizard -m count the switch once (2); gnatmetric counts each Ada alternative."""
-
-[[departure]]
 probe = "c/preproc_arms.c"
 function = "f"
 metric = "mccabe"

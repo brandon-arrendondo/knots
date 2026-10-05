@@ -87,6 +87,56 @@ fn has_catch_clause(children: &[Node]) -> bool {
         .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"))
 }
 
+/// McCabe decisions of a switch: one per non-default case label, as in
+/// McCabe's definition and the SonarSource whitepaper's getWords (CC 4 for
+/// three cases and a default). Applies where the grammar gives each label a
+/// `case_statement` with a `value` (C, C++, PHP). Grammars that don't (JS,
+/// C#, ...) keep the older count of 1 per switch until they have probes.
+fn switch_decisions(node: Node, source_code: &[u8]) -> u32 {
+    let Some(body) = node.child_by_field_name("body") else {
+        return 1;
+    };
+    let labels = case_labels(body, source_code);
+    if labels.is_empty() {
+        return 1;
+    }
+    labels.iter().filter(|valued| **valued).count() as u32
+}
+
+/// One entry per case label under `body` (true unless it is `default`), not
+/// entering nested switches. Labels are searched below the top level because
+/// a macro used as a statement (sqlite's `deliberate_fall_through`) makes the
+/// parser nest the following labels inside the previous case, or leave them
+/// in an ERROR node as a bare `case` identifier.
+fn case_labels(body: Node, source_code: &[u8]) -> Vec<bool> {
+    let mut labels = Vec::new();
+    let mut stack = vec![body];
+    while let Some(node) = stack.pop() {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "switch_statement" {
+                continue;
+            }
+            labels.extend(case_label(child, node, source_code));
+            stack.push(child);
+        }
+    }
+    labels
+}
+
+/// `Some(valued)` if `node` is a case label, `None` otherwise. Besides real
+/// `case_statement`s, this accepts `case`/`default` read as an identifier
+/// (the parser took `MACRO case X:` for a declaration) or left loose in an
+/// ERROR node. Both are reserved words, so neither can be a real identifier.
+fn case_label(node: Node, parent: Node, source_code: &[u8]) -> Option<bool> {
+    if node.kind() == "case_statement" {
+        return Some(node.child_by_field_name("value").is_some());
+    }
+    let text = node.utf8_text(source_code).ok()?;
+    let loose = node.kind() == "identifier" || parent.kind() == "ERROR";
+    (loose && matches!(text, "case" | "default")).then_some(text == "case")
+}
+
 fn mccabe_logical_op(node: Node, source_code: &[u8], valid_ops: &[&str], complexity: &mut u32) {
     if let Some(op) = node.child_by_field_name("operator") {
         if let Ok(op_text) = op.utf8_text(source_code) {
@@ -192,6 +242,9 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Lua: elseif_statement, repeat_statement
         // Fortran: elseif_clause, select_case/rank/type, where_statement,
         //          elsewhere_clause, arithmetic_if_statement
+        // A switch is one decision per non-default case (see switch_decisions).
+        "switch_statement" => *complexity += switch_decisions(node, source_code),
+
         // Ada: loops and case alternatives are decisions only sometimes.
         "loop_statement" | "case_statement_alternative" => {
             *complexity += ada_decision(node, source_code);
@@ -202,7 +255,6 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         | "do_statement"
         | "for_statement"
         | "for_range_loop"
-        | "switch_statement"
         | "if_expression"
         | "while_expression"
         | "for_expression"
@@ -2821,6 +2873,24 @@ mod tests {
         let node = tree.root_node();
         // base 1 + 1 if = 2; an unconditional throw is not a decision
         assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+    }
+
+    #[test]
+    fn test_c_switch_counts_each_non_default_case() {
+        // three cases and a default: 1 + 3 (getWords, SonarSource whitepaper)
+        let code = "int f(int x) { switch (x) { case 1: return 1; case 2: return 2; case 3: return 3; default: return 0; } }";
+        let tree = parse_c_function(code);
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            4
+        );
+        // a switch with only a default has no decision
+        let code = "int g(int x) { switch (x) { default: return 0; } }";
+        let tree = parse_c_function(code);
+        assert_eq!(
+            calculate_mccabe_complexity(tree.root_node(), code.as_bytes()),
+            1
+        );
     }
 
     #[test]

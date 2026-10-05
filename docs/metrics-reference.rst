@@ -145,8 +145,15 @@ Counts the number of linearly independent paths through a function.
 
 - **Formula**: decision points + 1
 - **Decision points**: ``if``/``elif``, ``while``, ``for``, ``do``,
-  ``switch``/``case``/``match``, ternary, logical operators (``&&``/``||``,
+  ``case``/``match`` arms, ternary, logical operators (``&&``/``||``,
   Python ``and``/``or``), ``except`` (Python and C++)
+- **switch**: one decision per non-default ``case`` label, as in McCabe's
+  definition (the SonarSource whitepaper's ``getWords``: three cases and a
+  ``default`` give 4), in C, C++ and PHP. knots 1.18.0 and earlier counted a
+  C ``switch`` once (pmccabe's "modified" column). Ada counts each ``when``
+  alternative except ``when others``. **Known limitation:** the switch forms
+  of JavaScript/TypeScript, Java, C#, Go, Kotlin, Swift and Scala still count
+  1 per switch until they have definition probes
 - **Not decision points**: unconditional transfers (``goto``, ``throw``,
   ``raise``) add nothing, as in McCabe's definition and pmccabe
 - **Preprocessor**: decisions in every ``#if``/``#ifdef`` arm are counted
@@ -154,13 +161,16 @@ Counts the number of linearly independent paths through a function.
   McCabe spans all its configurations. pmccabe keeps only the first arm by
   default, which accounts for nearly all remaining differences
 - **Thresholds**: ≤10 good, 11–20 moderate, 21+ consider refactoring
-- **Validated**: agrees with pmccabe's "modified" count (``switch`` counted
-  once) on 29,753 of 30,461 C functions (97.7%) across six corpora pinned by
-  commit. 702 of the 708 differing functions contain ``#if`` arms (above,
-  the expected cause; not yet confirmed one by one). Of the other 6, the one
-  examined puts an ``if`` inside a macro argument, which pmccabe's token
-  scan counts and a parser cannot. Reproduce with ``validation/pmccabe_compare.py`` (see
-  ``validation/README.md``)
+- **Validated**: agrees with pmccabe's "traditional" count (each ``case``
+  counted, McCabe's definition) on 29,744 of 30,461 C functions (97.65%)
+  across six corpora pinned by commit. 702 of the 717 differing functions
+  contain ``#if`` arms (above). Most of the other 15 are macro artifacts: a
+  ``switch`` whose ``case`` labels come from macros (neither tool sees them;
+  knots counts the switch as one decision, pmccabe as none), or an ``if``
+  inside a macro argument, which pmccabe's token scan counts and a parser
+  cannot. Case labels that a statement-like macro makes the parser misread
+  (sqlite's ``deliberate_fall_through``) are recovered. Reproduce with
+  ``validation/pmccabe_compare.py`` (see ``validation/README.md``)
 
 Cognitive Complexity
 ---------------------
