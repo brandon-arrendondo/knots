@@ -56,10 +56,12 @@ not a type"), and how parser recovery from preprocessor text gets misread
    configuration, per function: each `#if` chain is one choice, chains on the
    same condition are one choice, and arms are never summed. AIRD and AICP
    model an AI reading the text, which sees every arm, so they read the source
-   as written. No build facts are required. Supplying them (`-D`/`-U`, a
-   compile database) to narrow the configurations is a planned option. Unlike
-   aurora-lint, where a build fact never stops a finding being reported, here
-   the facts say which program is being measured.
+   as written. No build facts are required. How a user could supply them
+   (C/C++ macros, Rust `cfg` and features, C# and Swift symbols, and so on)
+   is an open cross-language design question, deliberately not answered
+   with C-specific flags. Whatever form it takes, the facts would say which
+   program is being measured. That differs from aurora-lint, where a build
+   fact never stops a finding being reported.
 4. **When parser recovery produces structure, diagnose what was misread
    before trusting it.** For example, a C function that appears nested in
    another is nearly always error recovery around a macro. Don't build

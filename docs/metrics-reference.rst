@@ -172,9 +172,10 @@ Counts the number of linearly independent paths through a function.
   sum of arms no build compiles together. Conditions are compared as
   written, so logically linked conditions spelled differently count as
   independent. A function with more than 64 combinations (one in the six C
-  corpora) keeps every arm counted. No build facts are needed; supplying
-  ``-D``/``-U`` or a compile database to narrow the configurations is
-  planned. knots 1.18.0 and earlier summed every arm. pmccabe keeps the
+  corpora) keeps every arm counted. No build facts are needed. How a user
+  could supply them to narrow the configurations is an open design question
+  across all of knots' languages, not only C. knots 1.18.0 and earlier
+  summed every arm. pmccabe keeps the
   first arm, which accounts for nearly all remaining differences
 - **Thresholds**: ≤10 good, 11–20 moderate, 21+ consider refactoring
 - **Validated**: agrees with pmccabe's "traditional" count (each ``case``
