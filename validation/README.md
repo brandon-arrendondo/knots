@@ -226,3 +226,28 @@ Against the previous branch commit:
   Complexity and nesting from local functions reported as functions. Go and Python don't change. AIRD 355 changed (176 up,
   179 down), 21 band changes, no gate crossings.
 - C and Rust (50,926 functions): no change in any field.
+
+**SLOC read from the parse (eighth change).** knots counted SLOC with a text
+scan for `//`, `/*` and `#`. Four probes (`*/sloc_comment_markers.*`) show
+where a scan goes wrong: two comments alone on a line, `"/*"` inside a string
+(the scan then took every following line for a comment), Rust's nested block
+comments, `//` and `/*` in a JS template literal or regular expression, and
+`#` inside a Python string. knots got all four wrong; it now counts a line
+when any non-comment token has text on it, and matches every SLOC probe. No
+other tool does: on the same probes sloccount 2.26, cloc 1.98 and scc 3.5.0
+miss the JS case, cloc the Python and Rust cases, tokei 12.1 the C case
+(`validation/probes/TOOLS.md`).
+
+Per function, against sloccount on each function's own lines: Lua 1,285 of
+1,288 (99.77%, from 99.53%), curl 4,897 of 4,986 (98.22%, from 98.17%); 60 of
+curl's 89 differences have `#if` arms the substrate proves dead and blanks,
+which sloccount counts, and most of the rest are sloccount skipping
+duplicate files. JavaScript (eslint) 87.02% and Python (requests) 63.75%: the
+rest there are the two undecided questions, nested callbacks and docstrings.
+
+Against the previous branch commit: SLOC changed in 16 C functions (AIRD in
+5, 2 band changes, no gate crossings; for example jimsh0's
+`Jim_initjimshInit` 15 → 149 and curl `http_add_hd` 78 → 126, both cut short
+by a `"/*"` in a string, both now equal to sloccount), 7 Rust functions, 33
+JS/TS functions, and 77 elsewhere (gin's `"./testdata/template/*"`,
+Newtonsoft's comments inside verbatim strings). No gate crossings anywhere.

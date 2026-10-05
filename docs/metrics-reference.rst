@@ -14,7 +14,8 @@ All 13 metrics are computed. Python-specific notes:
   ``or``, ``match`` (3.10+), and ternary expressions
 - **Cognitive**: ``elif`` is a flat ``+1`` (no nesting penalty); ``lambda``
   increments nesting depth without adding a base cost
-- **SLOC**: ``#`` comment lines are excluded
+- **SLOC**: ``#`` comments are excluded; a docstring counts as code (see SLOC
+  below)
 - **External calls**: attribute-form calls (``obj.method()``, ``module.func()``)
   are counted as external references
 - **Limitations**: ``for_in_clause`` inside comprehensions is not counted
@@ -272,8 +273,28 @@ Maximum depth of nested control structures (``if``, ``for``, ``while``,
 SLOC (Source Lines of Code)
 ----------------------------
 
-Non-blank, non-comment lines of code within the function body.
+Physical source lines of the function that hold code (Park, *Software Size
+Measurement*, CMU/SEI-92-TR-20, 1992): blank lines and lines holding only
+comments don't count, and a line with code and a comment does.
 
+- **What is a comment comes from the parse**, not from a scan for ``//``,
+  ``/*`` or ``#``: a line counts when any token that isn't part of a comment
+  has text on it. So comment markers inside a string, a template literal or a
+  regular expression are code, and Rust's nested block comments end where
+  Rust says. In C, C++, Rust, Python, JavaScript/TypeScript, Go, Java, C#,
+  PHP, Kotlin, Swift and Scala. Ada, Lua and Fortran still use a scan for
+  their line-comment markers.
+- **Agreement**: on the definition probes knots matches every row; sloccount,
+  cloc, tokei and scc each miss at least one (``validation/probes/TOOLS.md``).
+  Per function on the pinned corpora it agrees with sloccount on 99.77% of
+  Lua's and 98.22% of curl's functions; most of the rest are arms of ``#if``
+  that the substrate proves dead and blanks before measuring, which
+  sloccount counts.
+- **Not yet decided**: a Python docstring counts as code (each line with
+  text), where sloccount, cloc, scc, radon and lizard count it as comment; and
+  the lines of a function nested in another (an arrow callback included) are
+  left out of the outer function's SLOC, where whole-file counters and
+  rust-code-analysis keep them.
 - Useful in combination with complexity metrics
 - Functions >50 SLOC often benefit from decomposition
 - Threshold flag: ``--sloc-threshold``

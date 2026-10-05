@@ -39,12 +39,13 @@ fn load_manifest() -> Manifest {
     toml::from_str(&text).unwrap()
 }
 
-/// The `expect ...` text of a `//` or `--` comment line, if it is one.
+/// The `expect ...` text of a `//`, `--` or `#` comment line, if it is one.
 fn expect_clause(line: &str) -> Option<&str> {
     let line = line.trim_start();
     let comment = line
         .strip_prefix("//")
-        .or_else(|| line.strip_prefix("--"))?;
+        .or_else(|| line.strip_prefix("--"))
+        .or_else(|| line.strip_prefix("#"))?;
     comment.trim().strip_prefix("expect ")
 }
 

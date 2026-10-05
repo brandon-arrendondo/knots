@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -32,7 +33,7 @@ def run(cmd):
 def expectations(path):
     out = []
     for line in path.read_text().splitlines():
-        m = re.match(r"\s*(?://|--)\s*expect\s+(\S+)\s+(.*)", line)
+        m = re.match(r"\s*(?://|--|#)\s*expect\s+(\S+)\s+(.*)", line)
         if m:
             for pair in m.group(2).split():
                 metric, value = pair.split("=")
@@ -153,6 +154,40 @@ def rust_rows(tools, knots_bin):
 
 
 ESLINT_TOOLCHAIN = Path.home() / "toolchain/jsmetrics"
+SLOC_TOOLCHAIN = Path.home() / "toolchain/sloctools"
+
+
+def file_sloc(tools, path):
+    """Code lines per whole-file counter. A SLOC probe holds one function and comments, so the file's count
+    is the function's. sloccount reads a directory and skips duplicate files, so each probe gets its own."""
+    out = {}
+    if tools["sloccount"]:
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copy(path, tmp)
+            for line in run([tools["sloccount"], "--details", tmp]).splitlines():
+                parts = line.split()
+                if parts and parts[0].isdigit() and parts[-1].endswith(path.name):
+                    out["sloccount"] = int(parts[0])
+    if tools["cloc"]:
+        rows = run([tools["cloc"], "--quiet", "--csv", str(path)]).strip().splitlines()
+        out["cloc"] = int(rows[-1].split(",")[4]) if len(rows) > 1 else None
+    if tools["tokei"]:
+        out["tokei"] = json.loads(run([tools["tokei"], "-o", "json", str(path)]))["Total"]["code"]
+    if tools["scc"]:
+        out["scc"] = sum(f["Code"] for f in json.loads(run([tools["scc"], "-f", "json", str(path)])))
+    return out
+
+
+def sloc_rows(tools, knots_bin):
+    rows = []
+    for path in sorted(HERE.glob("*/sloc*")):
+        k = knots(knots_bin, path)
+        counts = file_sloc(tools, path)
+        for function, metric, want in expectations(path):
+            rows.append({"probe": f"{path.parent.name}/{path.name}", "function": function, "metric": metric,
+                         "definition": want, "knots": k.get(function, {}).get(metric), "language": "any",
+                         **counts})
+    return rows
 
 
 def eslint(path, binary_dir, knots_bin):
@@ -212,6 +247,9 @@ def main():
              "lizard": tool("lizard"), "clang-tidy": tool("clang-tidy"),
              "rust-code-analysis-cli": tool("rust-code-analysis-cli"), "pmccabe": tool("pmccabe"),
              "clippy-driver": tool("clippy-driver"),
+             "sloccount": tool("sloccount"), "cloc": tool("cloc"),
+             "tokei": tool("tokei") or (str(SLOC_TOOLCHAIN / "tokei") if (SLOC_TOOLCHAIN / "tokei").exists() else None),
+             "scc": tool("scc") or (str(SLOC_TOOLCHAIN / "scc") if (SLOC_TOOLCHAIN / "scc").exists() else None),
              "eslint": ESLINT_TOOLCHAIN if (ESLINT_TOOLCHAIN / "node_modules/eslint").exists() else None}
     commit = run(["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"]).strip()
     versions = {"knots": f"{version([knots_bin, '--version'])} (built from {commit})",
@@ -222,7 +260,11 @@ def main():
                 "pmccabe": tools["pmccabe"] and "Debian package (no --version)",
                 "gnatmetric": tools["gnatmetric"] and "gnatmetric (libadalang_tools 25.0.0, GNAT 14.2.1 via Alire)",
                 "clippy-driver": tools["clippy-driver"] and version([tools["clippy-driver"], "--version"]),
-                "eslint": tools["eslint"] and js_versions(tools["eslint"])}
+                "eslint": tools["eslint"] and js_versions(tools["eslint"]),
+                "sloccount": tools["sloccount"] and "sloccount 2.26 (Debian package)",
+                "cloc": tools["cloc"] and f"cloc {version([tools['cloc'], '--version'])}",
+                "tokei": tools["tokei"] and version([tools["tokei"], "--version"]).split(" compiled")[0],
+                "scc": tools["scc"] and version([tools["scc"], "--version"])}
     rows = []
     for path in sorted((HERE / "c").glob("*.c")):
         k = knots(knots_bin, path)
@@ -257,12 +299,14 @@ def main():
             rows.append(row)
     rows += rust_rows(tools, knots_bin)
     rows += js_rows(tools, knots_bin)
+    rows = [r for r in rows if r["metric"] != "sloc"] + sloc_rows(tools, knots_bin)
     write_markdown(out_md, rows, versions)
     if out_json:
         out_json.write_text(json.dumps({"date": str(date.today()), "versions": versions, "rows": rows}, indent=1))
 
 
-LANGUAGE_NAMES = {"c": "C", "ada": "Ada", "rust": "Rust", "js": "JavaScript and TypeScript"}
+LANGUAGE_NAMES = {"c": "C", "ada": "Ada", "rust": "Rust", "js": "JavaScript and TypeScript",
+                  "any": "Every language"}
 
 
 def cell(value, want):
@@ -284,10 +328,10 @@ def write_markdown(path, rows, versions):
                                ("ada", "cognitive", ["knots"]),
                                ("rust", "mccabe", ["knots", "lizard", "rust-code-analysis"]),
                                ("rust", "cognitive", ["knots", "rust-code-analysis", "clippy (not Campbell)"]),
-                               ("rust", "sloc", ["knots"]),
+
                                ("js", "mccabe", ["knots", "eslint complexity", "lizard", "rust-code-analysis"]),
                                ("js", "cognitive", ["knots", "sonarjs", "rust-code-analysis"]),
-                               ("js", "sloc", ["knots"])):
+                               ("any", "sloc", ["knots", "sloccount", "cloc", "tokei", "scc"])):
         lines += [f"## {LANGUAGE_NAMES[lang]}: {metric}", "",
                   "| probe | function | definition | " + " | ".join(cols) + " |",
                   "|---|---|---|" + "---|" * len(cols)]

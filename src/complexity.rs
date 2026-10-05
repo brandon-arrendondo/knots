@@ -943,14 +943,53 @@ const NESTING_STRUCTURES: &[&str] = &[
     "do_while_expression",
 ];
 
-/// Calculates Source Lines of Code (SLOC) - non-comment, non-blank lines (C/C++/Rust).
+/// Source Lines of Code (Park 1992): the physical lines of `node` holding
+/// code. A line holds code when any token that isn't part of a comment has
+/// non-whitespace text on it, so a line with code and a comment counts and a
+/// line of comments alone doesn't. What is a comment is the grammar's call
+/// (any node kind ending in `comment`), not a scan for `//` or `/*`: a marker
+/// inside a string, template literal or regular expression is not a comment,
+/// and Rust's nested block comments close where Rust says they do.
 pub fn calculate_sloc(node: Node, source_code: &[u8]) -> u32 {
-    calculate_sloc_inner(node, source_code, false)
+    let tokens = code_tokens(node);
+    let lines: HashSet<usize> = tokens
+        .into_iter()
+        .flat_map(|token| code_rows(token, source_code))
+        .collect();
+    lines.len() as u32
 }
 
-/// Calculates SLOC for Python source — additionally skips lines beginning with `#`.
+/// The tokens under `node` that aren't part of a comment.
+fn code_tokens(node: Node) -> Vec<Node> {
+    let mut tokens = Vec::new();
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        if node.kind().ends_with("comment") {
+            continue;
+        }
+        if node.child_count() == 0 {
+            tokens.push(node);
+        }
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
+    }
+    tokens
+}
+
+/// The rows on which a token has non-whitespace text (a multi-line string
+/// holds code on each line it has text on).
+fn code_rows(token: Node, source_code: &[u8]) -> Vec<usize> {
+    let text = &source_code[token.start_byte()..token.end_byte()];
+    let first = token.start_position().row;
+    let rows = text.split(|&b| b == b'\n').enumerate();
+    rows.filter(|(_, line)| !trim_bytes(line).is_empty())
+        .map(|(i, _)| first + i)
+        .collect()
+}
+
+/// Python SLOC: the same rule; `#` comments are comment nodes.
 pub fn calculate_sloc_python(node: Node, source_code: &[u8]) -> u32 {
-    calculate_sloc_inner(node, source_code, true)
+    calculate_sloc(node, source_code)
 }
 
 /// Counts non-blank, non-comment lines within a node's byte range, where a comment
@@ -1024,71 +1063,6 @@ pub fn calculate_sloc_fixed_form_fortran(node: Node, source_code: &[u8]) -> u32 
     sloc
 }
 
-fn calculate_sloc_inner(node: Node, source_code: &[u8], skip_hash_comments: bool) -> u32 {
-    let start_byte = node.start_byte();
-    let end_byte = node.end_byte();
-
-    if start_byte >= end_byte || end_byte > source_code.len() {
-        return 0;
-    }
-
-    let function_text = &source_code[start_byte..end_byte];
-    let mut sloc = 0;
-    let mut in_multiline_comment = false;
-
-    for line in function_text.split(|&b| b == b'\n') {
-        let trimmed = trim_bytes(line);
-
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        // Handle multi-line comments (C/C++/Rust /* ... */)
-        if in_multiline_comment {
-            if let Some(pos) = find_bytes(trimmed, b"*/") {
-                in_multiline_comment = false;
-                let after_comment = &trimmed[pos + 2..];
-                if !trim_bytes(after_comment).is_empty() {
-                    sloc += 1;
-                }
-            }
-            continue;
-        }
-
-        // Python # comments (# in C/C++/Rust is a preprocessor directive, not a comment)
-        if skip_hash_comments && trimmed.starts_with(b"#") {
-            continue;
-        }
-
-        // Check for start of multi-line comment
-        if let Some(pos) = find_bytes(trimmed, b"/*") {
-            // Check if it ends on the same line
-            if let Some(end_pos) = find_bytes(&trimmed[pos..], b"*/") {
-                let before = &trimmed[..pos];
-                let after = &trimmed[pos + end_pos + 2..];
-                if !trim_bytes(before).is_empty() || !trim_bytes(after).is_empty() {
-                    sloc += 1;
-                }
-            } else {
-                in_multiline_comment = true;
-                if !trim_bytes(&trimmed[..pos]).is_empty() {
-                    sloc += 1;
-                }
-            }
-            continue;
-        }
-
-        // Single-line // comments (C/C++/Rust)
-        if trimmed.starts_with(b"//") {
-            continue;
-        }
-
-        sloc += 1;
-    }
-
-    sloc
-}
-
 fn trim_bytes(bytes: &[u8]) -> &[u8] {
     let mut start = 0;
     let mut end = bytes.len();
@@ -1102,14 +1076,6 @@ fn trim_bytes(bytes: &[u8]) -> &[u8] {
     }
 
     &bytes[start..end]
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || haystack.len() < needle.len() {
-        return None;
-    }
-
-    (0..=(haystack.len() - needle.len())).find(|&i| &haystack[i..i + needle.len()] == needle)
 }
 
 /// Represents ABC complexity components

@@ -1,14 +1,18 @@
 {
  "date": "2026-10-05",
  "versions": {
-  "knots": "knots 1.18.0 (built from 7642b75)",
+  "knots": "knots 1.18.0 (built from 15e6373)",
   "lizard": "1.23.0",
   "clang-tidy": "Ubuntu LLVM version 18.1.3",
   "rust-code-analysis-cli": "rust-code-analysis-cli 0.0.25",
   "pmccabe": "Debian package (no --version)",
   "gnatmetric": "gnatmetric (libadalang_tools 25.0.0, GNAT 14.2.1 via Alire)",
   "clippy-driver": "clippy 0.1.97 (2d8144b788 2026-07-07)",
-  "eslint": "eslint 10.12.0, eslint-plugin-sonarjs 4.2.2, typescript-eslint 8.71.1"
+  "eslint": "eslint 10.12.0, eslint-plugin-sonarjs 4.2.2, typescript-eslint 8.71.1",
+  "sloccount": "sloccount 2.26 (Debian package)",
+  "cloc": "cloc 1.98",
+  "tokei": "tokei 12.1.2",
+  "scc": "scc version 3.5.0"
  },
  "rows": [
   {
@@ -409,13 +413,6 @@
    "knots": 0,
    "clang-tidy": 0,
    "rust-code-analysis": 0
-  },
-  {
-   "probe": "sloc.c",
-   "function": "f",
-   "metric": "sloc",
-   "definition": 5,
-   "knots": 5
   },
   {
    "probe": "sum_of_primes.c",
@@ -907,14 +904,6 @@
    "clippy (not Campbell)": 2
   },
   {
-   "probe": "sloc.rs",
-   "function": "f",
-   "metric": "sloc",
-   "definition": 4,
-   "knots": 4,
-   "language": "rust"
-  },
-  {
    "probe": "sum_of_primes.rs",
    "function": "sum_of_primes",
    "metric": "mccabe",
@@ -1396,14 +1385,6 @@
    "rust-code-analysis": 1
   },
   {
-   "probe": "js/sloc.js",
-   "function": "f",
-   "metric": "sloc",
-   "definition": 4,
-   "knots": 4,
-   "language": "js"
-  },
-  {
    "probe": "js/sum_of_primes.js",
    "function": "sumOfPrimes",
    "metric": "mccabe",
@@ -1549,6 +1530,88 @@
    "language": "js",
    "sonarjs": 1,
    "rust-code-analysis": 1
+  },
+  {
+   "probe": "c/sloc.c",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 5,
+   "knots": 5,
+   "language": "any",
+   "sloccount": 5,
+   "cloc": 5,
+   "tokei": 5,
+   "scc": 5
+  },
+  {
+   "probe": "c/sloc_comment_markers.c",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 7,
+   "knots": 7,
+   "language": "any",
+   "sloccount": 7,
+   "cloc": 7,
+   "tokei": 6,
+   "scc": 7
+  },
+  {
+   "probe": "js/sloc.js",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 4,
+   "knots": 4,
+   "language": "any",
+   "sloccount": 4,
+   "cloc": 4,
+   "tokei": 4,
+   "scc": 4
+  },
+  {
+   "probe": "js/sloc_comment_markers.js",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 7,
+   "knots": 7,
+   "language": "any",
+   "sloccount": 5,
+   "cloc": 5,
+   "tokei": 7,
+   "scc": 5
+  },
+  {
+   "probe": "python/sloc_comment_markers.py",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 5,
+   "knots": 5,
+   "language": "any",
+   "sloccount": 5,
+   "cloc": 3,
+   "tokei": 5,
+   "scc": 5
+  },
+  {
+   "probe": "rust/sloc.rs",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 4,
+   "knots": 4,
+   "language": "any",
+   "cloc": 4,
+   "tokei": 4,
+   "scc": 4
+  },
+  {
+   "probe": "rust/sloc_comment_markers.rs",
+   "function": "f",
+   "metric": "sloc",
+   "definition": 5,
+   "knots": 5,
+   "language": "any",
+   "cloc": 6,
+   "tokei": 5,
+   "scc": 5
   }
  ]
 }
