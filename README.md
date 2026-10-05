@@ -138,6 +138,43 @@ Full documentation is in the `docs/` directory (Sphinx/RST):
 - [Alternatives Comparison](docs/alternatives.rst) — vs. lizard, rust-code-analysis, clippy; cognitive algorithm differences
 - [Troubleshooting](docs/troubleshooting.rst)
 
+## Acknowledgements
+
+knots' numbers are checked against independent tools, and several of its
+fixes were found by disagreeing with one of them. The comparison tables are in
+[validation/probes/TOOLS.md](validation/probes/TOOLS.md) and the corpus
+results in [validation/README.md](validation/README.md).
+
+- **[pmccabe](https://packages.debian.org/sid/pmccabe)** (Paul Bame,
+  Hewlett-Packard): the reference for McCabe complexity on C. Its separate
+  "traditional" and "modified" columns let knots' `switch` counting, and much
+  else, be checked function by function across six C corpora.
+- **[SLOCCount](https://dwheeler.com/sloccount/)** (David A. Wheeler): the
+  reference for physical SLOC, built on the same definition knots follows.
+- **[cloc](https://github.com/AlDanial/cloc)** (Al Danial): the most widely
+  used line counter, and the second SLOC reference.
+- **SLOC, also:** [tokei](https://github.com/XAMPPRocky/tokei) and
+  [scc](https://github.com/boyter/scc).
+- **McCabe and Cognitive Complexity, other languages:**
+  - [lizard](https://github.com/terryyin/lizard) (Terry Yin);
+  - [rust-code-analysis](https://github.com/mozilla/rust-code-analysis) (Mozilla);
+  - clang-tidy's `readability-function-cognitive-complexity` (LLVM);
+  - AdaCore's gnatmetric;
+  - Clippy's `cognitive_complexity` lint (the Rust project);
+  - [ESLint](https://eslint.org/)'s `complexity` rule;
+  - [eslint-plugin-sonarjs](https://github.com/SonarSource/SonarJS) (SonarSource).
+
+The metrics themselves follow their published definitions:
+- T. J. McCabe, "A Complexity Measure" (1976), and G. J. Myers' extension to
+  compound conditions (1977);
+- G. Ann Campbell, *Cognitive Complexity* (SonarSource, version 1.7, 2023);
+- R. E. Park, *Software Size Measurement* (CMU/SEI-92-TR-20, 1992);
+- J. Fitzpatrick's ABC metric (1997).
+
+knots parses every language with [tree-sitter](https://tree-sitter.github.io/)
+and its community grammars. The validation corpora are open-source projects,
+pinned in [validation/README.md](validation/README.md).
+
 ## License
 
 MIT
