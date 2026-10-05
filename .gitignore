@@ -10,3 +10,5 @@ dist/
 
 .todo-sqlite-cli
 *.db
+
+__pycache__/
