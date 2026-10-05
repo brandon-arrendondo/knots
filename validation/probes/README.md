@@ -38,6 +38,12 @@ pmccabe (both its columns), lizard (default and `-m`), clang-tidy's
 `readability-function-cognitive-complexity`, and rust-code-analysis, and
 writes `TOOLS.md`: each tool's value beside the definition's, with
 differences in bold. It's generated, so regenerate it rather than editing
-it, and commit it with the tool versions it records. multimetric reports per
-file only, and gnatmetric (Ada) needs a GNAT toolchain, so neither is in
-it yet.
+it, and commit it with the tool versions it records. For the Ada probes it uses
+AdaCore's gnatmetric (cyclomatic complexity). multimetric reports per file
+only, so it isn't included.
+
+gnatmetric isn't packaged for Ubuntu. It was built here with Alire 2.1.1 as
+`alr install libadalang_tools=25.0.0 gnat_native=14.2.1`, which needs
+`libgmp-dev` and installs to `~/.alire/bin`. GNAT 15.3.1, which Alire
+selects by default, can't build libadalang_tools 25 or 26: gnatcoll and
+libgpr reference `timeval` declarations that GNAT 15 no longer provides.

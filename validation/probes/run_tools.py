@@ -91,6 +91,24 @@ def rust_code_analysis(binary, path):
     return out
 
 
+def gnatmetric(binary, path):
+    """McCabe per subprogram from gnatmetric's XML, run on a copy in a temp dir."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / path.name
+        copy.write_text(path.read_text())
+        xml = Path(tmp) / "out.xml"
+        subprocess.run([binary, "--complexity-cyclomatic", "--generate-xml-output",
+                        f"--xml-file-name={xml}", str(copy)], cwd=tmp, capture_output=True, text=True)
+        text = xml.read_text() if xml.exists() else ""
+    out = {}
+    for unit in re.finditer(r'<unit name="([^"]+)"[^>]*>(.*?)</unit>', text, re.S):
+        m = re.search(r'<metric name="cyclomatic_complexity">(\d+)<', unit.group(2))
+        if m:
+            out[unit.group(1)] = int(m.group(1))
+    return out
+
+
 def version(cmd):
     return (run(cmd).strip().splitlines() or ["?"])[0]
 
@@ -98,7 +116,9 @@ def version(cmd):
 def main():
     knots_bin, out_md = sys.argv[1], Path(sys.argv[2])
     out_json = Path(sys.argv[3]) if len(sys.argv) > 3 else None
-    tools = {"lizard": tool("lizard"), "clang-tidy": tool("clang-tidy"),
+    tools = {"gnatmetric": tool("gnatmetric") or (str(Path.home() / ".alire/bin/gnatmetric")
+                                                  if (Path.home() / ".alire/bin/gnatmetric").exists() else None),
+             "lizard": tool("lizard"), "clang-tidy": tool("clang-tidy"),
              "rust-code-analysis-cli": tool("rust-code-analysis-cli"), "pmccabe": tool("pmccabe")}
     commit = run(["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"]).strip()
     versions = {"knots": f"{version([knots_bin, '--version'])} (built from {commit})",
@@ -106,7 +126,8 @@ def main():
                 "clang-tidy": tools["clang-tidy"] and version([tools["clang-tidy"], "--version"]),
                 "rust-code-analysis-cli": tools["rust-code-analysis-cli"]
                 and version([tools["rust-code-analysis-cli"], "--version"]),
-                "pmccabe": tools["pmccabe"] and "Debian package (no --version)"}
+                "pmccabe": tools["pmccabe"] and "Debian package (no --version)",
+                "gnatmetric": tools["gnatmetric"] and "gnatmetric (libadalang_tools 25.0.0, GNAT 14.2.1 via Alire)"}
     rows = []
     for path in sorted((HERE / "c").glob("*.c")):
         k = knots(knots_bin, path)
@@ -130,6 +151,15 @@ def main():
                 row["clang-tidy"] = None if ct is None else ct.get(function, 0)
                 row["rust-code-analysis"] = rca.get(function, {}).get("cognitive")
             rows.append(row)
+    for path in sorted((HERE / "ada").glob("*.adb")):
+        k = knots(knots_bin, path)
+        g = gnatmetric(tools["gnatmetric"], path) if tools["gnatmetric"] else {}
+        for function, metric, want in expectations(path):
+            row = {"probe": path.name, "function": function, "metric": metric, "definition": want,
+                   "knots": k.get(function, {}).get(metric), "language": "ada"}
+            if metric == "mccabe":
+                row["gnatmetric"] = g.get(function)
+            rows.append(row)
     write_markdown(out_md, rows, versions)
     if out_json:
         out_json.write_text(json.dumps({"date": str(date.today()), "versions": versions, "rows": rows}, indent=1))
@@ -147,12 +177,15 @@ def write_markdown(path, rows, versions):
              "definition. – means the tool doesn't report that metric for that function, or isn't installed.", "",
              "Tool versions: " + "; ".join(v if v.lower().startswith(k.split("-")[0]) else f"{k} {v}"
                                 for k, v in versions.items() if v) + ".", ""]
-    for metric, cols in (("mccabe", ["knots", "pmccabe (modified)", "pmccabe (traditional)", "lizard",
-                                     "lizard -m", "rust-code-analysis"]),
-                         ("cognitive", ["knots", "clang-tidy", "rust-code-analysis"])):
-        lines += [f"## {metric}", "", "| probe | function | definition | " + " | ".join(cols) + " |",
+    for lang, metric, cols in (("c", "mccabe", ["knots", "pmccabe (modified)", "pmccabe (traditional)", "lizard",
+                                                "lizard -m", "rust-code-analysis"]),
+                               ("c", "cognitive", ["knots", "clang-tidy", "rust-code-analysis"]),
+                               ("ada", "mccabe", ["knots", "gnatmetric"]),
+                               ("ada", "cognitive", ["knots"])):
+        lines += [f"## {lang.upper() if lang == 'c' else 'Ada'}: {metric}", "",
+                  "| probe | function | definition | " + " | ".join(cols) + " |",
                   "|---|---|---|" + "---|" * len(cols)]
-        for r in (r for r in rows if r["metric"] == metric):
+        for r in (r for r in rows if r["metric"] == metric and r.get("language", "c") == lang):
             lines.append(f"| {r['probe']} | {r['function']} | {r['definition']} | "
                          + " | ".join(cell(r.get(c), r["definition"]) for c in cols) + " |")
         lines.append("")
