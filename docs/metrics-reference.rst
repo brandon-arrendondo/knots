@@ -84,8 +84,9 @@ the general-purpose rules do not cover:
   ``subprogram_body``.
 - **Exit statements**: ``exit when Condition`` is +1 to McCabe, Cognitive (flat),
   and ABC (a condition). A bare ``exit`` adds nothing.
-- **Raise**: ``raise`` statements and Ada 2012 raise expressions are +1 to
-  McCabe, +1 (flat) to Cognitive, and one branch to ABC.
+- **Raise**: ``raise`` statements and Ada 2012 raise expressions are +1
+  (flat) to Cognitive and one branch to ABC. They add nothing to McCabe: an
+  unconditional raise is not a decision.
 - **Tasking**: task bodies (``task_body``) are discovered as functions, and
   subprograms inside a protected body are discovered too. In a ``select``,
   each ``select_alternative`` is +1 to McCabe, each guard
@@ -142,8 +143,20 @@ Counts the number of linearly independent paths through a function.
 - **Decision points**: ``if``/``elif``, ``while``, ``for``, ``do``,
   ``switch``/``case``/``match``, ternary, logical operators (``&&``/``||``,
   Python ``and``/``or``), ``except`` (Python and C++)
+- **Not decision points**: unconditional transfers (``goto``, ``throw``,
+  ``raise``) add nothing, as in McCabe's definition and pmccabe
+- **Preprocessor**: decisions in every ``#if``/``#ifdef`` arm are counted
+  (except the constant-false arms blanked before parsing), so a function's
+  McCabe spans all its configurations. pmccabe keeps only the first arm by
+  default, which accounts for nearly all remaining differences
 - **Thresholds**: ≤10 good, 11–20 moderate, 21+ consider refactoring
-- **Validated**: 100% match with ``pmccabe`` output across a 32,205-function corpus
+- **Validated**: agrees with pmccabe's "modified" count (``switch`` counted
+  once) on 29,753 of 30,461 C functions (97.7%) across six corpora pinned by
+  commit. 702 of the 708 differing functions contain ``#if`` arms (above,
+  the expected cause; not yet confirmed one by one). Of the other 6, the one
+  examined puts an ``if`` inside a macro argument, which pmccabe's token
+  scan counts and a parser cannot. Reproduce with ``validation/pmccabe_compare.py`` (see
+  ``validation/README.md``)
 
 Cognitive Complexity
 ---------------------
@@ -158,9 +171,13 @@ Key differences from McCabe:
 - ``else``/``else if`` chains cost less than independent ``if`` chains
 - ``switch`` is a single increment regardless of arm count
 
-Validated against Mozilla's
-`rust-code-analysis <https://github.com/mozilla/rust-code-analysis>`_ at
-1.004× mean ratio across 11,365 Rust functions (285k lines).
+Compared against Mozilla's
+`rust-code-analysis <https://github.com/mozilla/rust-code-analysis>`_: a
+1.004× mean ratio over **17 matched high-complexity functions**, drawn from
+11,365 Rust functions scanned (285k lines; the corpus was not pinned by
+commit). Agreement with another implementation is evidence, not ground
+truth. Both tools omit the specification's recursion increment, and knots
+adds a flat +1 for ``throw``/``raise``, which the specification does not.
 
 Nesting Depth
 -------------
@@ -384,9 +401,12 @@ are secondary. Documentation (doc_score) reduces difficulty.
 
 **Recommended CI threshold**: ``--aird-threshold 85``
 
-Validated empirically against Sonnet 4.6 and Opus 4.8: functions scoring
-≥85 were consistently rated significantly harder to modify than mid-band
-or low-band functions.
+**Evidence so far is a pilot, not a validation.** Sonnet 4.6 and Opus 4.8
+rated nine functions (three per AIRD band) on one task. The top band
+separated, the middle band did not, and one function falsified the gate:
+``hostapd_config_read_eap_user`` scored the highest AIRD in the pilot and
+was rated as easy as the low band. A pre-registered validation study is
+designed but not yet run.
 
 **Distribution**: heavily right-skewed. In mature codebases, 67–88% of
 functions score ≤10. The ≥76 bucket accounts for 1–2% of all functions.

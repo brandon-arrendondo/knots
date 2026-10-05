@@ -8,13 +8,13 @@ are genuinely expensive to modify with AI assistance.
 ## Features
 
 - **Multiple Complexity Metrics**: McCabe, Cognitive, Nesting Depth, SLOC, ABC, Test Scoring
-- **AI Cost Metrics**: AIRD (reasoning difficulty) and AICP (context pressure) — corpus-validated against 32,205 functions across 6 open-source C codebases
+- **AI Cost Metrics**: AIRD (reasoning difficulty) and AICP (context pressure) — ceilings calibrated on six open-source C codebases; predictive validation is a pilot so far (see [Metrics Reference](docs/metrics-reference.rst))
 - **Multi-Language**: C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua — same metrics and thresholds across all supported languages
 - **Testability Matrix**: Categorize functions by complexity and testability
 - **Multiple Output Formats**: text, SARIF, JSON, NDJSON (find/xargs-composable), CSV
 - **CI Threshold Enforcement**: exit 1 on any threshold violation; recommended `--aird-threshold 85`
 - **Pre-commit Hook**: native integration, no shim scripts required
-- **Validated**: McCabe matches pmccabe exactly; Cognitive matches Mozilla rust-code-analysis at 1.004× mean ratio (11,365 Rust functions)
+- **Validated**: McCabe agrees with pmccabe on 97.7% of 30,461 C functions across six pinned corpora (nearly all differences are in functions with `#if` arms); Cognitive is within 1.004× of Mozilla rust-code-analysis on 17 matched Rust functions. See [Metrics Reference](docs/metrics-reference.rst)
 
 ## Installation
 
