@@ -110,8 +110,9 @@ exceeds the specified value.
     Return statement count.
 
 ``--aird-threshold <N>``
-    AIRD (AI Reasoning Difficulty) score. Recommended value: ``85``
-    (empirically validated against Sonnet 4.6 and Opus 4.8). Run
+    AIRD (AI Reasoning Difficulty) score. Suggested starting value: ``85``,
+    from a nine-function pilot, not a validation (see
+    :doc:`metrics-reference`). Run
     ``knots --explain aird`` for what drives the score and how to lower it.
 
 ``--aicp-threshold <N>``

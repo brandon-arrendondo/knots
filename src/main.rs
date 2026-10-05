@@ -286,7 +286,7 @@ function. Higher = harder. Cognitive complexity dominates the score.
   AIRD = cognitive/75 ×55 + sloc/200 ×15 + nesting/8 ×15
        + test_score/20 ×15 − doc_score/10 ×15        (clamped 0–100)
 
-Recommended CI threshold: 85 (validated against Sonnet 4.6 and Opus 4.8).
+Suggested CI threshold: 85, from a nine-function pilot (Sonnet 4.6, Opus 4.8), not a validation.
 
 Lower it by: reducing cognitive complexity first — it carries 55 of the 100
 points. Extract deeply nested branches into well-named helpers, then trim
