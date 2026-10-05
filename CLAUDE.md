@@ -126,11 +126,19 @@ Cover: plain function, method on a type, multiple functions, anonymous/closure (
 
 ---
 
+## Departures from a metric's definition
+
+A metric's published definition is the authority (`docs/adr/0001-the-definition-is-the-authority.md`).
+**A departure from it is either recorded with its reason in `validation/probes/conformance.toml`, or it is a bug.**
+`tests/probes.rs` enforces this: it fails on an unrecorded difference and on a recorded one that no longer occurs.
+Before changing a counting rule, add or adjust a probe in `validation/probes/`, with the definition's value and its
+source, and run `validation/compare_versions.py` against the previous release.
+
 ## Language-specific calibration notes
 
 ### Ada — McCabe vs Cognitive for case/dispatch patterns
 
-Ada's `case_statement` counts each `when` alternative as +1 to McCabe (correct per the McCabe definition). A dispatch table with 20 `when` arms contributes 20 to McCabe even if each arm is a single assignment. The same construct contributes only `1 + nesting` to Cognitive complexity.
+Ada's `case_statement` counts each `when` alternative as +1 to McCabe, except `when others` (the default), as in the McCabe definition. A dispatch table with 20 `when` arms contributes 20 to McCabe even if each arm is a single assignment. The same construct contributes only `1 + nesting` to Cognitive complexity.
 
 **Consequence:** McCabe thresholds calibrated against C/Rust code (e.g. the default threshold of 10–15) will fire on routine Ada dispatch tables that are not genuinely complex.
 

@@ -45,6 +45,48 @@ pub fn calculate_mccabe_complexity(node: Node, source_code: &[u8]) -> u32 {
 }
 
 // Increments complexity if node's `operator` field matches one of `valid_ops`.
+/// 1 if an Ada loop or case alternative is a McCabe decision: a loop with a
+/// while or for scheme (a bare `loop` has no predicate; its `exit when` is the
+/// decision), or any case alternative but `when others`, the default.
+fn ada_decision(node: Node, source_code: &[u8]) -> u32 {
+    let mut cursor = node.walk();
+    let mut children = node.children(&mut cursor);
+    let decision = if node.kind() == "loop_statement" {
+        children.any(|c| c.kind() == "iteration_scheme")
+    } else {
+        !children.any(|c| c.kind() == "discrete_choice_list" && is_others(c, source_code))
+    };
+    u32::from(decision)
+}
+
+fn is_others(choices: Node, source_code: &[u8]) -> bool {
+    choices
+        .utf8_text(source_code)
+        .is_ok_and(|t| t.trim().eq_ignore_ascii_case("others"))
+}
+
+/// McCabe contribution of a `try_expression`: 1 for Rust's `?` (always a
+/// branch) and Swift's `try?`; 0 for Swift `try`/`try!` and for a Scala or
+/// Kotlin try block, whose catch clauses are counted on their own.
+fn mccabe_try_expression(node: Node, source_code: &[u8]) -> u32 {
+    let mut cursor = node.walk();
+    let children: Vec<Node> = node.named_children(&mut cursor).collect();
+    u32::from(try_branches(&children, source_code))
+}
+
+fn try_branches(children: &[Node], source_code: &[u8]) -> bool {
+    match children.iter().find(|c| c.kind() == "try_operator") {
+        Some(op) => op.utf8_text(source_code).ok() == Some("try?"),
+        None => !has_catch_clause(children),
+    }
+}
+
+fn has_catch_clause(children: &[Node]) -> bool {
+    children
+        .iter()
+        .any(|c| matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block"))
+}
+
 fn mccabe_logical_op(node: Node, source_code: &[u8], valid_ops: &[&str], complexity: &mut u32) {
     if let Some(op) = node.child_by_field_name("operator") {
         if let Ok(op_text) = op.utf8_text(source_code) {
@@ -81,28 +123,7 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Rust ? operator / Swift try? — both use "try_expression".
         // No try_operator child → Rust ? (always a branch) or Scala/Kotlin try-block (skip).
         // try_operator child text "try?" → Swift short-circuit; "try"/"try!" → no branch.
-        "try_expression" => {
-            let mut cur = node.walk();
-            let try_op = node
-                .named_children(&mut cur)
-                .find(|c| c.kind() == "try_operator");
-            match try_op {
-                None => {
-                    let mut cur2 = node.walk();
-                    let is_try_block = node.named_children(&mut cur2).any(|c| {
-                        matches!(c.kind(), "catch_clause" | "finally_clause" | "catch_block")
-                    });
-                    if !is_try_block {
-                        *complexity += 1;
-                    }
-                }
-                Some(op) => {
-                    if op.utf8_text(source_code).ok() == Some("try?") {
-                        *complexity += 1;
-                    }
-                }
-            }
-        }
+        "try_expression" => *complexity += mccabe_try_expression(node, source_code),
 
         // Ada: logical operators as unnamed keyword children (and / or / xor).
         // Each occurrence is a separate branch point (unlike cognitive, which chain-counts).
@@ -171,6 +192,11 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         // Lua: elseif_statement, repeat_statement
         // Fortran: elseif_clause, select_case/rank/type, where_statement,
         //          elsewhere_clause, arithmetic_if_statement
+        // Ada: loops and case alternatives are decisions only sometimes.
+        "loop_statement" | "case_statement_alternative" => {
+            *complexity += ada_decision(node, source_code);
+        }
+
         "if_statement"
         | "while_statement"
         | "do_statement"
@@ -190,9 +216,7 @@ fn visit_node_mccabe_one(node: Node, source_code: &[u8], complexity: &mut u32) {
         | "match_statement"
         | "for_in_statement"
         | "optional_chain"
-        | "loop_statement"
         | "elsif_statement_item"
-        | "case_statement_alternative"
         | "exception_handler"
         | "select_alternative"
         | "guard"
@@ -370,6 +394,8 @@ fn visit_node_cognitive<'a>(
         | "for_statement"
         | "for_range_loop"
         | "for_in_statement"
+        | "conditional_expression"
+        | "ternary_expression"
         | "while_expression"
         | "for_expression"
         | "loop_expression"
@@ -459,6 +485,13 @@ fn visit_node_cognitive<'a>(
                     }
                 }
             }
+        }
+
+        // A negation starts a new operator sequence: the spec scores
+        // `a && !(b && c)` as two sequences (whitepaper 1.7, "Sequences of
+        // logical operators").
+        "unary_expression" | "not_operator" => {
+            push_op = None;
         }
 
         // Ada: exit when Condition — flat +1 only when the `when` keyword is present.
@@ -3818,20 +3851,20 @@ mod tests {
 
     #[test]
     fn test_ada_exit_when_mccabe() {
-        // loop = +1; exit when = +1; base = 1 → total 3
+        // a bare loop has no predicate; exit when is the one decision → 2
         let code = "procedure P is begin loop exit when X > 0; end loop; end P;";
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
-        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 3);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
     }
 
     #[test]
     fn test_ada_exit_unconditional_mccabe() {
-        // bare `exit` has no condition — no branch, loop = +1, base = 1 → total 2
+        // neither the bare loop nor the bare exit is a decision → 1
         let code = "procedure P is begin loop exit; end loop; end P;";
         let tree = parse_ada(code);
         let node = ada_subprogram_node(&tree);
-        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 2);
+        assert_eq!(calculate_mccabe_complexity(node, code.as_bytes()), 1);
     }
 
     #[test]

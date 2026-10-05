@@ -82,6 +82,10 @@ the general-purpose rules do not cover:
 - **Expression functions**: ``function F (X : T) return T is (expr);`` is
   discovered as a function (``expression_function_declaration``), alongside
   ``subprogram_body``.
+- **Loops and case alternatives (McCabe)**: a ``while`` or ``for`` loop is a
+  decision; a bare ``loop`` is not (its ``exit when`` is). Each ``when``
+  alternative is +1 except ``when others``, the default, as in McCabe's
+  definition.
 - **Exit statements**: ``exit when Condition`` is +1 to McCabe, Cognitive (flat),
   and ABC (a condition). A bare ``exit`` adds nothing.
 - **Raise**: ``raise`` statements and Ada 2012 raise expressions are one
@@ -170,9 +174,15 @@ Key differences from McCabe:
 - Nested structures add more than flat ones (nesting penalty)
 - ``else``/``else if`` chains cost less than independent ``if`` chains
 - ``switch`` is a single increment regardless of arm count
+- The conditional operator (``?:``, Python's ``x if c else y``) is +1 plus
+  nesting and nests what it contains, like ``if`` (whitepaper 1.7, Appendix B).
+  knots 1.18.0 and earlier did not count it
 
-Follows the specification (whitepaper 1.7, 2023) on two points other
-implementations skip:
+Conformance is checked by ``validation/probes`` (see
+``validation/probes/README.md``): every known departure from the
+specification is listed, with its reason, in
+``validation/probes/conformance.toml``. Follows the specification
+(whitepaper 1.7, 2023) on two points other implementations skip:
 
 - **Recursion**: +1 for each function in a recursion cycle, direct or
   indirect (Appendix B1), once per function, not per call. Cycles are found

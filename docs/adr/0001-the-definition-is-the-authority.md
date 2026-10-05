@@ -23,8 +23,10 @@ functions differed.
    A reference implementation is evidence about the definition, not a
    substitute for it.
 2. **Every departure from a definition is deliberate, named and documented**
-   in `docs/metrics-reference.rst`, with its reason. A difference nobody
-   chose is a bug.
+   in `docs/metrics-reference.rst` and `validation/probes/conformance.toml`,
+   with its reason. Chosen means recorded: a sharp departure from the norm
+   with no recorded reason gets re-adjudicated as a bug, even if someone
+   remembers deciding it. `tests/probes.rs` enforces the list.
 3. **A published agreement figure names its corpus pins, the knots commit
    and the script that produced it** (`validation/`), and its sample size
    is the number of functions actually compared.
@@ -46,6 +48,13 @@ functions differed.
   change was measured on the calibration corpora before landing
   (`validation/README.md`), and the AIRD paper's figures are re-measured at
   the release that carries it.
+- **The probe suite found three more departures with no recorded reason,
+  so they were fixed as bugs:** Cognitive Complexity never counted the
+  conditional operator; Ada McCabe counted `when others` and a bare `loop`.
+  A negation (`a && !(b && c)`) also failed to start a new operator
+  sequence, against the specification's own worked example. The ternary fix
+  is the largest change to AIRD: it alters Cognitive Complexity in about
+  11% of the calibration corpora's functions.
 - This doesn't make agreement with other tools unimportant. It makes it
   evidence: a disagreement is investigated against the definition, and
   either side can turn out to be wrong.

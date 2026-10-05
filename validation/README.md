@@ -66,3 +66,27 @@ every arm and pmccabe keeps the first.
 9118b81):** 30 keep the same AIRD and 2 move by 1 point. None changes
 Cognitive Complexity. McCabe drops sharply for `goto`-heavy tasks (e.g.
 mosquitto `handle__connect` from 68 to 44).
+
+**Definition probes (`validation/probes/`, third change).** The probes
+found, and this branch fixed, four more departures with no recorded reason:
+- Cognitive Complexity now counts the conditional operator (+1 plus
+  nesting).
+- A negation now starts a new boolean sequence.
+- Ada McCabe no longer counts `when others`.
+- Ada McCabe no longer counts a bare `loop`.
+
+**Cumulative effect against 1.18.0, the same 32,999 functions, all fixes on
+the branch:**
+- Cognitive Complexity: 3,580 functions changed (10.8%), mostly from the
+  ternary.
+- McCabe: 1,711 changed.
+- AIRD: 3,499 changed; 2,783 rose (by up to +48 for ternary-heavy functions)
+  and 716 fell by 1–3.
+- 376 band changes; **20 functions now cross the 85 gate upward** (for
+  example curl `client_cert` 77 → 91, hostap `bss_update` 67 → 90).
+- The AIRD paper's three exemplars (`hostapd_config_read_eap_user`,
+  `whereLoopAddBtreeIndex`, `luaV_execute`) keep their AIRD (98, 98, 89).
+  Their Cognitive Complexity is already above the ceiling.
+- Micro-pilot (32 tasks): 7 change AIRD, all within their band. The one
+  exception is `http_output_bearer` at 3 → 2, under the L band's listed
+  floor of 3.

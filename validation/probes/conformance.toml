@@ -1,0 +1,38 @@
+# Every known place where knots departs from a metric's published definition
+# (docs/adr/0001-the-definition-is-the-authority.md). tests/probes.rs runs each
+# probe in this directory and fails when knots disagrees with a definition that
+# is not listed here, or when a listed departure no longer occurs.
+#
+# status: "deliberate" (decided, with the reason below) or "decision pending".
+
+[[departure]]
+probe = "c/get_words.c"
+function = "getWords"
+metric = "mccabe"
+definition = 4
+knots = 2
+status = "decision pending"
+reason = """In C, knots counts a switch once and its case labels not at all (pmccabe's
+"modified" column). McCabe and the SonarSource whitepaper count each case. knots'
+Ada counts each case alternative, so the same metric name follows different rules
+in C and Ada. Choose one rule for every language, or name the difference."""
+
+[[departure]]
+probe = "c/preproc_arms.c"
+function = "f"
+metric = "mccabe"
+definition = 2
+knots = 3
+status = "decision pending"
+reason = """knots counts decisions in every #if arm that is not constant-false, so the
+score spans all configurations; the definition applies to one configuration at a
+time (pmccabe keeps the first arm). Compare aurora-lint ADR-0010."""
+
+[[departure]]
+probe = "c/preproc_arms.c"
+function = "f"
+metric = "cognitive"
+definition = 1
+knots = 2
+status = "decision pending"
+reason = "Same cause as the McCabe entry for this probe: every #if arm is counted."
