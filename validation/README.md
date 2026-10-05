@@ -142,9 +142,29 @@ mosquitto's tests, and two `#else` stubs (sqlite `sqlite3SelectDup`, curl
 the same name.
 
 **Cumulative effect against 1.18.0, all changes on the branch:**
-- C (32,999 functions): McCabe 3,277 changed; Cognitive Complexity 3,408;
-  test score 2,092; AIRD 4,335 (3,646 up, 689 down); 510 band changes; the
-  same 20 functions cross the 85 gate.
+- C (32,999 functions): McCabe 3,438 changed; Cognitive Complexity 3,584
+  (both including the sixth change below); test score 2,092; AIRD 4,335
+  (3,646 up, 689 down); 510 band changes; the same 20 functions cross the 85
+  gate.
 - Rust (13,882 functions): McCabe 923 changed; Cognitive Complexity 110;
   test score 766; AIRD 626 (612 up, 14 down); 82 band changes; none crosses
   the 85 gate.
+
+**Preprocessor configurations (sixth change).** McCabe and Cognitive
+Complexity now score a C/C++ function as its worst real configuration (ADR-0002
+§3). Each `#if` chain is one choice, chains on the same condition are one
+choice, and arms are never summed. Four probes cover it (`c/preproc_*.c`), and
+the two recorded `preproc_arms.c` departures are gone. AIRD, AICP and the test
+score read the source as written, so they do not move.
+
+Against the previous branch commit (32,999 functions): McCabe changed in 239
+functions and Cognitive Complexity in 249, all down. Test score, AIRD and AICP
+are unchanged. For example, mosquitto `mosquitto_fopen` goes from 34 to 21:
+the `WIN32` arm (13 decisions) and the POSIX arm (20) had been added together.
+One sqlite function exceeds the 64-combination limit and keeps every arm
+counted.
+
+pmccabe agreement, traditional column: 29,852 of 30,461 (98.00%), up from
+29,744. 597 of the 609 remaining differences are in functions with `#if` arms:
+pmccabe keeps the first arm, knots the worst.
+

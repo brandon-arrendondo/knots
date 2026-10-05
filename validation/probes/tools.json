@@ -1,7 +1,7 @@
 {
  "date": "2026-10-05",
  "versions": {
-  "knots": "knots 1.18.0 (built from fc962c2)",
+  "knots": "knots 1.18.0 (built from b8707f5)",
   "lizard": "1.23.0",
   "clang-tidy": "Ubuntu LLVM version 18.1.3",
   "rust-code-analysis-cli": "rust-code-analysis-cli 0.0.25",
@@ -221,11 +221,32 @@
    "rust-code-analysis": 6
   },
   {
+   "probe": "preproc_additive.c",
+   "function": "h",
+   "metric": "mccabe",
+   "definition": 3,
+   "knots": 3,
+   "pmccabe (modified)": 3,
+   "pmccabe (traditional)": 3,
+   "lizard": 4,
+   "lizard -m": 4,
+   "rust-code-analysis": 3
+  },
+  {
+   "probe": "preproc_additive.c",
+   "function": "h",
+   "metric": "cognitive",
+   "definition": 2,
+   "knots": 2,
+   "clang-tidy": 1,
+   "rust-code-analysis": 2
+  },
+  {
    "probe": "preproc_arms.c",
    "function": "f",
    "metric": "mccabe",
    "definition": 2,
-   "knots": 3,
+   "knots": 2,
    "pmccabe (modified)": 2,
    "pmccabe (traditional)": 2,
    "lizard": 4,
@@ -237,9 +258,51 @@
    "function": "f",
    "metric": "cognitive",
    "definition": 1,
-   "knots": 2,
+   "knots": 1,
    "clang-tidy": 1,
    "rust-code-analysis": 2
+  },
+  {
+   "probe": "preproc_elif.c",
+   "function": "k",
+   "metric": "mccabe",
+   "definition": 3,
+   "knots": 3,
+   "pmccabe (modified)": 3,
+   "pmccabe (traditional)": 3,
+   "lizard": 6,
+   "lizard -m": 6,
+   "rust-code-analysis": 4
+  },
+  {
+   "probe": "preproc_elif.c",
+   "function": "k",
+   "metric": "cognitive",
+   "definition": 2,
+   "knots": 2,
+   "clang-tidy": 0,
+   "rust-code-analysis": 3
+  },
+  {
+   "probe": "preproc_linked.c",
+   "function": "g",
+   "metric": "mccabe",
+   "definition": 4,
+   "knots": 4,
+   "pmccabe (modified)": 5,
+   "pmccabe (traditional)": 5,
+   "lizard": 6,
+   "lizard -m": 6,
+   "rust-code-analysis": 5
+  },
+  {
+   "probe": "preproc_linked.c",
+   "function": "g",
+   "metric": "cognitive",
+   "definition": 3,
+   "knots": 3,
+   "clang-tidy": 3,
+   "rust-code-analysis": 4
   },
   {
    "probe": "recursion.c",

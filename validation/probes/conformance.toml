@@ -9,26 +9,6 @@
 # "decision pending".
 
 [[departure]]
-probe = "c/preproc_arms.c"
-function = "f"
-metric = "mccabe"
-definition = 2
-knots = 3
-status = "decision pending"
-reason = """knots counts decisions in every #if arm that is not constant-false, so the
-score spans all configurations; the definition applies to one configuration at a
-time (pmccabe keeps the first arm). Compare aurora-lint ADR-0010."""
-
-[[departure]]
-probe = "c/preproc_arms.c"
-function = "f"
-metric = "cognitive"
-definition = 1
-knots = 2
-status = "decision pending"
-reason = "Same cause as the McCabe entry for this probe: every #if arm is counted."
-
-[[departure]]
 probe = "rust/recursion.rs"
 function = "depth"
 metric = "cognitive"

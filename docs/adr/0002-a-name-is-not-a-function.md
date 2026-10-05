@@ -51,8 +51,15 @@ not a type"), and how parser recovery from preprocessor text gets misread
    different configurations, never one node. The substrate's dead-code
    detection (`blank_dead_code`: C/C++ `#if 0`, `__cplusplus` and locally
    proven macros, C# and Swift `#if`) removes arms no build compiles before
-   parsing. What remains are live alternatives, and how a metric scores them
-   is a separate decision.
+   parsing. What remains are live alternatives. A metric with a published
+   definition (McCabe, Cognitive Complexity) scores the function's worst real
+   configuration, per function: each `#if` chain is one choice, chains on the
+   same condition are one choice, and arms are never summed. AIRD and AICP
+   model an AI reading the text, which sees every arm, so they read the source
+   as written. No build facts are required. Supplying them (`-D`/`-U`, a
+   compile database) to narrow the configurations is a planned option. Unlike
+   aurora-lint, where a build fact never stops a finding being reported, here
+   the facts say which program is being measured.
 4. **When parser recovery produces structure, diagnose what was misread
    before trusting it.** For example, a C function that appears nested in
    another is nearly always error recovery around a macro. Don't build

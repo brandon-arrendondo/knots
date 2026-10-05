@@ -37,10 +37,18 @@ fn is_ada_case_statement(node: Node) -> bool {
 /// Formula: M = E - N + 2P where E = edges, N = nodes, P = connected components
 /// Simplified: Count decision points + 1
 pub fn calculate_mccabe_complexity(node: Node, source_code: &[u8]) -> u32 {
+    calculate_mccabe_complexity_skipping(node, source_code, &HashSet::new())
+}
+
+/// McCabe complexity with the subtrees in `skipped` left out: one
+/// preprocessor configuration of the function (see `configurations`).
+pub fn calculate_mccabe_complexity_skipping(
+    node: Node,
+    source_code: &[u8],
+    skipped: &HashSet<usize>,
+) -> u32 {
     let mut complexity = 1; // Base complexity
-
-    visit_node_mccabe(node, source_code, &mut complexity);
-
+    visit_node_mccabe(node, source_code, skipped, &mut complexity);
     complexity
 }
 
@@ -190,9 +198,17 @@ fn or_alternatives(pattern: Node, guard: Option<Node>) -> u32 {
 // under a naive recursive walk of this exact shape. Order doesn't matter —
 // every match arm below only increments `complexity` — so children are
 // pushed in whatever order `Node::children` yields them.
-fn visit_node_mccabe(root: Node, source_code: &[u8], complexity: &mut u32) {
+fn visit_node_mccabe(
+    root: Node,
+    source_code: &[u8],
+    skipped: &HashSet<usize>,
+    complexity: &mut u32,
+) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
+        if skipped.contains(&node.id()) {
+            continue;
+        }
         // Skip unnamed tokens (punctuation, keyword literals) and their subtree.
         // Without this guard, Ada's named `guard` rule would fire on Swift's
         // unnamed `guard` keyword token, and similar cross-grammar collisions
@@ -370,8 +386,18 @@ fn logical_decision(node: Node, source_code: &[u8]) -> u32 {
 /// Calculates cognitive complexity for a function
 /// Based on the Cognitive Complexity specification by SonarSource
 pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
+    calculate_cognitive_complexity_skipping(node, source_code, &HashSet::new())
+}
+
+/// Cognitive Complexity with the subtrees in `skipped` left out: one
+/// preprocessor configuration of the function (see `configurations`).
+pub fn calculate_cognitive_complexity_skipping(
+    node: Node,
+    source_code: &[u8],
+    skipped: &HashSet<usize>,
+) -> u32 {
     let mut complexity = 0;
-    walk_cognitive(node, source_code, 0, &mut complexity, None);
+    walk_cognitive(node, source_code, skipped, &mut complexity);
     complexity
 }
 
@@ -384,12 +410,14 @@ pub fn calculate_cognitive_complexity(node: Node, source_code: &[u8]) -> u32 {
 fn walk_cognitive<'a>(
     root: Node<'a>,
     source_code: &'a [u8],
-    nesting_level: u32,
+    skipped: &HashSet<usize>,
     complexity: &mut u32,
-    parent_binary_op: Option<&'a str>,
 ) {
-    let mut stack = vec![(root, nesting_level, parent_binary_op)];
+    let mut stack = vec![(root, 0, None)];
     while let Some((node, nesting_level, parent_binary_op)) = stack.pop() {
+        if skipped.contains(&node.id()) {
+            continue;
+        }
         if node.kind() == "case_statement" && !is_ada_case_statement(node) {
             push_children_cognitive(&mut stack, node, nesting_level, parent_binary_op);
             continue;
@@ -1302,12 +1330,11 @@ impl TestScoringMetric {
 /// Calculates test scoring metric for assessing test generation difficulty
 /// Score components: signature, dependency, observable behavior, implementation, documentation
 pub fn calculate_test_scoring(node: Node, source_code: &[u8]) -> TestScoringMetric {
+    // Use existing cyclomatic complexity for implementation score
+    let mccabe = calculate_mccabe_complexity(node, source_code);
     let signature = calculate_signature_complexity(node, source_code);
     let dependency = calculate_dependency_score(node, source_code);
     let observable = calculate_observable_behavior_score(node, source_code);
-
-    // Use existing cyclomatic complexity for implementation score
-    let mccabe = calculate_mccabe_complexity(node, source_code);
     let implementation = map_cyclomatic_to_implementation_score(mccabe);
 
     let documentation = calculate_documentation_score(node, source_code);

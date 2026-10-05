@@ -2478,6 +2478,7 @@ mod tests {
             end_line: 2,
             mccabe: 0,
             cognitive,
+            aird_cognitive: cognitive,
             nesting,
             sloc,
             abc_magnitude: 0.0,
@@ -3767,16 +3768,6 @@ class C {
     /// `std` and external crates add no edge.
     #[test]
     fn rust_fixture_crate_file_ce() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("sample-files/rust_crate");
-        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
-        let coupling = collect_import_graph(&files).coupling();
-        let ce: HashMap<String, u32> = coupling
-            .iter()
-            .map(|c| {
-                let rel = Path::new(&c.file_path).strip_prefix(&dir).unwrap();
-                (rel.to_string_lossy().replace('\\', "/"), c.ce)
-            })
-            .collect();
         let expected: HashMap<String, u32> = [
             ("src/lib.rs", 1),
             ("src/a.rs", 1),
@@ -3792,7 +3783,23 @@ class C {
         .into_iter()
         .map(|(f, n)| (f.to_string(), n))
         .collect();
-        assert_eq!(ce, expected);
+        assert_eq!(fixture_crate_ce(), expected);
+    }
+
+    /// Ce of each file in the Rust fixture crate, keyed by its path in the crate.
+    fn fixture_crate_ce() -> HashMap<String, u32> {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("sample-files/rust_crate");
+        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
+        let coupling = collect_import_graph(&files).coupling();
+        coupling
+            .iter()
+            .map(|c| (path_in(&dir, &c.file_path), c.ce))
+            .collect()
+    }
+
+    fn path_in(dir: &Path, path: &str) -> String {
+        let rel = Path::new(path).strip_prefix(dir).unwrap();
+        rel.to_string_lossy().replace('\\', "/")
     }
 }
 

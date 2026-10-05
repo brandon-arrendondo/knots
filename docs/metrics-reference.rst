@@ -164,15 +164,23 @@ Counts the number of linearly independent paths through a function.
   and a ``loop`` as a decision, and didn't count ``let ... else``
 - **Not decision points**: unconditional transfers (``goto``, ``throw``,
   ``raise``) add nothing, as in McCabe's definition and pmccabe
-- **Preprocessor**: decisions in every ``#if``/``#ifdef`` arm are counted
-  (except the constant-false arms blanked before parsing), so a function's
-  McCabe spans all its configurations. pmccabe keeps only the first arm by
-  default, which accounts for nearly all remaining differences
+- **Preprocessor (C/C++)**: a function is scored as its worst real
+  configuration (ADR-0002 §3). Arms the file proves dead are blanked before
+  parsing; each remaining ``#if``/``#ifdef`` chain is one choice among its
+  arms, chains on the same condition (``#ifdef X`` and a later ``#ifndef X``)
+  are one choice, and McCabe is the maximum over the combinations, never a
+  sum of arms no build compiles together. Conditions are compared as
+  written, so logically linked conditions spelled differently count as
+  independent. A function with more than 64 combinations (one in the six C
+  corpora) keeps every arm counted. No build facts are needed; supplying
+  ``-D``/``-U`` or a compile database to narrow the configurations is
+  planned. knots 1.18.0 and earlier summed every arm. pmccabe keeps the
+  first arm, which accounts for nearly all remaining differences
 - **Thresholds**: ≤10 good, 11–20 moderate, 21+ consider refactoring
 - **Validated**: agrees with pmccabe's "traditional" count (each ``case``
-  counted, McCabe's definition) on 29,744 of 30,461 C functions (97.65%)
-  across six corpora pinned by commit. 702 of the 717 differing functions
-  contain ``#if`` arms (above). Most of the other 15 are macro artifacts: a
+  counted, McCabe's definition) on 29,852 of 30,461 C functions (98.00%)
+  across six corpora pinned by commit. 597 of the 609 differing functions
+  contain ``#if`` arms (above). Most of the other 12 are macro artifacts: a
   ``switch`` whose ``case`` labels come from macros (neither tool sees them;
   knots counts the switch as one decision, pmccabe as none), or an ``if``
   inside a macro argument, which pmccabe's token scan counts and a parser
@@ -195,6 +203,8 @@ Key differences from McCabe:
 - The conditional operator (``?:``, Python's ``x if c else y``) is +1 plus
   nesting and nests what it contains, like ``if`` (whitepaper 1.7, Appendix B).
   knots 1.18.0 and earlier did not count it
+- In C/C++ the ``cognitive`` column is the function's worst real
+  preprocessor configuration, as for McCabe above
 
 Conformance is checked by ``validation/probes`` (see
 ``validation/probes/README.md``): every known departure from the
@@ -367,6 +377,15 @@ Each ratio is capped at 1 before it is weighted (a negative ``test_score`` or
 ``doc_score`` counts as 0), and the sum is rounded and clamped to 0–100.
 ``state_coupling`` is the explicit parameter count plus the number of
 distinct ``self``/``this`` fields the function touches.
+
+AIRD reads the source **as written**. Its ``cognitive`` input (and the McCabe
+behind ``test_score``) counts every live ``#if`` arm, where the ``mccabe`` and
+``cognitive`` columns report the worst real configuration. McCabe and
+Cognitive Complexity are published definitions of one program; AIRD models an
+AI working on the text, which reads, greps and cuts the file with every arm
+in it and has to work out which arm a change concerns. AICP's inputs (SLOC,
+external calls) are as written too. Whether the number of configurations
+itself adds difficulty is a question for the validation study.
 
 With ``--recursive``, the clamped score is then multiplied by a file-level
 coupling factor and rounded and clamped again:

@@ -14,7 +14,7 @@ are genuinely expensive to modify with AI assistance.
 - **Multiple Output Formats**: text, SARIF, JSON, NDJSON (find/xargs-composable), CSV
 - **CI Threshold Enforcement**: exit 1 on any threshold violation; recommended `--aird-threshold 85`
 - **Pre-commit Hook**: native integration, no shim scripts required
-- **Validated**: McCabe agrees with pmccabe's traditional (per-`case`) count on 97.65% of 30,461 C functions across six pinned corpora (nearly all differences are in functions with `#if` arms); Cognitive follows the SonarSource specification, including the recursion increment other implementations omit. See [Metrics Reference](docs/metrics-reference.rst)
+- **Validated**: McCabe agrees with pmccabe's traditional (per-`case`) count on 98.00% of 30,461 C functions across six pinned corpora (nearly all differences are in functions with `#if` arms); Cognitive follows the SonarSource specification, including the recursion increment other implementations omit. See [Metrics Reference](docs/metrics-reference.rst)
 
 ## Installation
 

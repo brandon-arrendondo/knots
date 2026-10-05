@@ -411,6 +411,7 @@ mod tests {
             end_line: 2,
             mccabe: 0,
             cognitive: 0,
+            aird_cognitive: 0,
             nesting: 0,
             sloc: 0,
             abc_magnitude: 0.0,

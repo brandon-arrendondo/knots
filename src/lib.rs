@@ -22,6 +22,7 @@ use std::fs;
 use std::path::Path;
 use tree_sitter::{Node, Tree, TreeCursor};
 pub mod complexity;
+mod configurations;
 pub mod coupling;
 mod recursion;
 pub mod rust_modules;
@@ -34,6 +35,7 @@ pub use complexity::{
     calculate_sloc_fortran, calculate_sloc_python, calculate_state_coupling,
     calculate_test_scoring, calculate_unreachable_blocks, TestScoringMetric,
 };
+use complexity::{calculate_cognitive_complexity_skipping, calculate_mccabe_complexity_skipping};
 
 // File-level Ce/Ca/Instability coupling metrics, built on the substrate's
 // syntactic import extraction.
@@ -286,8 +288,14 @@ pub struct FunctionMetrics {
     pub end_line: u32,
     /// McCabe cyclomatic complexity.
     pub mccabe: u32,
-    /// Cognitive complexity (Sonar's structural-nesting-weighted measure).
+    /// Cognitive complexity (Sonar's structural-nesting-weighted measure),
+    /// of the function's worst real preprocessor configuration.
     pub cognitive: u32,
+    /// Cognitive complexity as written, every live preprocessor arm counted:
+    /// AIRD's input. An AI reads, greps and cuts the source as written, all
+    /// arms included, and has to work out which arm a change concerns.
+    /// Equal to `cognitive` wherever a function has no live alternatives.
+    pub aird_cognitive: u32,
     /// Maximum nesting depth of control-flow structures.
     pub nesting: u32,
     /// Source lines of code, excluding blank lines, comments, and any
@@ -340,7 +348,7 @@ impl FunctionMetrics {
     /// `--recursive` mode.
     pub fn aird_components(&self) -> complexity::AirdComponents {
         aird_components(
-            self.cognitive,
+            self.aird_cognitive,
             self.sloc,
             self.nesting,
             self.test_scoring.total_score,
@@ -1025,8 +1033,80 @@ fn file_call_context(root: Node, source_code: &str) -> (HashSet<String>, HashSet
 }
 
 /// Cognitive Complexity of one function, including the recursion increment.
-fn cognitive_for(node: Node, src: &str, recursive: &HashSet<usize>) -> u32 {
+fn language_configurations(
+    node: Node,
+    bytes: &[u8],
+    language_key: Option<&str>,
+) -> Vec<HashSet<usize>> {
+    match language_key {
+        Some("c" | "cpp") => configurations::configurations(node, bytes),
+        _ => vec![HashSet::new()],
+    }
+}
+
+/// McCabe and Cognitive Complexity (with the recursion increment) of the
+/// function's worst real preprocessor configuration, each taken on its own
+/// (ADR-0002 §3). Only C and C++ have configurations here; elsewhere the
+/// function is scored as written.
+fn worst_configuration(
+    node: Node,
+    src: &str,
+    language_key: Option<&str>,
+    recursive: &HashSet<usize>,
+) -> (u32, u32) {
+    let bytes = src.as_bytes();
+    let configurations = language_configurations(node, bytes, language_key);
+    let mccabe = worst(&configurations, |skipped| {
+        calculate_mccabe_complexity_skipping(node, bytes, skipped)
+    });
+    let cognitive = worst(&configurations, |skipped| {
+        calculate_cognitive_complexity_skipping(node, bytes, skipped)
+    });
+    (
+        mccabe,
+        cognitive + u32::from(recursive.contains(&node.id())),
+    )
+}
+
+/// `<anonymous>@line:col` for an unnamed closure or lambda, when
+/// `count_anonymous_closures` asks for them.
+fn anonymous_name(
+    node: Node,
+    sloc_mode: SlocMode,
+    count_anonymous_closures: bool,
+) -> Option<String> {
+    let is_anonymous_node = matches!(
+        node.kind(),
+        "func_literal" | "arrow_function" | "function_expression" | "generator_function"
+    ) || (sloc_mode == SlocMode::Lua
+        && node.kind() == "function_definition");
+    let pos = node.start_position();
+    (count_anonymous_closures && is_anonymous_node)
+        .then(|| format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
+}
+
+/// SLOC by the file's comment syntax, without nested functions' own lines.
+fn function_sloc(node: Node, src: &str, sloc_mode: SlocMode) -> u32 {
+    raw_sloc(node, src.as_bytes(), sloc_mode).saturating_sub(nested_fn_sloc(node, src, sloc_mode))
+}
+
+fn raw_sloc(node: Node, bytes: &[u8], sloc_mode: SlocMode) -> u32 {
+    match sloc_mode {
+        SlocMode::Python => calculate_sloc_python(node, bytes),
+        SlocMode::Ada => calculate_sloc_ada(node, bytes),
+        SlocMode::Fortran => calculate_sloc_fortran(node, bytes),
+        SlocMode::Lua => complexity::calculate_sloc_lua(node, bytes),
+        SlocMode::Default => calculate_sloc(node, bytes),
+    }
+}
+
+/// Cognitive Complexity with every arm counted, plus the recursion increment.
+fn cognitive_as_written(node: Node, src: &str, recursive: &HashSet<usize>) -> u32 {
     calculate_cognitive_complexity(node, src.as_bytes()) + u32::from(recursive.contains(&node.id()))
+}
+
+fn worst(configurations: &[HashSet<usize>], score: impl Fn(&HashSet<usize>) -> u32) -> u32 {
+    configurations.iter().map(score).max().unwrap_or(0)
 }
 
 /// Parse-tree entry point of the library: walk `tree` via [`visit_functions`]
@@ -1053,33 +1133,13 @@ pub fn collect_function_metrics(
     let inline_suppressions = suppressions(source_code, sloc_mode);
     let cfg_language_key = language_info_for_file(Path::new(file_path)).map(|info| info.key);
     visit_functions(&mut cursor, source_code, &mut |node, src| {
-        let name_opt = get_function_name(node, src).or_else(|| {
-            let is_anonymous_node = matches!(
-                node.kind(),
-                "func_literal" | "arrow_function" | "function_expression" | "generator_function"
-            ) || (sloc_mode == SlocMode::Lua
-                && node.kind() == "function_definition");
-            if count_anonymous_closures && is_anonymous_node {
-                let pos = node.start_position();
-                Some(format!("<anonymous>@{}:{}", pos.row + 1, pos.column + 1))
-            } else {
-                None
-            }
-        });
+        let name_opt = get_function_name(node, src)
+            .or_else(|| anonymous_name(node, sloc_mode, count_anonymous_closures));
         if let Some(name) = name_opt {
-            let mccabe = calculate_mccabe_complexity(node, src.as_bytes());
-            let cognitive = cognitive_for(node, src, &recursive);
+            let (mccabe, cognitive) = worst_configuration(node, src, cfg_language_key, &recursive);
+            let aird_cognitive = cognitive_as_written(node, src, &recursive);
             let nesting = calculate_nesting_depth(node);
-            let sloc = {
-                let raw = match sloc_mode {
-                    SlocMode::Python => calculate_sloc_python(node, src.as_bytes()),
-                    SlocMode::Ada => calculate_sloc_ada(node, src.as_bytes()),
-                    SlocMode::Fortran => calculate_sloc_fortran(node, src.as_bytes()),
-                    SlocMode::Lua => complexity::calculate_sloc_lua(node, src.as_bytes()),
-                    SlocMode::Default => calculate_sloc(node, src.as_bytes()),
-                };
-                raw.saturating_sub(nested_fn_sloc(node, src, sloc_mode))
-            };
+            let sloc = function_sloc(node, src, sloc_mode);
             let abc = calculate_abc_complexity(node, src.as_bytes());
             let abc_magnitude = abc.magnitude();
             let return_count = calculate_return_count(node);
@@ -1087,7 +1147,7 @@ pub fn collect_function_metrics(
             let external_calls = calculate_external_calls(node, src, &local_names);
             let state_coupling = calculate_state_coupling(node, src.as_bytes());
             let aird = calculate_aird(
-                cognitive,
+                aird_cognitive,
                 sloc,
                 nesting,
                 test_scoring.total_score,
@@ -1117,6 +1177,7 @@ pub fn collect_function_metrics(
                     end_line,
                     mccabe,
                     cognitive,
+                    aird_cognitive,
                     nesting,
                     sloc,
                     abc_magnitude,
