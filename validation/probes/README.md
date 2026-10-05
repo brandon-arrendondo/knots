@@ -28,8 +28,17 @@ Extension to the Cyclomatic Measure of Program Complexity", SIGPLAN Notices
 whitepaper, version 1.7, 29 August 2023; Park, *Software Size Measurement*,
 CMU/SEI-92-TR-20, 1992.
 
-Coverage today: C (14 probes), Ada (5) and Rust (14). Other languages follow
-the same pattern.
+Coverage today: C (17 probes), Ada (5), Rust (14), JavaScript (16),
+TypeScript (3, under `ts/`), and one probe each for C++ and Java (exception
+handlers, which share a node kind with JavaScript). Other languages follow the
+same pattern.
+
+Where a definition needs a language's semantics to be read (what `??`, `?.`,
+a default parameter or `this` does), the probe cites the language
+specification: the Rust Reference, ECMA-262, the TypeScript Handbook. The
+whitepaper's one language-specific rule, Appendix A's "JavaScript: Missing
+class structures" (an outer function holding only declarations doesn't nest
+the functions in it), has its own worked examples in `js/faux_class.js`.
 
 ## Across tools
 
@@ -43,7 +52,14 @@ uses lizard and rust-code-analysis, and clippy's `cognitive_complexity` lint
 for information only: that lint starts every function at 1 and isn't
 Campbell's algorithm. Where the Rust Reference's semantics are needed to read a
 definition (match arms, guards) the probe cites it. For the Ada probes it uses
-AdaCore's gnatmetric (cyclomatic complexity). multimetric reports per file
+AdaCore's gnatmetric (cyclomatic complexity). For the JavaScript and
+TypeScript probes it uses ESLint's `complexity` rule (`variant: "classic"`),
+eslint-plugin-sonarjs's `cognitive-complexity` (S3776, SonarSource's own
+implementation for JavaScript), lizard and rust-code-analysis, through
+`eslint_probe.cjs`. sonarjs reports only functions above its threshold, so a
+function it omits scored 0. Install the three Node packages into
+`~/toolchain/jsmetrics` (`npm i eslint eslint-plugin-sonarjs
+typescript-eslint typescript`); `run_tools.py` reports them absent otherwise. multimetric reports per file
 only, so it isn't included.
 
 gnatmetric isn't packaged for Ubuntu. It was built here with Alire 2.1.1 as

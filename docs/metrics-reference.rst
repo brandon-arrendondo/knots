@@ -26,13 +26,32 @@ Knots supports JavaScript (``.js``, ``.mjs``, ``.cjs``, ``.jsx``) and
 TypeScript (``.ts``, ``.tsx``). All 13 metrics are computed. Notes:
 
 - **McCabe**: counts ``if``, ``while``, ``do``, ``for``, ``for...in``,
-  ``for...of``, ``switch``, ``ternary`` (``?:``), ``&&``, ``||``, and ``??``
-  (nullish coalescing)
-- **Cognitive**: ``for...in`` and ``for...of`` are treated as loop structures
-  (+1 + nesting penalty); arrow functions (``() =>``) increment nesting depth
-  without adding a base cost; ``??`` chains count once per contiguous sequence
-  (same as ``&&``/``||``)
-- **SLOC**: ``//`` and ``/* */`` comments are excluded (same as C/C++)
+  ``for...of``, each non-default ``case``, ``catch``, the conditional operator
+  (``?:``), ``&&``, ``||``, ``??``, optional chaining (``?.``), logical
+  assignment (``||=``, ``&&=``, ``??=``) and each default value (a parameter
+  default or a destructuring default). ECMA-262 evaluates each of these
+  conditionally, so each is a decision; ESLint's ``complexity`` rule counts
+  the same set.
+- **Cognitive**: ``for...in`` and ``for...of`` are loop structures (+1 plus
+  the nesting penalty); ``break``/``continue`` to a label are +1; ``&&`` and
+  ``||`` count once per sequence, and ``??`` and ``?.`` add nothing (the
+  whitepaper's "Ignore shorthand" covers null-coalescing operators). Arrow
+  functions, function expressions, and functions and methods declared inside
+  a function increase the nesting level without an increment of their own.
+  As the whitepaper's Appendix A specifies for JavaScript, an outer function
+  whose top level holds only declarations (variables, functions, classes, or
+  a function assigned to a name) is treated as a namespace, and the functions
+  in it don't nest. A function that is itself an arrow function doesn't nest
+  its own body.
+- **Recursion**: a bare call resolves through the enclosing functions, and
+  ``this.f()``/``this.#f()`` to the method's own class, where ``this`` is the
+  method's own (inside an arrow function, not a nested ``function``).
+- **SLOC**: ``//`` and ``/* */`` comments are excluded (same as C/C++). The
+  lines of any function nested in another, an arrow callback included, are
+  left out of the outer function's SLOC.
+- **TypeScript**: type syntax adds nothing. Overload signatures,
+  ``declare function``, interface members and abstract methods have no body
+  and are not reported as functions.
 - **External calls**: member-expression calls (``obj.method()``,
   ``module.func()``) are counted as external references
 - **Function discovery**: ``function`` declarations, ``function`` expressions,

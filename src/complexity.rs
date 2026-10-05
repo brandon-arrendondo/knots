@@ -98,8 +98,9 @@ fn has_catch_clause(children: &[Node]) -> bool {
 /// McCabe decisions of a switch: one per non-default case label, as in
 /// McCabe's definition and the SonarSource whitepaper's getWords (CC 4 for
 /// three cases and a default). Applies where the grammar gives each label a
-/// `case_statement` with a `value` (C, C++, PHP). Grammars that don't (JS,
-/// C#, ...) keep the older count of 1 per switch until they have probes.
+/// `case_statement` (C, C++, PHP) or `switch_case` (JS, TS) with a `value`.
+/// Grammars that don't (C#, Java, Go, ...) keep the older count of 1 per
+/// switch until they have probes.
 fn switch_decisions(node: Node, source_code: &[u8]) -> u32 {
     let Some(body) = node.child_by_field_name("body") else {
         return 1;
@@ -137,9 +138,20 @@ fn case_labels(body: Node, source_code: &[u8]) -> Vec<bool> {
 /// (the parser took `MACRO case X:` for a declaration) or left loose in an
 /// ERROR node. Both are reserved words, so neither can be a real identifier.
 fn case_label(node: Node, parent: Node, source_code: &[u8]) -> Option<bool> {
-    if node.kind() == "case_statement" {
-        return Some(node.child_by_field_name("value").is_some());
+    parsed_label(node).or_else(|| loose_label(node, parent, source_code))
+}
+
+/// A label the grammar parsed: C/C++/PHP `case_statement`, JS/TS
+/// `switch_case` (valued unless `default`) and `switch_default`.
+fn parsed_label(node: Node) -> Option<bool> {
+    match node.kind() {
+        "case_statement" | "switch_case" => Some(node.child_by_field_name("value").is_some()),
+        "switch_default" => Some(false),
+        _ => None,
     }
+}
+
+fn loose_label(node: Node, parent: Node, source_code: &[u8]) -> Option<bool> {
     let text = node.utf8_text(source_code).ok()?;
     let loose = node.kind() == "identifier" || parent.kind() == "ERROR";
     (loose && matches!(text, "case" | "default")).then_some(text == "case")
@@ -289,6 +301,11 @@ const MCCABE_FLAT_DECISIONS: &[&str] = &[
     "where_statement",
     "elsewhere_clause",
     "arithmetic_if_statement",
+    // JS/TS, C++, Java: a handler is reached or not.
+    "catch_clause",
+    // JS/TS: a default value is evaluated only when the value is undefined.
+    "assignment_pattern",
+    "object_assignment_pattern",
 ];
 
 type DecisionCounter = fn(Node, &[u8]) -> u32;
@@ -307,7 +324,7 @@ const MCCABE_COUNTED: &[(&str, DecisionCounter)] = &[
     ("selective_accept", mccabe_select_else),
     // Ada: `exit when` is a decision; a bare exit is not.
     ("exit_statement", mccabe_exit_when),
-    // C/C++/PHP: one decision per non-default case (see switch_decisions).
+    // C/C++/PHP/JS/TS: one decision per non-default case (see switch_decisions).
     ("switch_statement", switch_decisions),
     // Ada: loops and case alternatives are decisions only sometimes.
     ("loop_statement", ada_decision),
@@ -319,6 +336,10 @@ const MCCABE_COUNTED: &[(&str, DecisionCounter)] = &[
     ("boolean_operator", logical_decision),
     ("infix_expression", logical_decision),
     ("logical_expression", logical_decision),
+    // JS/TS/PHP `||=`, `&&=`, `??=`: the assignment happens only sometimes.
+    ("augmented_assignment_expression", logical_assignment),
+    // TS: a parameter with a default value (see assignment_pattern).
+    ("required_parameter", default_value),
 ];
 
 fn mccabe_decisions(node: Node, source_code: &[u8]) -> u32 {
@@ -376,6 +397,17 @@ fn logical_operators(kind: &str) -> &'static [&'static str] {
     }
 }
 
+fn logical_assignment(node: Node, source_code: &[u8]) -> u32 {
+    let op = node
+        .child_by_field_name("operator")
+        .and_then(|op| op.utf8_text(source_code).ok());
+    u32::from(op.is_some_and(|op| matches!(op, "||=" | "&&=" | "??=")))
+}
+
+fn default_value(node: Node, _source_code: &[u8]) -> u32 {
+    u32::from(node.child_by_field_name("value").is_some())
+}
+
 fn logical_decision(node: Node, source_code: &[u8]) -> u32 {
     let op = node
         .child_by_field_name("operator")
@@ -413,12 +445,16 @@ fn walk_cognitive<'a>(
     skipped: &HashSet<usize>,
     complexity: &mut u32,
 ) {
-    let mut stack = vec![(root, 0, None)];
+    // The function's own node is not scored: a function that is itself a
+    // lambda (`const g = (x) => {...}`) doesn't nest its own body.
+    let mut stack = Vec::new();
+    push_children_cognitive(&mut stack, root, 0, None);
+    let namespaced = declared_in_namespace(root);
     while let Some((node, nesting_level, parent_binary_op)) = stack.pop() {
         if skipped.contains(&node.id()) {
             continue;
         }
-        if node.kind() == "case_statement" && !is_ada_case_statement(node) {
+        if passes_through(node, &namespaced) {
             push_children_cognitive(&mut stack, node, nesting_level, parent_binary_op);
             continue;
         }
@@ -434,6 +470,65 @@ fn walk_cognitive<'a>(
 }
 
 // The stack carries the per-node state (`nesting_level`, `parent_binary_op`)
+/// A node scored as its children alone: C's per-arm `case_statement`, and a
+/// function declared in a JS namespace (see declared_in_namespace).
+fn passes_through(node: Node, namespaced: &HashSet<usize>) -> bool {
+    let c_case = node.kind() == "case_statement" && !is_ada_case_statement(node);
+    c_case || namespaced.contains(&node.id())
+}
+
+/// Whitepaper 1.7 Appendix A, "JavaScript: Missing class structures": a
+/// JS/TS function that "contain[s] only declarations at the top level" is a
+/// namespace or faux class, so the functions in it don't nest. Their ids, or
+/// none when `root` isn't such a function. `statement_block` is the JS/TS
+/// grammars' function body; no other grammar knots reads uses it.
+fn declared_in_namespace(root: Node) -> HashSet<usize> {
+    match root.child_by_field_name("body") {
+        Some(body) if is_declarative(body) => functions_in(body),
+        _ => HashSet::new(),
+    }
+}
+
+fn is_declarative(body: Node) -> bool {
+    let mut cursor = body.walk();
+    let all_declarations = body.named_children(&mut cursor).all(is_declaration);
+    body.kind() == "statement_block" && all_declarations
+}
+
+/// A declaration, by the whitepaper's own example: `var foo;`, a function or
+/// class declaration, or a function assigned to a name (`bar.myFun =
+/// function (...) {...}`). Comments and empty statements are not statements.
+fn is_declaration(statement: Node) -> bool {
+    let kind = statement.kind();
+    kind.ends_with("_declaration")
+        || matches!(kind, "comment" | "empty_statement")
+        || (kind == "expression_statement" && assigns_function(statement))
+}
+
+fn assigns_function(statement: Node) -> bool {
+    let assigned = statement
+        .named_child(0)
+        .filter(|e| e.kind() == "assignment_expression")
+        .and_then(|e| e.child_by_field_name("right"));
+    assigned
+        .is_some_and(|value| matches!(cognitive_role(value.kind()), Some(CognitiveRole::Lambda)))
+}
+
+/// The functions under `body` that aren't inside another function.
+fn functions_in(body: Node) -> HashSet<usize> {
+    let mut nested = HashSet::new();
+    let mut stack = vec![body];
+    while let Some(node) = stack.pop() {
+        if matches!(cognitive_role(node.kind()), Some(CognitiveRole::Lambda)) {
+            nested.insert(node.id());
+            continue;
+        }
+        let mut cursor = node.walk();
+        stack.extend(node.children(&mut cursor));
+    }
+    nested
+}
+
 // that a recursive walk would pass as arguments. Each node kind's role
 // (COGNITIVE_ROLES) decides its increment and what its children are pushed
 // with; a kind with no role adds nothing and passes its state through.
@@ -506,10 +601,17 @@ const COGNITIVE_ROLES: &[(CognitiveRole, &[&str])] = &[
         &["try_statement", "unary_expression", "not_operator"],
     ),
     // C++/Rust, Python, JS/TS arrow functions, C# delegates and local
-    // functions, Kotlin lambdas, Go closures.
+    // functions, Kotlin lambdas, Go closures; JS/TS function expressions,
+    // and functions, generators and methods declared inside a function
+    // (B2: nested methods nest).
     (
         CognitiveRole::Lambda,
         &[
+            "function_expression",
+            "generator_function",
+            "function_declaration",
+            "generator_function_declaration",
+            "method_definition",
             "lambda_expression",
             "closure_expression",
             "lambda",
@@ -588,6 +690,8 @@ const COGNITIVE_ROLES: &[(CognitiveRole, &[&str])] = &[
             "arithmetic_if_statement",
             "break_expression",
             "continue_expression",
+            "break_statement",
+            "continue_statement",
         ],
     ),
     // C/C++/Rust/PHP, Python, Scala, Fortran.
@@ -678,26 +782,34 @@ fn logical_step<'a>(node: Node<'a>, source_code: &'a [u8], here: Push<'a>) -> (u
     }
 }
 
-/// Ada: one per new sequence of and / or / xor keywords.
+/// The logical operator that continues or starts a sequence. Null-coalescing
+/// operators (`??`, Kotlin `?:`) are shorthand the whitepaper ignores
+/// ("Ignore shorthand").
 fn sequence_operator<'a>(node: Node, source_code: &'a [u8]) -> Option<&'a str> {
     let op = node
         .child_by_field_name("operator")?
         .utf8_text(source_code)
         .ok()?;
-    (op != "?:" && logical_operators(node.kind()).contains(&op)).then_some(op)
+    let null_coalescing = matches!(op, "?:" | "??");
+    (!null_coalescing && logical_operators(node.kind()).contains(&op)).then_some(op)
 }
 
+/// Ada: one per new sequence of and / or / xor keywords.
 fn ada_sequences(node: Node) -> u32 {
     let ops = ada_operators(node);
     let changes = ops.windows(2).filter(|pair| pair[0] != pair[1]).count();
     u32::from(!ops.is_empty()) + changes as u32
 }
 
-/// A plain break or continue adds nothing; only one to a label does.
+/// A plain break or continue adds nothing; only one to a label does (a
+/// `label` child in Rust, a `label` field in JS/TS).
 fn flat_jump(node: Node) -> u32 {
-    let plain = matches!(node.kind(), "break_expression" | "continue_expression")
-        && !has_child_kind(node, "label");
-    u32::from(!plain)
+    let jump = matches!(
+        node.kind(),
+        "break_expression" | "continue_expression" | "break_statement" | "continue_statement"
+    );
+    let labeled = has_child_kind(node, "label") || node.child_by_field_name("label").is_some();
+    u32::from(!jump || labeled)
 }
 
 fn has_child_kind(node: Node, kind: &str) -> bool {
@@ -721,7 +833,12 @@ fn push_children_cognitive<'a>(
 /// Calculates maximum nesting depth of control structures
 pub fn calculate_nesting_depth(node: Node) -> u32 {
     let mut max_depth = 0;
-    visit_node_nesting(node, 0, &mut max_depth);
+    // The function's own node doesn't count: a lambda reported as a function
+    // is at depth 0 inside itself.
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        visit_node_nesting(child, 0, &mut max_depth);
+    }
     max_depth
 }
 
@@ -1230,6 +1347,11 @@ const ABC_CONDITIONS: &[&str] = &[
     "where_statement",
     "elsewhere_clause",
     "arithmetic_if_statement",
+    // JS/TS, C++, Java: a handler is reached or not.
+    "catch_clause",
+    // JS/TS: a default value is evaluated only when the value is undefined.
+    "assignment_pattern",
+    "object_assignment_pattern",
 ];
 
 /// ABC conditions that depend on a node's contents.
@@ -3938,10 +4060,11 @@ mod tests {
 
     #[test]
     fn test_js_nullish_cognitive() {
+        // Whitepaper 1.7, "Ignore shorthand": null-coalescing operators add nothing.
         let code = "function f(a, b) { return a ?? b; }";
         let tree = parse_js_function(code);
         let node = js_func_node(&tree);
-        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 1);
+        assert_eq!(calculate_cognitive_complexity(node, code.as_bytes()), 0);
     }
 
     #[test]

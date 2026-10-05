@@ -30,6 +30,24 @@ itertools 0.13.0, 13,882 functions. Use the copies under
 `.crate` from crates.io with `tar`), and pass the directories with
 `--ext=.rs`.
 
+The JavaScript and TypeScript corpus is eleven npm releases, pinned by
+version, each scanned at its authored source (not its bundles): eslint 10.12.0
+(`lib/`), webpack 5.101.3 (`lib/`), express 5.1.0, mocha 11.7.2 (`lib/`),
+commander 14.0.1 (`lib/`), moment 2.30.1 (`src/`), lodash 4.17.21 (the
+package as published, modules and the monolith both), and, for TypeScript,
+rxjs 7.8.2, zod 3.25.76, effect 3.17.13 and @trpc/server 11.5.1 (each
+`src/`); 18,669 functions. Fetch each with `npm pack NAME@VERSION` and unpack
+it. No JSX/TSX corpus is pinned yet.
+
+A changed rule that reaches other grammars is checked on one or two pinned
+releases per language: commons-lang3 3.17.0 and guava 33.4.0-jre (Java,
+Maven Central sources jars), kotlinx-coroutines-core-jvm 1.10.2 (Kotlin,
+sources jar), cobra 1.10.1 and gin 1.10.1 (Go, proxy.golang.org), Newtonsoft.Json
+13.0.3 (C#), guzzle 7.9.3 and symfony/console 7.3.4 (PHP),
+swift-argument-parser 1.6.1 (Swift), each at its release tag, requests 2.32.5
+and flask 3.1.2 (Python, sdists), and the Lua test scripts in the pinned lua
+checkout; 32,737 functions.
+
 ## Scripts
 
 - `pmccabe_compare.py KNOTS_BIN OUT.json CORPUS...` compares knots' McCabe
@@ -168,3 +186,43 @@ pmccabe agreement, traditional column: 29,852 of 30,461 (98.00%), up from
 29,744. 597 of the 609 remaining differences are in functions with `#if` arms:
 pmccabe keeps the first arm, knots the worst.
 
+**JavaScript and TypeScript probes (seventh change).** Sixteen JavaScript
+probes, three TypeScript probes and one each for C++ and Java found these
+departures with no recorded reason, all fixed:
+- SLOC dropped the declaration line of every JS/TS and Lua function, and more:
+  the `function` keyword is a token of the same kind as a Fortran function
+  node, so knots subtracted it as a nested function.
+- McCabe counted a JS `switch` once, not per `case`; didn't count `catch`
+  (JS/TS, and also C++ and Java, which share the node kind); and didn't count
+  default parameter values or `||=`, `&&=`, `??=`, each of which ECMA-262
+  evaluates conditionally.
+- Cognitive Complexity counted `??` in logical sequences, though the
+  whitepaper ignores null-coalescing operators; missed labeled `break` and
+  `continue`; didn't nest function expressions, nested function declarations
+  or methods; and didn't apply the whitepaper's JavaScript rule for an outer
+  function that holds only declarations.
+- A function that is itself a lambda (a JS arrow assigned to a name, a C#
+  local function) nested its own body, in Cognitive Complexity and in nesting
+  depth: `const g = (x) => { if (x) ... }` scored 2 for one `if`.
+- Recursion through `this.f()` and `this.#f()` wasn't seen, and a bare call
+  was matched file-wide, so a nested helper's name reached a top-level
+  function of the same name. Bare calls now resolve through the enclosing
+  functions, and `this` only where it is the method's own (an arrow, not a
+  nested `function`).
+
+ESLint's `complexity` rule (classic) agrees with the McCabe definition on all
+28 JS/TS rows; knots now departs only at the recorded `depth`.
+
+Against the previous branch commit:
+- JavaScript and TypeScript (18,669 functions): McCabe 1,259 changed;
+  Cognitive Complexity 3,344; nesting 6,561; SLOC 5,255; AIRD 7,827 (1,214 up,
+  6,613 down, most by the root-lambda fix); 808 band changes; 13 functions
+  fall below the 85 gate (for example webpack `replacePathVariables`, an arrow
+  function, 86 → 69 as its Cognitive Complexity goes from 73 to 52), none
+  rise above it.
+- Other grammars (32,737 functions): Java and C# McCabe from `catch`; PHP and
+  Lua SLOC from the keyword; PHP and C# Cognitive Complexity from `??`; Swift,
+  Kotlin and Lua Cognitive Complexity from nested functions; C# Cognitive
+  Complexity and nesting from local functions reported as functions. Go and Python don't change. AIRD 355 changed (176 up,
+  179 down), 21 band changes, no gate crossings.
+- C and Rust (50,926 functions): no change in any field.

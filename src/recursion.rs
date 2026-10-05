@@ -5,14 +5,17 @@
 //! Calls are resolved from syntax alone, so a call becomes an edge only when
 //! the syntax fixes its target:
 //!
-//! - a bare call, `name(..)`, to a function of that name that isn't a Rust
-//!   impl or trait member (a bare call can't reach one). In Rust the name is
-//!   looked up from the innermost enclosing `fn` or `mod` outwards, so `mod
-//!   small`'s `iadd` and `mod large`'s are different functions. Elsewhere it
-//!   is looked up file-wide: in C a function nested in another is nearly
-//!   always the parser recovering from a macro, not a real scope;
+//! - a bare call, `name(..)`, to a function of that name that isn't a
+//!   Rust impl or trait member or a JS/TS method (a bare call can't reach
+//!   one). In Rust the name is looked up from the innermost enclosing `fn` or
+//!   `mod` outwards, so `mod small`'s `iadd` and `mod large`'s are different
+//!   functions; in JS/TS, from the innermost enclosing function outwards.
+//!   Elsewhere it is looked up file-wide: in C a function nested in another
+//!   is nearly always the parser recovering from a macro, not a real scope;
 //! - a call through `self` or `this`, `self.name(..)`, to the caller's own
-//!   type's `name`;
+//!   type's `name`. In JS/TS that is the method's class (or object literal),
+//!   and only where `this` is the method's own: inside an arrow function, not
+//!   inside a nested `function`, which binds its own `this`;
 //! - in a Rust impl or trait, `Self::name` or `Type::name`, called or passed
 //!   as a value (`map(Self::count)`), to that type's `name`.
 //!
@@ -38,7 +41,8 @@ enum Callee {
 struct Site {
     id: usize,
     name: String,
-    /// The type (or trait) whose impl a Rust function is in.
+    /// The type (or trait) whose impl a Rust function is in; for a JS/TS
+    /// method, its class or object literal.
     owner: Option<String>,
     /// The scope the function is declared in (`None` for the file).
     scope: Option<usize>,
@@ -74,7 +78,7 @@ fn function_sites(root: Node, source_code: &str) -> Vec<Site> {
 }
 
 fn site(node: Node, name: String, source_code: &str) -> Site {
-    let owner = rust_owner(node, source_code);
+    let owner = rust_owner(node, source_code).or_else(|| js_owner(node));
     let refs = references(node, source_code, owner.as_deref());
     let lookup = lookup_scopes(node);
     Site {
@@ -88,7 +92,25 @@ fn site(node: Node, name: String, source_code: &str) -> Site {
 }
 
 fn is_scope(node: Node) -> bool {
-    matches!(node.kind(), "mod_item" | "function_item")
+    matches!(node.kind(), "mod_item" | "function_item") || is_js_function(node)
+}
+
+const JS_FUNCTIONS: &[&str] = &[
+    "function_declaration",
+    "generator_function_declaration",
+    "function_expression",
+    "generator_function",
+    "arrow_function",
+    "method_definition",
+];
+
+fn is_js_function(node: Node) -> bool {
+    JS_FUNCTIONS.contains(&node.kind())
+}
+
+/// A JS/TS function that binds its own `this`: any but an arrow function.
+fn binds_this(node: Node) -> bool {
+    is_js_function(node) && node.kind() != "arrow_function"
 }
 
 fn lookup_scopes(func: Node) -> Vec<Option<usize>> {
@@ -187,6 +209,16 @@ fn rust_owner(func: Node, source_code: &str) -> Option<String> {
     }
 }
 
+/// For a JS/TS method, the class body or object literal it is in, by node id:
+/// two classes of the same name in one file are still two classes.
+fn js_owner(func: Node) -> Option<String> {
+    if func.kind() != "method_definition" {
+        return None;
+    }
+    func.parent()
+        .map(|container| format!("#{}", container.id()))
+}
+
 fn type_name(ty: Node, source_code: &str) -> Option<String> {
     let base = match ty.kind() {
         "generic_type" => ty.child_by_field_name("type")?,
@@ -199,24 +231,43 @@ fn type_name(ty: Node, source_code: &str) -> Option<String> {
     text(last, source_code)
 }
 
+/// Each node is walked with whether `this` in it is still `func`'s own.
 fn references(func: Node, source_code: &str, owner: Option<&str>) -> Vec<Callee> {
     let mut refs = Vec::new();
-    let mut stack = vec![func];
-    while let Some(node) = stack.pop() {
-        refs.extend(reference(node, source_code, owner));
-        let mut cursor = node.walk();
-        stack.extend(
-            node.named_children(&mut cursor)
-                .filter(|c| !is_named_function(*c)),
-        );
+    let mut stack = vec![(func, true)];
+    while let Some((node, own_this)) = stack.pop() {
+        refs.extend(reference(node, source_code, owner).filter(|c| own_this || !is_this_call(c)));
+        stack.extend(walked_children(node, own_this));
     }
     refs
 }
 
-/// A Rust `fn` nested in another is a site of its own; its calls are not its
-/// parent's. Closures are part of the function they're in.
+/// A node's children, minus nested named functions, each with whether `this`
+/// in it is still the caller's.
+fn walked_children(node: Node, own_this: bool) -> Vec<(Node, bool)> {
+    let mut cursor = node.walk();
+    let children = node.named_children(&mut cursor);
+    children
+        .filter(|c| !is_named_function(*c))
+        .map(|c| (c, own_this && !binds_this(c)))
+        .collect()
+}
+
+fn is_this_call(callee: &Callee) -> bool {
+    matches!(callee, Callee::Member(_))
+}
+
+/// A Rust `fn`, or a JS/TS function declaration or method, nested in another
+/// is a site of its own; its calls are not its parent's. Closures are part of
+/// the function they're in.
 fn is_named_function(node: Node) -> bool {
-    node.kind() == "function_item"
+    matches!(
+        node.kind(),
+        "function_item"
+            | "function_declaration"
+            | "generator_function_declaration"
+            | "method_definition"
+    )
 }
 
 fn reference(node: Node, source_code: &str, owner: Option<&str>) -> Option<Callee> {
@@ -242,13 +293,21 @@ fn named_call(node: Node, source_code: &str) -> Option<Callee> {
 }
 
 /// The target of a call's `function` part: a bare name, or a field of
-/// `self`/`this` (Rust, C, C++).
+/// `self`/`this` (Rust, C, C++, JS/TS).
 fn called(function: Node, source_code: &str) -> Option<Callee> {
     match function.kind() {
         "identifier" => text(function, source_code).map(Callee::Free),
         "field_expression" => self_field(function, source_code),
+        "member_expression" => this_member(function, source_code),
         _ => None,
     }
+}
+
+/// JS/TS `this.name` or `this.#name`; any other receiver is unresolved.
+fn this_member(function: Node, source_code: &str) -> Option<Callee> {
+    let object = function.child_by_field_name("object")?;
+    (object.kind() == "this")
+        .then(|| text(function.child_by_field_name("property")?, source_code).map(Callee::Member))?
 }
 
 /// `self.name` (Rust) or `this->name` (C++); any other receiver is unresolved.

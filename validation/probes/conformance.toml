@@ -22,3 +22,16 @@ e645961), nearly all delegations such as `self.0.fmt(f)` and `self.inner.hash(h)
 with the edge dropped, 110 change against 1.18.0, and the sample checked were
 real cycles or labeled jumps. Counted: bare calls, `self.name()`, `Self::name`
 and `Type::name` (see src/recursion.rs)."""
+
+[[departure]]
+probe = "js/recursion.js"
+function = "depth"
+metric = "cognitive"
+definition = 2
+knots = 1
+status = "deliberate"
+reason = """The JavaScript form of rust/recursion.rs's depth, for the same reason: it
+recurses only through `c.depth()`, and a receiver other than `this` has a type
+knots can't see. Counted in JS/TS: bare calls, resolved through the enclosing
+functions, and `this.name()` / `this.#name()` to the method's own class, where
+`this` is the method's own (see src/recursion.rs)."""

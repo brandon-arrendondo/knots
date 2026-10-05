@@ -152,6 +152,54 @@ def rust_rows(tools, knots_bin):
     return rows
 
 
+ESLINT_TOOLCHAIN = Path.home() / "toolchain/jsmetrics"
+
+
+def eslint(path, binary_dir, knots_bin):
+    """ESLint `complexity` (classic) and sonarjs cognitive, keyed by function name via knots' start_line.
+    sonarjs reports only functions scoring above 0, so a function knots finds and sonarjs omits scored 0."""
+    rows = [json.loads(l) for l in run([knots_bin, str(path), "--format", "ndjson"]).splitlines()
+            if l.startswith("{")]
+    names = {r["start_line"]: r["function"] for r in rows}
+    out = {r["function"]: {"cognitive": 0} for r in rows}
+    for line in run(["node", str(HERE / "eslint_probe.cjs"), str(binary_dir), str(path)]).splitlines():
+        found = json.loads(line)
+        name = names.get(found["line"])
+        if name:
+            key = "mccabe" if found["rule"] == "complexity" else "cognitive"
+            out.setdefault(name, {})[key] = found["value"]
+    return out
+
+
+def js_rows(tools, knots_bin):
+    rows = []
+    paths = sorted((HERE / "js").glob("*.js")) + sorted((HERE / "ts").glob("*.ts*"))
+    for path in paths:
+        k = knots(knots_bin, path)
+        es = eslint(path, tools["eslint"], knots_bin) if tools["eslint"] else {}
+        lz = lizard(tools["lizard"], path, False) if tools["lizard"] else {}
+        rca = rust_code_analysis(tools["rust-code-analysis-cli"], path) if tools["rust-code-analysis-cli"] else {}
+        for function, metric, want in expectations(path):
+            row = {"probe": f"{path.parent.name}/{path.name}", "function": function, "metric": metric,
+                   "definition": want, "knots": k.get(function, {}).get(metric), "language": "js"}
+            if metric == "mccabe":
+                row["eslint complexity"] = es.get(function, {}).get("mccabe")
+                row["lizard"] = lz.get(function)
+                row["rust-code-analysis"] = rca.get(function, {}).get("cyclomatic")
+            elif metric == "cognitive":
+                row["sonarjs"] = es.get(function, {}).get("cognitive")
+                row["rust-code-analysis"] = rca.get(function, {}).get("cognitive")
+            rows.append(row)
+    return rows
+
+
+def js_versions(toolchain):
+    def of(name):
+        return json.loads((toolchain / "node_modules" / name / "package.json").read_text())["version"]
+    return (f"eslint {of('eslint')}, eslint-plugin-sonarjs {of('eslint-plugin-sonarjs')}, "
+            f"typescript-eslint {of('typescript-eslint')}")
+
+
 def version(cmd):
     return (run(cmd).strip().splitlines() or ["?"])[0]
 
@@ -163,7 +211,8 @@ def main():
                                                   if (Path.home() / ".alire/bin/gnatmetric").exists() else None),
              "lizard": tool("lizard"), "clang-tidy": tool("clang-tidy"),
              "rust-code-analysis-cli": tool("rust-code-analysis-cli"), "pmccabe": tool("pmccabe"),
-             "clippy-driver": tool("clippy-driver")}
+             "clippy-driver": tool("clippy-driver"),
+             "eslint": ESLINT_TOOLCHAIN if (ESLINT_TOOLCHAIN / "node_modules/eslint").exists() else None}
     commit = run(["git", "-C", str(HERE), "rev-parse", "--short", "HEAD"]).strip()
     versions = {"knots": f"{version([knots_bin, '--version'])} (built from {commit})",
                 "lizard": tools["lizard"] and version([tools["lizard"], "--version"]),
@@ -172,7 +221,8 @@ def main():
                 and version([tools["rust-code-analysis-cli"], "--version"]),
                 "pmccabe": tools["pmccabe"] and "Debian package (no --version)",
                 "gnatmetric": tools["gnatmetric"] and "gnatmetric (libadalang_tools 25.0.0, GNAT 14.2.1 via Alire)",
-                "clippy-driver": tools["clippy-driver"] and version([tools["clippy-driver"], "--version"])}
+                "clippy-driver": tools["clippy-driver"] and version([tools["clippy-driver"], "--version"]),
+                "eslint": tools["eslint"] and js_versions(tools["eslint"])}
     rows = []
     for path in sorted((HERE / "c").glob("*.c")):
         k = knots(knots_bin, path)
@@ -206,12 +256,13 @@ def main():
                 row["gnatmetric"] = g.get(function)
             rows.append(row)
     rows += rust_rows(tools, knots_bin)
+    rows += js_rows(tools, knots_bin)
     write_markdown(out_md, rows, versions)
     if out_json:
         out_json.write_text(json.dumps({"date": str(date.today()), "versions": versions, "rows": rows}, indent=1))
 
 
-LANGUAGE_NAMES = {"c": "C", "ada": "Ada", "rust": "Rust"}
+LANGUAGE_NAMES = {"c": "C", "ada": "Ada", "rust": "Rust", "js": "JavaScript and TypeScript"}
 
 
 def cell(value, want):
@@ -233,7 +284,10 @@ def write_markdown(path, rows, versions):
                                ("ada", "cognitive", ["knots"]),
                                ("rust", "mccabe", ["knots", "lizard", "rust-code-analysis"]),
                                ("rust", "cognitive", ["knots", "rust-code-analysis", "clippy (not Campbell)"]),
-                               ("rust", "sloc", ["knots"])):
+                               ("rust", "sloc", ["knots"]),
+                               ("js", "mccabe", ["knots", "eslint complexity", "lizard", "rust-code-analysis"]),
+                               ("js", "cognitive", ["knots", "sonarjs", "rust-code-analysis"]),
+                               ("js", "sloc", ["knots"])):
         lines += [f"## {LANGUAGE_NAMES[lang]}: {metric}", "",
                   "| probe | function | definition | " + " | ".join(cols) + " |",
                   "|---|---|---|" + "---|" * len(cols)]

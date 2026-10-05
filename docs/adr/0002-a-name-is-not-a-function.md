@@ -36,8 +36,11 @@ not a type"), and how parser recovery from preprocessor text gets misread
    type or a declaration counts toward a metric only where the syntax fixes
    its target. For recursion, that means:
    - a bare call, resolved through the language's lexical scopes where knots
-     models them (Rust `fn` and `mod`); elsewhere, file-wide;
-   - a call through `self`/`this`;
+     models them (Rust `fn` and `mod`, JS/TS functions); elsewhere,
+     file-wide;
+   - a call through `self`/`this`, to the caller's own type, and in JS/TS
+     only where `this` is the method's own (a nested `function` binds its
+     own `this`; an arrow function doesn't);
    - Rust `Self::f` or `Type::f` inside `Type`'s impl.
 
    See `src/recursion.rs`.

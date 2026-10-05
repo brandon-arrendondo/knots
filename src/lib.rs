@@ -391,30 +391,7 @@ where
     loop {
         let node = cursor.node();
 
-        if matches!(
-            node.kind(),
-            "function_definition"
-                | "function_item"
-                | "function_declaration"
-                | "function_expression"
-                | "arrow_function"
-                | "method_definition"
-                | "generator_function_declaration"
-                | "generator_function"
-                | "subprogram_body"
-                | "expression_function_declaration"
-                | "task_body"
-                | "method_declaration"
-                | "func_literal"
-                | "constructor_declaration"
-                | "local_function_statement"
-                | "init_declaration"
-                // Fortran: function subprogram, subroutine subprogram, module procedure, main program
-                | "function"
-                | "subroutine"
-                | "module_procedure"
-                | "program"
-        ) {
+        if is_function_node(node) {
             callback(node, source_code);
         }
 
@@ -873,11 +850,19 @@ pub fn is_function_kind(kind: &str) -> bool {
             | "constructor_declaration"
             | "local_function_statement"
             | "init_declaration"
+            // Fortran: function subprogram, subroutine subprogram, module procedure, main program
             | "function"
             | "subroutine"
             | "module_procedure"
             | "program"
     )
+}
+
+/// A function node, not a keyword token that shares its kind (the `function`
+/// keyword of JS and Lua is a token of kind "function", as is Fortran's
+/// function subprogram).
+fn is_function_node(node: Node) -> bool {
+    node.is_named() && is_function_kind(node.kind())
 }
 
 fn is_macro_function_definition(node: Node) -> bool {
@@ -911,14 +896,8 @@ pub fn nested_fn_sloc(outer: Node, source_code: &str, sloc_mode: SlocMode) -> u3
 fn accumulate_nested_sloc(root: Node, source_code: &str, sloc_mode: SlocMode, total: &mut u32) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if is_function_kind(node.kind()) && !is_macro_function_definition(node) {
-            *total += match sloc_mode {
-                SlocMode::Python => calculate_sloc_python(node, source_code.as_bytes()),
-                SlocMode::Ada => calculate_sloc_ada(node, source_code.as_bytes()),
-                SlocMode::Fortran => calculate_sloc_fortran(node, source_code.as_bytes()),
-                SlocMode::Lua => complexity::calculate_sloc_lua(node, source_code.as_bytes()),
-                SlocMode::Default => calculate_sloc(node, source_code.as_bytes()),
-            };
+        if is_function_node(node) && !is_macro_function_definition(node) {
+            *total += raw_sloc(node, source_code.as_bytes(), sloc_mode);
             continue;
         }
         let mut cursor = node.walk();
@@ -1253,6 +1232,27 @@ mod recursion_tests {
             .unwrap();
         let tree = parser.parse(source, None).unwrap();
         collect_function_metrics(&tree, source, "f.rs", &None, &None, false)
+    }
+
+    #[test]
+    fn typescript_signatures_are_not_functions() {
+        // validation/probes/ts/overloads.ts: only bodies have a flow graph.
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/validation/probes/ts/overloads.ts"
+        );
+        let rows = typescript_rows(&std::fs::read_to_string(path).unwrap());
+        let mut names: Vec<String> = rows.into_iter().map(|m| m.name).collect();
+        names.sort();
+        assert_eq!(names, ["area", "constructor", "parse"]);
+    }
+
+    fn typescript_rows(source: &str) -> Vec<FunctionMetrics> {
+        let mut parser = tree_sitter::Parser::new();
+        let typescript = crate::tree_sitter_typescript::LANGUAGE_TYPESCRIPT;
+        parser.set_language(&typescript.into()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        collect_function_metrics(&tree, source, "f.ts", &None, &None, false)
     }
 
     fn rust_cognitive(source: &str) -> HashMap<String, u32> {
