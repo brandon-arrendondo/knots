@@ -134,6 +134,10 @@ A metric's published definition is the authority (`docs/adr/0001-the-definition-
 Before changing a counting rule, add or adjust a probe in `validation/probes/`, with the definition's value and its
 source, and run `validation/compare_versions.py` against the previous release.
 
+**Never resolve a name by its spelling** (`docs/adr/0002-a-name-is-not-a-function.md`): count a call, type or
+declaration only where the syntax fixes its target; otherwise count nothing and record the undercount. Probe every
+language a resolution change touches, not just C.
+
 ## Language-specific calibration notes
 
 ### Ada — McCabe vs Cognitive for case/dispatch patterns
