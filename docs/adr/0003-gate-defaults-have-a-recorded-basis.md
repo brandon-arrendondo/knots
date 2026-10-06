@@ -56,13 +56,37 @@ set of benchmark systems is an established approach: Alves, Ypma and Visser,
 "Deriving metric thresholds from benchmark data" (ICSM 2010,
 doi:10.1109/ICSM.2010.5609747), and Oliveira, Valente and Lima, "Extracting
 relative thresholds for source code metrics" (CSMR-WCRE 2014,
-doi:10.1109/CSMR-WCRE.2014.6747177). The references and DOIs were checked in
-Crossref; the papers themselves were not available to this work, so they are
-cited for the approach only, not for any detail of their procedures. This
-ADR's method is pooled, unweighted per-function percentiles over the corpora,
-with no weighting by function size or per-system aggregation, and it reports
-how often an existing default fires. It derives no new threshold except ABC
-20.0, which is a percentile choice and is marked as such below.
+doi:10.1109/CSMR-WCRE.2014.6747177). Both were read in their publisher
+versions.
+
+- Alves et al. weight each method by its lines of code (section VI-B). They
+  normalize the weights within each system, so that "every system is
+  represented equally in the benchmark" (VI-C). They read thresholds at 70%,
+  80% and 90% of the code, not of the methods (VI-D).
+- Oliveira et al. state a relative threshold as "p% of the entities should
+  have M ≤ k" (section I; section II gives the method). They choose p and k by
+  the share of systems in the corpus that meet the threshold, with a penalty
+  when fewer than Min% of them do. A second penalty applies when k lies above
+  the median of each system's Tail-th percentile. Their example sets Min and
+  Tail to 90% (section III).
+
+This ADR's method is simpler than either: pooled, unweighted per-function
+percentiles over the corpora, with no weighting by function size or
+per-system aggregation. It reports how often an existing default fires. It
+derives no new threshold except ABC 20.0, which is a percentile choice and is
+marked as such below.
+
+Alves et al. show the cost of pooling (section VII-B, Fig. 8a). If all
+measurements are aggregated "without applying any aggregation technique", the
+larger systems "would influence the overall result". In their example the
+pooled curve lies close to the larger of two systems (about 330 and 40
+thousand LOC). The pooled percentiles here are open to the same bias: each
+corpus counts in proportion to its number of functions, so the largest corpus
+in a set moves the pooled figure most. Alves et al. also weigh the alternative
+of taking the mean or median of each system's quantile, and argue against it:
+at the top quantiles the median rests on few data points and shifts when data
+is added (VII-B). A recomputation of ABC's basis under both alternatives is
+open.
 
 Figures below are the share of functions over a threshold, pooled over the set,
 with the range across its corpora. They describe how often a default fires on
