@@ -498,14 +498,22 @@ attributes are not followed, an inline ``mod x { ... }`` has no file of its
 own to count, and edition-2015 paths (``use y::Thing`` meaning
 ``crate::y::Thing``) are not modelled, so they add no edge.
 
-Ceiling values (p99 of observed distribution across 32,205 functions from
-mosquitto, SQLite, curl, hostap, Lua, libcrc):
+Ceiling values (set near the 99th percentile of each input over the paper's
+six C corpora when the formula was calibrated):
 
 =========  =====
 cognitive  75
 sloc       200
 nesting    8
 =========  =====
+
+The ceilings have not moved, but the counts have (``docs/adr/0001``). Measured
+at this version on the same six corpora (32,999 functions), the 99th
+percentiles are cognitive 81, SLOC 180 and nesting 6. On six C corpora the
+ceilings never saw (12,248 functions), they are cognitive 75, SLOC 161 and
+nesting 6. Cognitive 75 and SLOC 200 therefore still sit near p99 of C;
+nesting 8 is nearer p99.5, and nesting seldom approaches it.
+``docs/adr/0003`` records the method and the figures.
 
 Cognitive complexity is the dominant driver. SLOC, nesting, and testability
 are secondary. Documentation (doc_score) reduces difficulty.
@@ -531,6 +539,10 @@ functions score ≤10. The ≥76 bucket accounts for 1–2% of all functions.
    scores from inline event handlers and render callbacks while staying under
    AIRD 85 — meaning the headline ``--aird-threshold 85`` gate may pass
    functions that are genuinely hard to maintain.
+
+   Rust is the same: the 99th percentile of cognitive complexity is 14 and of
+   SLOC 86 across twelve crates, so ``--aird-threshold 85`` selects 0.04% of
+   their functions, against about 1% of C (``docs/adr/0003``).
 
    For JS/TS/React projects, pair the AIRD gate with explicit McCabe and
    cognitive thresholds::

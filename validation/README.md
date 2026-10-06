@@ -68,6 +68,12 @@ checkout; 32,737 functions.
   and crossings of the 85 gate. `--ext` picks the file extensions (default C
   and C++).
 
+- `default_calibration.py KNOTS_BIN OUT.json NAME=DIR[:SCOPE] ...` measures
+  where each gate default sits on a set of corpora: percentiles of every metric
+  that has a default, and the share of functions over each threshold. It
+  produces the figures in `docs/adr/0003-gate-defaults-have-a-recorded-basis.md`.
+  A scope is `GLOB,GLOB!EXCLUDE,...` relative to the corpus directory.
+
 ## Results recorded 2026-10-05
 
 **pmccabe agreement, C files (30,461 matched functions):**
