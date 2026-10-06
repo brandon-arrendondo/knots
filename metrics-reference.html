@@ -409,6 +409,12 @@ rust-code-analysis keep them.</p></li>
 <li><p><strong>C</strong>: condition statements (decision points)</p></li>
 <li><p><strong>Magnitude</strong>: <code class="docutils literal notranslate"><span class="pre">√(A²</span> <span class="pre">+</span> <span class="pre">B²</span> <span class="pre">+</span> <span class="pre">C²)</span></code></p></li>
 <li><p>Threshold flag: <code class="docutils literal notranslate"><span class="pre">--abc-threshold</span></code> (accepts floating-point)</p></li>
+<li><p><strong>The ABC threshold has no published basis and needs follow-up research.</strong>
+The 20.0 in knots’ own self-check and in the <code class="docutils literal notranslate"><span class="pre">knots-strict</span></code> hooks is a
+calibration, not a validated value: it is the 97.6th percentile of function
+ABC magnitude across twelve pinned Rust crates, and the 88th across six
+held-out C corpora. ABC magnitude grows with function size, so one number
+does not suit every language. See <code class="docutils literal notranslate"><span class="pre">docs/adr/0003</span></code>.</p></li>
 </ul>
 </section>
 <section id="preprocessor-dead-code-exclusion-c-c-swift-c">
@@ -592,8 +598,8 @@ and other external crates, and the file’s own inline modules, so
 attributes are not followed, an inline <code class="docutils literal notranslate"><span class="pre">mod</span> <span class="pre">x</span> <span class="pre">{</span> <span class="pre">...</span> <span class="pre">}</span></code> has no file of its
 own to count, and edition-2015 paths (<code class="docutils literal notranslate"><span class="pre">use</span> <span class="pre">y::Thing</span></code> meaning
 <code class="docutils literal notranslate"><span class="pre">crate::y::Thing</span></code>) are not modelled, so they add no edge.</p>
-<p>Ceiling values (p99 of observed distribution across 32,205 functions from
-mosquitto, SQLite, curl, hostap, Lua, libcrc):</p>
+<p>Ceiling values (set near the 99th percentile of each input over the paper’s
+six C corpora when the formula was calibrated):</p>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>cognitive</p></td>
@@ -607,6 +613,13 @@ mosquitto, SQLite, curl, hostap, Lua, libcrc):</p>
 </tr>
 </tbody>
 </table>
+<p>The ceilings have not moved, but the counts have (<code class="docutils literal notranslate"><span class="pre">docs/adr/0001</span></code>). Measured
+at this version on the same six corpora (32,999 functions), the 99th
+percentiles are cognitive 81, SLOC 180 and nesting 6. On six C corpora the
+ceilings never saw (12,248 functions), they are cognitive 75, SLOC 161 and
+nesting 6. Cognitive 75 and SLOC 200 therefore still sit near p99 of C;
+nesting 8 is nearer p99.5, and nesting seldom approaches it.
+<code class="docutils literal notranslate"><span class="pre">docs/adr/0003</span></code> records the method and the figures.</p>
 <p>Cognitive complexity is the dominant driver. SLOC, nesting, and testability
 are secondary. Documentation (doc_score) reduces difficulty.</p>
 <p><strong>Recommended CI threshold</strong>: <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code></p>
@@ -627,6 +640,9 @@ functions and React components can accumulate high McCabe and cognitive
 scores from inline event handlers and render callbacks while staying under
 AIRD 85 — meaning the headline <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code> gate may pass
 functions that are genuinely hard to maintain.</p>
+<p>These ceilings need tuning on non-C languages. Rust is the same: the 99th percentile of cognitive complexity is 14 and of
+SLOC 86 across twelve crates, so <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code> selects 0.04% of
+their functions, against about 1% of C (<code class="docutils literal notranslate"><span class="pre">docs/adr/0003</span></code>).</p>
 <p>For JS/TS/React projects, pair the AIRD gate with explicit McCabe and
 cognitive thresholds:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">--</span><span class="n">aird</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">85</span> <span class="o">--</span><span class="n">mccabe</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">20</span> <span class="o">--</span><span class="n">cognitive</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">25</span>
