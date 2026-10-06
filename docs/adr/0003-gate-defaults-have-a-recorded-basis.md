@@ -85,12 +85,13 @@ corpus counts in proportion to its number of functions, so the largest corpus
 in a set moves the pooled figure most. Alves et al. also weigh the alternative
 of taking the mean or median of each system's quantile, and argue against it:
 at the top quantiles the median rests on few data points and shifts when data
-is added (VII-B). A recomputation of ABC's basis under both alternatives is
-open.
+is added (VII-B). ABC's basis is recomputed under both below.
 
-Figures below are the share of functions over a threshold, pooled over the set,
-with the range across its corpora. They describe how often a default fires on
-these corpora. They are not a claim that the corpora are well written.
+Figures below are the share of functions over a threshold, pooled over the set;
+where a range across corpora is shown it runs from the lowest corpus to the
+highest, and ABC's is in its own section below. They describe how often a
+default fires on these corpora. They are not a claim that the corpora are well
+written.
 
 ## The defaults
 
@@ -153,6 +154,50 @@ The `knots-strict` hooks list C, C++, Rust, Python, JavaScript and TypeScript.
 ABC 5.0 (the value before the ruling below) failed 48.7% of held-out C functions and 54.1% of the paper's six. A
 gate that fails most functions in a language it claims to support is not
 tight, it is off.
+
+### ABC's basis, recomputed per corpus
+
+ABC 20.0 is a pooled percentile, so it is open to the size bias described
+under Prior work. `validation/abc_basis.py` recomputes it four ways over the
+same corpora and the same knots build (the pooled column reproduces the
+figures above: 19.8 is the 88th percentile of held-out C, and 11.9% and 2.4%
+of functions are over 20.0 in held-out C and Rust).
+
+| Combination | C held-out: p88 | over 20.0 | Rust: p88 | over 20.0 |
+|-------------|----------------:|----------:|----------:|----------:|
+| Pooled, every function once (what 20.0 came from) | 19.8 | 11.9% | 7.07 | 2.4% |
+| Every corpus equal, functions unweighted (Alves et al. VI-C normalization) | 22.0 | 13.8% | 7.07 | 2.1% |
+| Median of the per-corpus p88 (check only; Alves et al. VII-B argue against it) | 19.7 | | 7.14 | |
+| Across the corpora, each one's own | 18.6 to 31.1 | 10.9% to 21.8% | 4.0 to 11.0 | 0.6% to 5.8% |
+
+Weighting functions by their SLOC within each corpus, as Alves et al. do
+(VI-B), answers a different question: the share of code, not of functions. In
+held-out C, 47.5% of the code is in functions over ABC 20.0 (11.7% in Rust),
+and reading at 70, 80 and 90% of the code gives 38.0, 58.1 and 96.0 (Rust 8.1,
+13.0 and 22.6). Those figures are not comparable with a share of functions, so
+they are reported and not used to replace 20.0.
+
+What this shows:
+
+- **The size bias is real but small.** Pooling lets the two largest C corpora
+  (valkey and mbedtls, 68% of the functions) set the figure; their p88 is 18.8
+  and 19.8. The two smallest, pureftpd and ventoy, sit at 31.1 and 28.0, and
+  the other two at 18.6 and 19.7. Counting each corpus equally gives the two
+  small ones more weight, which moves the held-out C p88 from 19.8 to 22.0 and
+  puts 20.0 at about the 86th percentile, not the 88th. In Rust it does not
+  move the p88.
+- **The median of per-corpus percentiles agrees with the pooled one** (19.7
+  against 19.8 in C, 7.14 against 7.07 in Rust). It rests on six C corpora and
+  twelve Rust ones, which is the thin base Alves et al. warn about.
+- **The spread between corpora is larger than the weighting effect.** The C
+  p88 runs from 18.6 to 31.1 across six corpora. A single threshold is a
+  statement about the pool, not about any one project.
+- **The figures describe C and Rust only.** The JS/TS set was not recomputed
+  (the figure of 5.8% over 20.0 above is pooled).
+
+None of this gives ABC a published basis. The ruling below stands: 20.0 is a
+placeholder with a measured effect, and the weighting changes that effect by
+about two points of functions in C (11.9% to 13.8%) and 0.3 in Rust.
 
 ### The AIRD gate
 

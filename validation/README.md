@@ -74,6 +74,13 @@ checkout; 32,737 functions.
   produces the figures in `docs/adr/0003-gate-defaults-have-a-recorded-basis.md`.
   A scope is `GLOB,GLOB!EXCLUDE,...` relative to the corpus directory.
 
+- `abc_basis.py [--ext=.rs] [--metric=abc] KNOTS_BIN OUT.json NAME=DIR[:SCOPE] ...`
+  recomputes one metric's percentiles with the corpora combined four ways
+  (pooled, each corpus equal, Alves et al.'s SLOC weighting, and the median of
+  per-corpus percentiles), with each corpus' own figures, so the size bias of
+  a pooled percentile can be read off. It takes the same arguments as
+  `default_calibration.py`; run it from `validation/`.
+
 ## Results recorded 2026-10-05
 
 **pmccabe agreement, C files (30,461 matched functions):**
