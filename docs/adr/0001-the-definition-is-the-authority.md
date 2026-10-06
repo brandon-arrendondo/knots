@@ -61,3 +61,19 @@ functions differed.
 - This doesn't make agreement with other tools unimportant. It makes it
   evidence: a disagreement is investigated against the definition, and
   either side can turn out to be wrong.
+- **The earlier choices were checked for a recorded reason before they were
+  changed** (2026-10-05: the project history, the docs, both papers and the
+  maintainers' notes back to 2026-09-05; the Ada and metrics work itself dates
+  from June 2026):
+  - *The conditional operator in Cognitive Complexity:* no reason was ever
+    recorded; the first commit had no arm for it. The nearest record, `318fddf`,
+    keeps `?`, `?.`, null-conditional, Elvis and `try?` out of Cognitive
+    Complexity as error-propagation pipelines. That reasoning doesn't cover
+    `?:`, which chooses between two values, so the fix stands.
+  - *A C `switch` counted once:* the recorded reason was agreement with
+    pmccabe's modified column (`c8b49ed`, `a8522d8`), a validation target
+    rather than the definition. Superseded by this ADR: each non-default
+    `case` counts, as in McCabe, the whitepaper and gnatmetric.
+  - *Decisions in every `#if` arm:* never a choice, but the parser's default.
+    `ddf935a` already called counting a never-compiled arm an inflating gap;
+    the worst real configuration is counted instead (ADR-0002).

@@ -39,6 +39,16 @@ rxjs 7.8.2, zod 3.25.76, effect 3.17.13 and @trpc/server 11.5.1 (each
 `src/`); 18,669 functions. Fetch each with `npm pack NAME@VERSION` and unpack
 it. No JSX/TSX corpus is pinned yet.
 
+The Ada corpus is the set knots' Ada metrics were built on (commit `b25a436`),
+at the commits those checkouts were cloned at:
+
+| Corpus | Repository | Commit |
+|--------|------------|--------|
+| HAC | `github.com/zertovitch/hac` | `b0fa2e5a7e75` |
+| GNATCOLL-Core | `github.com/AdaCore/gnatcoll-core` | `c45d2ccb2d70` |
+| Ada-Util | `github.com/stcarrez/ada-util` | `bd635f55729b` |
+| AdaChess | `github.com/adachess/AdaChess` | `faa593fb8dea` |
+
 A changed rule that reaches other grammars is checked on one or two pinned
 releases per language: commons-lang3 3.17.0 and guava 33.4.0-jre (Java,
 Maven Central sources jars), kotlinx-coroutines-core-jvm 1.10.2 (Kotlin,
