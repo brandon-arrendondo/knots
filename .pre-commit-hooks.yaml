@@ -33,9 +33,9 @@
 # tighter baseline without managing args themselves
 - id: knots-strict
   name: Code Complexity Check (Strict)
-  description: Strict thresholds for C, C++, Rust, Python, JavaScript, and TypeScript (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 5.0, Returns 3)
+  description: Strict thresholds for C, C++, Rust, Python, JavaScript, and TypeScript (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 20.0, Returns 3)
   entry: knots
-  args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=5.0, --return-threshold=3]
+  args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=20.0, --return-threshold=3]
   language: rust
   types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
 
@@ -53,7 +53,7 @@
   name: Code Complexity Check (system, strict)
   description: Like knots-strict but assumes knots is already on PATH
   entry: knots
-  args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=5.0, --return-threshold=3]
+  args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=20.0, --return-threshold=3]
   language: system
   types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
 

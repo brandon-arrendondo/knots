@@ -89,7 +89,7 @@ repos:
 
       # -----------------------------------------------------------------------
       # Strict checking (McCabe: 10, Cognitive: 10, Nesting: 3, SLOC: 30,
-      #                  ABC: 5.0, Returns: 3) — fully baked, not overridable
+      #                  ABC: 20.0, Returns: 3) — fully baked, not overridable
       # -----------------------------------------------------------------------
       # - id: knots-strict
 

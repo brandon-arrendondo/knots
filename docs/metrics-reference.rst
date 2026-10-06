@@ -309,6 +309,12 @@ Assignment, Branch, Condition magnitude vector.
 - **C**: condition statements (decision points)
 - **Magnitude**: ``√(A² + B² + C²)``
 - Threshold flag: ``--abc-threshold`` (accepts floating-point)
+- **The ABC threshold has no published basis and needs follow-up research.**
+  The 20.0 in knots' own self-check and in the ``knots-strict`` hooks is a
+  calibration, not a validated value: it is the 97.6th percentile of function
+  ABC magnitude across twelve pinned Rust crates, and the 88th across six
+  held-out C corpora. ABC magnitude grows with function size, so one number
+  does not suit every language. See ``docs/adr/0003``.
 
 Preprocessor Dead-Code Exclusion (C/C++, Swift, C#)
 -----------------------------------------------------
@@ -540,7 +546,7 @@ functions score ≤10. The ≥76 bucket accounts for 1–2% of all functions.
    AIRD 85 — meaning the headline ``--aird-threshold 85`` gate may pass
    functions that are genuinely hard to maintain.
 
-   Rust is the same: the 99th percentile of cognitive complexity is 14 and of
+   These ceilings need tuning on non-C languages. Rust is the same: the 99th percentile of cognitive complexity is 14 and of
    SLOC 86 across twelve crates, so ``--aird-threshold 85`` selects 0.04% of
    their functions, against about 1% of C (``docs/adr/0003``).
 

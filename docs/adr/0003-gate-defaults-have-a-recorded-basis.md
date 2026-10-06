@@ -1,6 +1,6 @@
 # ADR-0003: Every gate default has a recorded source or calibration
 
-**Status:** Proposed, 2026-10-05
+**Status:** Accepted, 2026-10-05
 
 ## Context
 
@@ -66,9 +66,17 @@ these corpora. They are not a claim that the corpora are well written.
 | 15, self-check | `.pre-commit-config.yaml` | **Source, conditional.** NIST SP 500-235 (Watson and McCabe 1996) section 2.5: limits "as high as 15 have been used successfully", but "limits over 10 should be reserved for projects that have several operational advantages", such as experienced staff, formal design and a comprehensive test plan. **Calibration:** over 15 on 1.2% of Rust, the language knots is written in (0.0-3.0% across crates). |
 | 20, CI examples | `ci-integration.rst` | **Calibration.** Over 20 on 0.7% of Rust, 2.6% of JS/TS, 4.0% of held-out C. No source for 20 itself. |
 
+**The self-check keeps 15 under NIST's condition, by the maintainer's ruling.**
+NIST allows a limit above 10 for projects with operational advantages, such as
+experienced staff. The reasoning for knots: inexperienced teams are unlikely to
+be using knots to begin with, and more experienced teams, or ones using LLMs,
+can manage the added complexity. That is a judgment about who knots' users are,
+not a measurement, and it is recorded as one.
+
 Both McCabe and NIST exempt a module that is one multiway `switch` from the
 limit. knots counts each non-default `case` (ADR-0001, McCabe's definition) and
-applies no exemption, so a McCabe gate flags dispatch tables. McCabe's count
+applies no exemption, so a McCabe gate flags dispatch tables. (McCabe 1976
+and NIST SP 500-235 both exempt a module that is a single multiway decision.) McCabe's count
 is over 10 on 11.6% of held-out C functions and 2.1% of Rust; part of that gap
 may be large `switch` bodies, which this measurement does not separate. See the
 Ada paragraph in `metrics-reference.rst`.
@@ -90,11 +98,12 @@ None has a source that this project has found. The measurements:
 | nesting 5 (self-check) | 1.5% | 0.2% | 1.4% | top ~1-2% |
 | SLOC 50 (self-check) | 9.6% | 2.2% | 2.2% | top ~2% outside C |
 | returns 3 (self-check) | 12.2% | 0.6% | 8.0% | top ~1% of Rust |
-| ABC 10.0 (self-check) | 27.6% | 7.7% | 13.5% | **outlier**: ~8% of Rust |
+| ABC 10.0 (self-check, was) | 27.6% | 7.7% | 13.5% | **outlier**: ~8% of Rust; now 20.0 |
 | McCabe 10 (strict) | 11.6% | 2.1% | 6.5% | |
 | nesting 3 (strict) | 6.0% | 1.3% | 5.4% | |
 | SLOC 30 (strict) | 19.6% | 5.0% | 5.6% | |
-| ABC 5.0 (strict) | 48.7% | 19.3% | 28.0% | **fails half of C** |
+| ABC 5.0 (strict, was) | 48.7% | 19.3% | 28.0% | **failed half of C**; now 20.0 |
+| **ABC 20.0** (self-check and strict, now) | 11.9% | 2.4% | 5.8% | 88th percentile of held-out C, 97.6th of Rust |
 | returns 3 (strict) | 12.2% | 0.6% | 8.0% | |
 
 On Rust, knots' own language, every self-check value except ABC fires on about
@@ -104,7 +113,7 @@ the others sit near the 98th-99th). ABC magnitude grows with function size, so
 one number cannot fit C (p90 = 22.2) and Rust (p90 = 8.2) alike.
 
 The `knots-strict` hooks list C, C++, Rust, Python, JavaScript and TypeScript.
-ABC 5.0 fails 48.7% of held-out C functions and 54.1% of the paper's six. A
+ABC 5.0 (the value before the ruling below) failed 48.7% of held-out C functions and 54.1% of the paper's six. A
 gate that fails most functions in a language it claims to support is not
 tight, it is off.
 
@@ -159,24 +168,29 @@ AIRD therefore compresses Rust code into the bottom of its range (p99 AIRD is
 29 on Rust, 65 on JS/TS, 82 on held-out C). Whether to give each language its
 own ceilings is a change to the formula and is for the maintainer to decide.
 
-## Proposed changes
+## Rulings and open items
 
-None is applied here. Each needs the maintainer's decision.
+The maintainer ruled on these defaults on 2026-10-05.
 
-1. **`knots-strict` ABC 5.0.** Fails 48.7% of held-out C. Proposal: 20.0,
-   which sits at the 88th percentile of held-out C and the 97.6th of Rust,
-   the same intent as the other strict values (roughly the worst tenth of C).
-   Alternative: drop ABC from the strict set.
-2. **Self-check ABC 10.0.** Fires on 7.7% of Rust, where every other
-   self-check value fires on 1-2%. Proposal: 20.0 (the 97.6th percentile of Rust). The
-   self-check is knots' own policy ("fix the code to get under the gate"), so
-   this is a policy call as well as a calibration one.
-3. **Documentation, no number changes.** Replace the stale "p99 over 32,205
-   functions" paragraph with the measured percentiles and the nesting caveat,
-   and extend the JS/TS calibration note to Rust. This ADR's branch does that.
-4. **AIRD formula (not proposed, flagged).** Per-language ceilings, or a gate
-   that ranks within a language, would fix the Rust and JS/TS compression.
-   That changes the formula and requires re-scoring the paper's pilots.
+1. **ABC is 20.0 in the self-check and in `knots-strict`** (was 10.0 and 5.0).
+   **The ABC threshold has no published basis, and 20.0 is not a validated
+   value.** It is a calibration: the 97.6th percentile of the pinned Rust set,
+   and the 88th of the held-out C set. ABC magnitude grows with function size,
+   so one number cannot suit every language (p90 is 22.2 in held-out C and 8.2
+   in Rust). **Follow-up research is needed** to find a basis for any ABC
+   threshold, or to give ABC no default. Until then 20.0 is a placeholder with
+   a measured effect: over it on 11.9% of held-out C, 2.4% of Rust and 5.8% of
+   JS/TS.
+2. **McCabe 15 in the self-check stands**, under NIST's condition, as above.
+3. **The AIRD weights and ceilings do not change.** The ceilings are
+   calibrated on C. **They need tuning on non-C languages**: on Rust and JS/TS
+   AIRD compresses into the bottom of its range, and the 85 gate almost never
+   fires (above). Whether that means per-language ceilings or a within-language
+   gate is a change to the formula, and the paper's pilots would need
+   re-scoring.
+4. **Documentation.** The stale "p99 over 32,205 functions" paragraph in
+   `metrics-reference.rst` now gives the percentiles at this version and the
+   nesting caveat, and its JS/TS calibration note covers Rust.
 
 ## Not covered
 
