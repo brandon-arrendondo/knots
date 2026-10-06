@@ -166,14 +166,14 @@ of functions are over 20.0 in held-out C and Rust).
 | Combination | C held-out: p88 | over 20.0 | Rust: p88 | over 20.0 |
 |-------------|----------------:|----------:|----------:|----------:|
 | Pooled, every function once (what 20.0 came from) | 19.8 | 11.9% | 7.07 | 2.4% |
-| Every corpus equal, functions unweighted (Alves et al. VI-C normalization) | 22.0 | 13.8% | 7.07 | 2.1% |
+| Every corpus equal, each function weighted 1/n of its corpus (the function-count analogue of Alves et al.'s VI-C normalization) | 22.0 | 13.8% | 7.07 | 2.1% |
 | Median of the per-corpus p88 (check only; Alves et al. VII-B argue against it) | 19.7 | | 7.14 | |
 | Across the corpora, each one's own | 18.6 to 31.1 | 10.9% to 21.8% | 4.0 to 11.0 | 0.6% to 5.8% |
 
 Weighting functions by their SLOC within each corpus, as Alves et al. do
-(VI-B), answers a different question: the share of code, not of functions. In
+(VI-B and VI-C), answers a different question: the share of code, not of functions. In
 held-out C, 47.5% of the code is in functions over ABC 20.0 (11.7% in Rust),
-and reading at 70, 80 and 90% of the code gives 38.0, 58.1 and 96.0 (Rust 8.1,
+and reading at 70, 80 and 90% of the code (VI-D) gives 38.0, 58.1 and 96.0 (Rust 8.1,
 13.0 and 22.6). Those figures are not comparable with a share of functions, so
 they are reported and not used to replace 20.0.
 
