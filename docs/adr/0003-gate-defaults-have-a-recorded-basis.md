@@ -51,6 +51,20 @@ differ from that README's whole-package counts.
 | Rust, twelve crates (`src/`) | 12,273 |
 | JS/TS, eleven packages | 18,120 |
 
+**Prior work.** Deriving a threshold from the distribution of a metric over a
+set of benchmark systems is an established approach: Alves, Ypma and Visser,
+"Deriving metric thresholds from benchmark data" (ICSM 2010,
+doi:10.1109/ICSM.2010.5609747), and Oliveira, Valente and Lima, "Extracting
+relative thresholds for source code metrics" (CSMR-WCRE 2014,
+doi:10.1109/CSMR-WCRE.2014.6747177). The references and DOIs were checked in
+Crossref; the papers themselves were not available to this work, so the
+comparison below is of approach only and is not a claim that either paper's
+procedure was followed. What this ADR does is simpler: it takes percentiles of
+the per-function values pooled over the corpora, with no weighting by function
+size and no per-system aggregation, and reports how often an existing default
+fires. It derives no new threshold except ABC 20.0, which is a percentile
+choice and is marked as such below.
+
 Figures below are the share of functions over a threshold, pooled over the set,
 with the range across its corpora. They describe how often a default fires on
 these corpora. They are not a claim that the corpora are well written.
