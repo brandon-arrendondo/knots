@@ -118,7 +118,8 @@ All 13 metrics are computed. Python-specific notes:</p>
 <code class="docutils literal notranslate"><span class="pre">or</span></code>, <code class="docutils literal notranslate"><span class="pre">match</span></code> (3.10+), and ternary expressions</p></li>
 <li><p><strong>Cognitive</strong>: <code class="docutils literal notranslate"><span class="pre">elif</span></code> is a flat <code class="docutils literal notranslate"><span class="pre">+1</span></code> (no nesting penalty); <code class="docutils literal notranslate"><span class="pre">lambda</span></code>
 increments nesting depth without adding a base cost</p></li>
-<li><p><strong>SLOC</strong>: <code class="docutils literal notranslate"><span class="pre">#</span></code> comment lines are excluded</p></li>
+<li><p><strong>SLOC</strong>: <code class="docutils literal notranslate"><span class="pre">#</span></code> comments are excluded; a docstring counts as code (see SLOC
+below)</p></li>
 <li><p><strong>External calls</strong>: attribute-form calls (<code class="docutils literal notranslate"><span class="pre">obj.method()</span></code>, <code class="docutils literal notranslate"><span class="pre">module.func()</span></code>)
 are counted as external references</p></li>
 <li><p><strong>Limitations</strong>: <code class="docutils literal notranslate"><span class="pre">for_in_clause</span></code> inside comprehensions is not counted</p></li>
@@ -130,13 +131,32 @@ are counted as external references</p></li>
 TypeScript (<code class="docutils literal notranslate"><span class="pre">.ts</span></code>, <code class="docutils literal notranslate"><span class="pre">.tsx</span></code>). All 13 metrics are computed. Notes:</p>
 <ul class="simple">
 <li><p><strong>McCabe</strong>: counts <code class="docutils literal notranslate"><span class="pre">if</span></code>, <code class="docutils literal notranslate"><span class="pre">while</span></code>, <code class="docutils literal notranslate"><span class="pre">do</span></code>, <code class="docutils literal notranslate"><span class="pre">for</span></code>, <code class="docutils literal notranslate"><span class="pre">for...in</span></code>,
-<code class="docutils literal notranslate"><span class="pre">for...of</span></code>, <code class="docutils literal notranslate"><span class="pre">switch</span></code>, <code class="docutils literal notranslate"><span class="pre">ternary</span></code> (<code class="docutils literal notranslate"><span class="pre">?:</span></code>), <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>, <code class="docutils literal notranslate"><span class="pre">||</span></code>, and <code class="docutils literal notranslate"><span class="pre">??</span></code>
-(nullish coalescing)</p></li>
-<li><p><strong>Cognitive</strong>: <code class="docutils literal notranslate"><span class="pre">for...in</span></code> and <code class="docutils literal notranslate"><span class="pre">for...of</span></code> are treated as loop structures
-(+1 + nesting penalty); arrow functions (<code class="docutils literal notranslate"><span class="pre">()</span> <span class="pre">=&gt;</span></code>) increment nesting depth
-without adding a base cost; <code class="docutils literal notranslate"><span class="pre">??</span></code> chains count once per contiguous sequence
-(same as <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>/<code class="docutils literal notranslate"><span class="pre">||</span></code>)</p></li>
-<li><p><strong>SLOC</strong>: <code class="docutils literal notranslate"><span class="pre">//</span></code> and <code class="docutils literal notranslate"><span class="pre">/*</span> <span class="pre">*/</span></code> comments are excluded (same as C/C++)</p></li>
+<code class="docutils literal notranslate"><span class="pre">for...of</span></code>, each non-default <code class="docutils literal notranslate"><span class="pre">case</span></code>, <code class="docutils literal notranslate"><span class="pre">catch</span></code>, the conditional operator
+(<code class="docutils literal notranslate"><span class="pre">?:</span></code>), <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>, <code class="docutils literal notranslate"><span class="pre">||</span></code>, <code class="docutils literal notranslate"><span class="pre">??</span></code>, optional chaining (<code class="docutils literal notranslate"><span class="pre">?.</span></code>), logical
+assignment (<code class="docutils literal notranslate"><span class="pre">||=</span></code>, <code class="docutils literal notranslate"><span class="pre">&amp;&amp;=</span></code>, <code class="docutils literal notranslate"><span class="pre">??=</span></code>) and each default value (a parameter
+default or a destructuring default). ECMA-262 evaluates each of these
+conditionally, so each is a decision; ESLint’s <code class="docutils literal notranslate"><span class="pre">complexity</span></code> rule counts
+the same set.</p></li>
+<li><p><strong>Cognitive</strong>: <code class="docutils literal notranslate"><span class="pre">for...in</span></code> and <code class="docutils literal notranslate"><span class="pre">for...of</span></code> are loop structures (+1 plus
+the nesting penalty); <code class="docutils literal notranslate"><span class="pre">break</span></code>/<code class="docutils literal notranslate"><span class="pre">continue</span></code> to a label are +1; <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">||</span></code> count once per sequence, and <code class="docutils literal notranslate"><span class="pre">??</span></code> and <code class="docutils literal notranslate"><span class="pre">?.</span></code> add nothing (the
+whitepaper’s “Ignore shorthand” covers null-coalescing operators). Arrow
+functions, function expressions, and functions and methods declared inside
+a function increase the nesting level without an increment of their own.
+As the whitepaper’s Appendix A specifies for JavaScript, an outer function
+whose top level holds only declarations (variables, functions, classes, or
+a function assigned to a name) is treated as a namespace, and the functions
+in it don’t nest. A function that is itself an arrow function doesn’t nest
+its own body.</p></li>
+<li><p><strong>Recursion</strong>: a bare call resolves through the enclosing functions, and
+<code class="docutils literal notranslate"><span class="pre">this.f()</span></code>/<code class="docutils literal notranslate"><span class="pre">this.#f()</span></code> to the method’s own class, where <code class="docutils literal notranslate"><span class="pre">this</span></code> is the
+method’s own (inside an arrow function, not a nested <code class="docutils literal notranslate"><span class="pre">function</span></code>).</p></li>
+<li><p><strong>SLOC</strong>: <code class="docutils literal notranslate"><span class="pre">//</span></code> and <code class="docutils literal notranslate"><span class="pre">/*</span> <span class="pre">*/</span></code> comments are excluded (same as C/C++). The
+lines of any function nested in another, an arrow callback included, are
+left out of the outer function’s SLOC.</p></li>
+<li><p><strong>TypeScript</strong>: type syntax adds nothing. Overload signatures,
+<code class="docutils literal notranslate"><span class="pre">declare</span> <span class="pre">function</span></code>, interface members and abstract methods have no body
+and are not reported as functions.</p></li>
 <li><p><strong>External calls</strong>: member-expression calls (<code class="docutils literal notranslate"><span class="pre">obj.method()</span></code>,
 <code class="docutils literal notranslate"><span class="pre">module.func()</span></code>) are counted as external references</p></li>
 <li><p><strong>Function discovery</strong>: <code class="docutils literal notranslate"><span class="pre">function</span></code> declarations, <code class="docutils literal notranslate"><span class="pre">function</span></code> expressions,
@@ -185,10 +205,15 @@ toward the return count. Neither adds to McCabe.</p></li>
 <li><p><strong>Expression functions</strong>: <code class="docutils literal notranslate"><span class="pre">function</span> <span class="pre">F</span> <span class="pre">(X</span> <span class="pre">:</span> <span class="pre">T)</span> <span class="pre">return</span> <span class="pre">T</span> <span class="pre">is</span> <span class="pre">(expr);</span></code> is
 discovered as a function (<code class="docutils literal notranslate"><span class="pre">expression_function_declaration</span></code>), alongside
 <code class="docutils literal notranslate"><span class="pre">subprogram_body</span></code>.</p></li>
+<li><p><strong>Loops and case alternatives (McCabe)</strong>: a <code class="docutils literal notranslate"><span class="pre">while</span></code> or <code class="docutils literal notranslate"><span class="pre">for</span></code> loop is a
+decision; a bare <code class="docutils literal notranslate"><span class="pre">loop</span></code> is not (its <code class="docutils literal notranslate"><span class="pre">exit</span> <span class="pre">when</span></code> is). Each <code class="docutils literal notranslate"><span class="pre">when</span></code>
+alternative is +1 except <code class="docutils literal notranslate"><span class="pre">when</span> <span class="pre">others</span></code>, the default, as in McCabe’s
+definition.</p></li>
 <li><p><strong>Exit statements</strong>: <code class="docutils literal notranslate"><span class="pre">exit</span> <span class="pre">when</span> <span class="pre">Condition</span></code> is +1 to McCabe, Cognitive (flat),
 and ABC (a condition). A bare <code class="docutils literal notranslate"><span class="pre">exit</span></code> adds nothing.</p></li>
-<li><p><strong>Raise</strong>: <code class="docutils literal notranslate"><span class="pre">raise</span></code> statements and Ada 2012 raise expressions are +1 to
-McCabe, +1 (flat) to Cognitive, and one branch to ABC.</p></li>
+<li><p><strong>Raise</strong>: <code class="docutils literal notranslate"><span class="pre">raise</span></code> statements and Ada 2012 raise expressions are one
+branch to ABC. They add nothing to McCabe (an unconditional raise is not a
+decision) or to Cognitive (the specification gives <code class="docutils literal notranslate"><span class="pre">throw</span></code> no increment).</p></li>
 <li><p><strong>Tasking</strong>: task bodies (<code class="docutils literal notranslate"><span class="pre">task_body</span></code>) are discovered as functions, and
 subprograms inside a protected body are discovered too. In a <code class="docutils literal notranslate"><span class="pre">select</span></code>,
 each <code class="docutils literal notranslate"><span class="pre">select_alternative</span></code> is +1 to McCabe, each guard
@@ -242,10 +267,51 @@ table than hard logic; review it before refactoring.</p>
 <ul class="simple">
 <li><p><strong>Formula</strong>: decision points + 1</p></li>
 <li><p><strong>Decision points</strong>: <code class="docutils literal notranslate"><span class="pre">if</span></code>/<code class="docutils literal notranslate"><span class="pre">elif</span></code>, <code class="docutils literal notranslate"><span class="pre">while</span></code>, <code class="docutils literal notranslate"><span class="pre">for</span></code>, <code class="docutils literal notranslate"><span class="pre">do</span></code>,
-<code class="docutils literal notranslate"><span class="pre">switch</span></code>/<code class="docutils literal notranslate"><span class="pre">case</span></code>/<code class="docutils literal notranslate"><span class="pre">match</span></code>, ternary, logical operators (<code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>/<code class="docutils literal notranslate"><span class="pre">||</span></code>,
-Python <code class="docutils literal notranslate"><span class="pre">and</span></code>/<code class="docutils literal notranslate"><span class="pre">or</span></code>), <code class="docutils literal notranslate"><span class="pre">except</span></code> (Python and C++)</p></li>
+<code class="docutils literal notranslate"><span class="pre">case</span></code>/<code class="docutils literal notranslate"><span class="pre">match</span></code> arms, ternary, logical operators (<code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>/<code class="docutils literal notranslate"><span class="pre">||</span></code>,
+Python <code class="docutils literal notranslate"><span class="pre">and</span></code>/<code class="docutils literal notranslate"><span class="pre">or</span></code>), each exception handler (<code class="docutils literal notranslate"><span class="pre">except</span></code>, <code class="docutils literal notranslate"><span class="pre">catch</span></code>).
+knots 1.18.0 and earlier didn’t count <code class="docutils literal notranslate"><span class="pre">catch</span></code> in C++, Java, C# or
+JavaScript/TypeScript</p></li>
+<li><p><strong>switch</strong>: one decision per non-default <code class="docutils literal notranslate"><span class="pre">case</span></code> label, as in McCabe’s
+definition (the SonarSource whitepaper’s <code class="docutils literal notranslate"><span class="pre">getWords</span></code>: three cases and a
+<code class="docutils literal notranslate"><span class="pre">default</span></code> give 4), in C, C++, PHP and JavaScript/TypeScript. knots 1.18.0
+and earlier counted a <code class="docutils literal notranslate"><span class="pre">switch</span></code> once (pmccabe’s “modified” column). Ada
+counts each <code class="docutils literal notranslate"><span class="pre">when</span></code> alternative except <code class="docutils literal notranslate"><span class="pre">when</span> <span class="pre">others</span></code>. <strong>Known
+limitation:</strong> the switch forms of Java, C#, Go, Kotlin, Swift and Scala
+still count 1 per switch until they have definition probes</p></li>
+<li><p><strong>Rust</strong> <code class="docutils literal notranslate"><span class="pre">match</span></code>: one decision per arm but the last (arms are tried in
+order and the match is exhaustive, so four arms are three tests, as in
+<code class="docutils literal notranslate"><span class="pre">getWords</span></code>), plus one per guard (<code class="docutils literal notranslate"><span class="pre">if</span></code> after a pattern) and one per
+<code class="docutils literal notranslate"><span class="pre">|</span></code> alternative in an arm’s pattern, as <code class="docutils literal notranslate"><span class="pre">case</span> <span class="pre">1:</span> <span class="pre">case</span> <span class="pre">2:</span></code> is two in C.
+<code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">...</span> <span class="pre">else</span></code> is one decision and <code class="docutils literal notranslate"><span class="pre">?</span></code> one. A bare <code class="docutils literal notranslate"><span class="pre">loop</span></code> has no test
+and adds nothing (the <code class="docutils literal notranslate"><span class="pre">if</span></code> that breaks out of it is the decision), as
+for Ada’s bare <code class="docutils literal notranslate"><span class="pre">loop</span></code>. knots 1.18.0 and earlier counted a <code class="docutils literal notranslate"><span class="pre">match</span></code> once
+and a <code class="docutils literal notranslate"><span class="pre">loop</span></code> as a decision, and didn’t count <code class="docutils literal notranslate"><span class="pre">let</span> <span class="pre">...</span> <span class="pre">else</span></code></p></li>
+<li><p><strong>Not decision points</strong>: unconditional transfers (<code class="docutils literal notranslate"><span class="pre">goto</span></code>, <code class="docutils literal notranslate"><span class="pre">throw</span></code>,
+<code class="docutils literal notranslate"><span class="pre">raise</span></code>) add nothing, as in McCabe’s definition and pmccabe</p></li>
+<li><p><strong>Preprocessor (C/C++)</strong>: a function is scored as its worst real
+configuration (ADR-0002 §3). Arms the file proves dead are blanked before
+parsing; each remaining <code class="docutils literal notranslate"><span class="pre">#if</span></code>/<code class="docutils literal notranslate"><span class="pre">#ifdef</span></code> chain is one choice among its
+arms, chains on the same condition (<code class="docutils literal notranslate"><span class="pre">#ifdef</span> <span class="pre">X</span></code> and a later <code class="docutils literal notranslate"><span class="pre">#ifndef</span> <span class="pre">X</span></code>)
+are one choice, and McCabe is the maximum over the combinations, never a
+sum of arms no build compiles together. Conditions are compared as
+written, so logically linked conditions spelled differently count as
+independent. A function with more than 64 combinations (one in the six C
+corpora) keeps every arm counted. No build facts are needed. How a user
+could supply them to narrow the configurations is an open design question
+across all of knots’ languages, not only C. knots 1.18.0 and earlier
+summed every arm. pmccabe keeps the
+first arm, which accounts for nearly all remaining differences</p></li>
 <li><p><strong>Thresholds</strong>: ≤10 good, 11–20 moderate, 21+ consider refactoring</p></li>
-<li><p><strong>Validated</strong>: 100% match with <code class="docutils literal notranslate"><span class="pre">pmccabe</span></code> output across a 32,205-function corpus</p></li>
+<li><p><strong>Validated</strong>: agrees with pmccabe’s “traditional” count (each <code class="docutils literal notranslate"><span class="pre">case</span></code>
+counted, McCabe’s definition) on 29,852 of 30,461 C functions (98.00%)
+across six corpora pinned by commit. 597 of the 609 differing functions
+contain <code class="docutils literal notranslate"><span class="pre">#if</span></code> arms (above). Most of the other 12 are macro artifacts: a
+<code class="docutils literal notranslate"><span class="pre">switch</span></code> whose <code class="docutils literal notranslate"><span class="pre">case</span></code> labels come from macros (neither tool sees them;
+knots counts the switch as one decision, pmccabe as none), or an <code class="docutils literal notranslate"><span class="pre">if</span></code>
+inside a macro argument, which pmccabe’s token scan counts and a parser
+cannot. Case labels that a statement-like macro makes the parser misread
+(sqlite’s <code class="docutils literal notranslate"><span class="pre">deliberate_fall_through</span></code>) are recovered. Reproduce with
+<code class="docutils literal notranslate"><span class="pre">validation/pmccabe_compare.py</span></code> (see <code class="docutils literal notranslate"><span class="pre">validation/README.md</span></code>)</p></li>
 </ul>
 </section>
 <section id="cognitive-complexity">
@@ -258,10 +324,43 @@ and structural complexity. Based on the
 <li><p>Nested structures add more than flat ones (nesting penalty)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">else</span></code>/<code class="docutils literal notranslate"><span class="pre">else</span> <span class="pre">if</span></code> chains cost less than independent <code class="docutils literal notranslate"><span class="pre">if</span></code> chains</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">switch</span></code> is a single increment regardless of arm count</p></li>
+<li><p>The conditional operator (<code class="docutils literal notranslate"><span class="pre">?:</span></code>, Python’s <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">if</span> <span class="pre">c</span> <span class="pre">else</span> <span class="pre">y</span></code>) is +1 plus
+nesting and nests what it contains, like <code class="docutils literal notranslate"><span class="pre">if</span></code> (whitepaper 1.7, Appendix B).
+knots 1.18.0 and earlier did not count it</p></li>
+<li><p>In C/C++ the <code class="docutils literal notranslate"><span class="pre">cognitive</span></code> column is the function’s worst real
+preprocessor configuration, as for McCabe above</p></li>
 </ul>
-<p>Validated against Mozilla’s
-<a class="reference external" href="https://github.com/mozilla/rust-code-analysis">rust-code-analysis</a> at
-1.004× mean ratio across 11,365 Rust functions (285k lines).</p>
+<p>Conformance is checked by <code class="docutils literal notranslate"><span class="pre">validation/probes</span></code> (see
+<code class="docutils literal notranslate"><span class="pre">validation/probes/README.md</span></code>): every known departure from the
+specification is listed, with its reason, in
+<code class="docutils literal notranslate"><span class="pre">validation/probes/conformance.toml</span></code>. Follows the specification
+(whitepaper 1.7, 2023) on two points other implementations skip:</p>
+<ul class="simple">
+<li><p><strong>Recursion</strong>: +1 for each function in a recursion cycle, direct or
+indirect (Appendix B1), once per function, not per call. Cycles are found
+among the functions of one file, from the call syntax alone: a bare call
+<code class="docutils literal notranslate"><span class="pre">f()</span></code>, a call through <code class="docutils literal notranslate"><span class="pre">self</span></code>/<code class="docutils literal notranslate"><span class="pre">this</span></code>, and in Rust <code class="docutils literal notranslate"><span class="pre">Self::f</span></code> or
+<code class="docutils literal notranslate"><span class="pre">Type::f</span></code> inside <code class="docutils literal notranslate"><span class="pre">Type</span></code>’s impl (called or passed as a value). A method
+called on any other receiver (<code class="docutils literal notranslate"><span class="pre">child.depth()</span></code>) is not followed, since
+its type isn’t known; following it by name scored a third of Rust
+functions as recursive, almost all of them delegations like
+<code class="docutils literal notranslate"><span class="pre">self.0.fmt(f)</span></code>. A cycle through another file is not seen either. In
+Rust a bare call resolves through the enclosing <code class="docutils literal notranslate"><span class="pre">fn</span></code> and <code class="docutils literal notranslate"><span class="pre">mod</span></code>
+scopes, so same-named functions in different modules are kept apart.</p></li>
+<li><p><strong>break/continue to a label</strong> (Rust <code class="docutils literal notranslate"><span class="pre">break</span> <span class="pre">'outer</span></code>): +1 (Appendix B1).
+A plain <code class="docutils literal notranslate"><span class="pre">break</span></code> or <code class="docutils literal notranslate"><span class="pre">continue</span></code> adds nothing.</p></li>
+<li><p><strong>throw/raise</strong>: no increment (Appendix B1; Appendix C scores every
+<code class="docutils literal notranslate"><span class="pre">throw</span></code> 0). <code class="docutils literal notranslate"><span class="pre">goto</span></code> keeps its +1.</p></li>
+</ul>
+<p>Compared against Mozilla’s
+<a class="reference external" href="https://github.com/mozilla/rust-code-analysis">rust-code-analysis</a>: a
+1.004× mean ratio over <strong>17 matched high-complexity functions</strong>, drawn from
+11,365 Rust functions scanned (285k lines; the corpus was not pinned by
+commit), measured before knots added the recursion increment, which
+rust-code-analysis omits. Agreement with another implementation is
+evidence, not ground truth: on the Rust probes rust-code-analysis also
+scores the whitepaper’s own logical-operator example 5 instead of 4 and a
+bare <code class="docutils literal notranslate"><span class="pre">loop</span></code> with a nested <code class="docutils literal notranslate"><span class="pre">if</span></code> 1 instead of 3 (<code class="docutils literal notranslate"><span class="pre">validation/probes/TOOLS.md</span></code>).</p>
 </section>
 <section id="nesting-depth">
 <h2>Nesting Depth<a class="headerlink" href="#nesting-depth" title="Link to this heading"></a></h2>
@@ -274,8 +373,28 @@ and structural complexity. Based on the
 </section>
 <section id="sloc-source-lines-of-code">
 <h2>SLOC (Source Lines of Code)<a class="headerlink" href="#sloc-source-lines-of-code" title="Link to this heading"></a></h2>
-<p>Non-blank, non-comment lines of code within the function body.</p>
+<p>Physical source lines of the function that hold code (Park, <em>Software Size
+Measurement</em>, CMU/SEI-92-TR-20, 1992): blank lines and lines holding only
+comments don’t count, and a line with code and a comment does.</p>
 <ul class="simple">
+<li><p><strong>What is a comment comes from the parse</strong>, not from a scan for <code class="docutils literal notranslate"><span class="pre">//</span></code>,
+<code class="docutils literal notranslate"><span class="pre">/*</span></code> or <code class="docutils literal notranslate"><span class="pre">#</span></code>: a line counts when any token that isn’t part of a comment
+has text on it. So comment markers inside a string, a template literal or a
+regular expression are code, and Rust’s nested block comments end where
+Rust says. In C, C++, Rust, Python, JavaScript/TypeScript, Go, Java, C#,
+PHP, Kotlin, Swift and Scala. Ada, Lua and Fortran still use a scan for
+their line-comment markers.</p></li>
+<li><p><strong>Agreement</strong>: on the definition probes knots matches every row; sloccount,
+cloc, tokei and scc each miss at least one (<code class="docutils literal notranslate"><span class="pre">validation/probes/TOOLS.md</span></code>).
+Per function on the pinned corpora it agrees with sloccount on 99.77% of
+Lua’s and 98.22% of curl’s functions; most of the rest are arms of <code class="docutils literal notranslate"><span class="pre">#if</span></code>
+that the substrate proves dead and blanks before measuring, which
+sloccount counts.</p></li>
+<li><p><strong>Not yet decided</strong>: a Python docstring counts as code (each line with
+text), where sloccount, cloc, scc, radon and lizard count it as comment; and
+the lines of a function nested in another (an arrow callback included) are
+left out of the outer function’s SLOC, where whole-file counters and
+rust-code-analysis keep them.</p></li>
 <li><p>Useful in combination with complexity metrics</p></li>
 <li><p>Functions &gt;50 SLOC often benefit from decomposition</p></li>
 <li><p>Threshold flag: <code class="docutils literal notranslate"><span class="pre">--sloc-threshold</span></code></p></li>
@@ -406,6 +525,14 @@ needs to safely modify a function. Higher = harder for an AI to modify.</p>
 <code class="docutils literal notranslate"><span class="pre">doc_score</span></code> counts as 0), and the sum is rounded and clamped to 0–100.
 <code class="docutils literal notranslate"><span class="pre">state_coupling</span></code> is the explicit parameter count plus the number of
 distinct <code class="docutils literal notranslate"><span class="pre">self</span></code>/<code class="docutils literal notranslate"><span class="pre">this</span></code> fields the function touches.</p>
+<p>AIRD reads the source <strong>as written</strong>. Its <code class="docutils literal notranslate"><span class="pre">cognitive</span></code> input (and the McCabe
+behind <code class="docutils literal notranslate"><span class="pre">test_score</span></code>) counts every live <code class="docutils literal notranslate"><span class="pre">#if</span></code> arm, where the <code class="docutils literal notranslate"><span class="pre">mccabe</span></code> and
+<code class="docutils literal notranslate"><span class="pre">cognitive</span></code> columns report the worst real configuration. McCabe and
+Cognitive Complexity are published definitions of one program; AIRD models an
+AI working on the text, which reads, greps and cuts the file with every arm
+in it and has to work out which arm a change concerns. AICP’s inputs (SLOC,
+external calls) are as written too. Whether the number of configurations
+itself adds difficulty is a question for the validation study.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">--recursive</span></code>, the clamped score is then multiplied by a file-level
 coupling factor and rounded and clamped again:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>multiplier = 1 + min(file_ce/10, 1) × 0.20        (1.0 to 1.2)
@@ -483,9 +610,12 @@ mosquitto, SQLite, curl, hostap, Lua, libcrc):</p>
 <p>Cognitive complexity is the dominant driver. SLOC, nesting, and testability
 are secondary. Documentation (doc_score) reduces difficulty.</p>
 <p><strong>Recommended CI threshold</strong>: <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code></p>
-<p>Validated empirically against Sonnet 4.6 and Opus 4.8: functions scoring
-≥85 were consistently rated significantly harder to modify than mid-band
-or low-band functions.</p>
+<p><strong>Evidence so far is a pilot, not a validation.</strong> Sonnet 4.6 and Opus 4.8
+rated nine functions (three per AIRD band) on one task. The top band
+separated, the middle band did not, and one function falsified the gate:
+<code class="docutils literal notranslate"><span class="pre">hostapd_config_read_eap_user</span></code> scored the highest AIRD in the pilot and
+was rated as easy as the low band. A pre-registered validation study is
+designed but not yet run.</p>
 <p><strong>Distribution</strong>: heavily right-skewed. In mature codebases, 67–88% of
 functions score ≤10. The ≥76 bucket accounts for 1–2% of all functions.</p>
 <div class="admonition note">

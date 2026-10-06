@@ -14,7 +14,8 @@ All 13 metrics are computed. Python-specific notes:
   ``or``, ``match`` (3.10+), and ternary expressions
 - **Cognitive**: ``elif`` is a flat ``+1`` (no nesting penalty); ``lambda``
   increments nesting depth without adding a base cost
-- **SLOC**: ``#`` comment lines are excluded
+- **SLOC**: ``#`` comments are excluded; a docstring counts as code (see SLOC
+  below)
 - **External calls**: attribute-form calls (``obj.method()``, ``module.func()``)
   are counted as external references
 - **Limitations**: ``for_in_clause`` inside comprehensions is not counted
@@ -26,13 +27,32 @@ Knots supports JavaScript (``.js``, ``.mjs``, ``.cjs``, ``.jsx``) and
 TypeScript (``.ts``, ``.tsx``). All 13 metrics are computed. Notes:
 
 - **McCabe**: counts ``if``, ``while``, ``do``, ``for``, ``for...in``,
-  ``for...of``, ``switch``, ``ternary`` (``?:``), ``&&``, ``||``, and ``??``
-  (nullish coalescing)
-- **Cognitive**: ``for...in`` and ``for...of`` are treated as loop structures
-  (+1 + nesting penalty); arrow functions (``() =>``) increment nesting depth
-  without adding a base cost; ``??`` chains count once per contiguous sequence
-  (same as ``&&``/``||``)
-- **SLOC**: ``//`` and ``/* */`` comments are excluded (same as C/C++)
+  ``for...of``, each non-default ``case``, ``catch``, the conditional operator
+  (``?:``), ``&&``, ``||``, ``??``, optional chaining (``?.``), logical
+  assignment (``||=``, ``&&=``, ``??=``) and each default value (a parameter
+  default or a destructuring default). ECMA-262 evaluates each of these
+  conditionally, so each is a decision; ESLint's ``complexity`` rule counts
+  the same set.
+- **Cognitive**: ``for...in`` and ``for...of`` are loop structures (+1 plus
+  the nesting penalty); ``break``/``continue`` to a label are +1; ``&&`` and
+  ``||`` count once per sequence, and ``??`` and ``?.`` add nothing (the
+  whitepaper's "Ignore shorthand" covers null-coalescing operators). Arrow
+  functions, function expressions, and functions and methods declared inside
+  a function increase the nesting level without an increment of their own.
+  As the whitepaper's Appendix A specifies for JavaScript, an outer function
+  whose top level holds only declarations (variables, functions, classes, or
+  a function assigned to a name) is treated as a namespace, and the functions
+  in it don't nest. A function that is itself an arrow function doesn't nest
+  its own body.
+- **Recursion**: a bare call resolves through the enclosing functions, and
+  ``this.f()``/``this.#f()`` to the method's own class, where ``this`` is the
+  method's own (inside an arrow function, not a nested ``function``).
+- **SLOC**: ``//`` and ``/* */`` comments are excluded (same as C/C++). The
+  lines of any function nested in another, an arrow callback included, are
+  left out of the outer function's SLOC.
+- **TypeScript**: type syntax adds nothing. Overload signatures,
+  ``declare function``, interface members and abstract methods have no body
+  and are not reported as functions.
 - **External calls**: member-expression calls (``obj.method()``,
   ``module.func()``) are counted as external references
 - **Function discovery**: ``function`` declarations, ``function`` expressions,
@@ -82,10 +102,15 @@ the general-purpose rules do not cover:
 - **Expression functions**: ``function F (X : T) return T is (expr);`` is
   discovered as a function (``expression_function_declaration``), alongside
   ``subprogram_body``.
+- **Loops and case alternatives (McCabe)**: a ``while`` or ``for`` loop is a
+  decision; a bare ``loop`` is not (its ``exit when`` is). Each ``when``
+  alternative is +1 except ``when others``, the default, as in McCabe's
+  definition.
 - **Exit statements**: ``exit when Condition`` is +1 to McCabe, Cognitive (flat),
   and ABC (a condition). A bare ``exit`` adds nothing.
-- **Raise**: ``raise`` statements and Ada 2012 raise expressions are +1 to
-  McCabe, +1 (flat) to Cognitive, and one branch to ABC.
+- **Raise**: ``raise`` statements and Ada 2012 raise expressions are one
+  branch to ABC. They add nothing to McCabe (an unconditional raise is not a
+  decision) or to Cognitive (the specification gives ``throw`` no increment).
 - **Tasking**: task bodies (``task_body``) are discovered as functions, and
   subprograms inside a protected body are discovered too. In a ``select``,
   each ``select_alternative`` is +1 to McCabe, each guard
@@ -140,10 +165,51 @@ Counts the number of linearly independent paths through a function.
 
 - **Formula**: decision points + 1
 - **Decision points**: ``if``/``elif``, ``while``, ``for``, ``do``,
-  ``switch``/``case``/``match``, ternary, logical operators (``&&``/``||``,
-  Python ``and``/``or``), ``except`` (Python and C++)
+  ``case``/``match`` arms, ternary, logical operators (``&&``/``||``,
+  Python ``and``/``or``), each exception handler (``except``, ``catch``).
+  knots 1.18.0 and earlier didn't count ``catch`` in C++, Java, C# or
+  JavaScript/TypeScript
+- **switch**: one decision per non-default ``case`` label, as in McCabe's
+  definition (the SonarSource whitepaper's ``getWords``: three cases and a
+  ``default`` give 4), in C, C++, PHP and JavaScript/TypeScript. knots 1.18.0
+  and earlier counted a ``switch`` once (pmccabe's "modified" column). Ada
+  counts each ``when`` alternative except ``when others``. **Known
+  limitation:** the switch forms of Java, C#, Go, Kotlin, Swift and Scala
+  still count 1 per switch until they have definition probes
+- **Rust** ``match``: one decision per arm but the last (arms are tried in
+  order and the match is exhaustive, so four arms are three tests, as in
+  ``getWords``), plus one per guard (``if`` after a pattern) and one per
+  ``|`` alternative in an arm's pattern, as ``case 1: case 2:`` is two in C.
+  ``let ... else`` is one decision and ``?`` one. A bare ``loop`` has no test
+  and adds nothing (the ``if`` that breaks out of it is the decision), as
+  for Ada's bare ``loop``. knots 1.18.0 and earlier counted a ``match`` once
+  and a ``loop`` as a decision, and didn't count ``let ... else``
+- **Not decision points**: unconditional transfers (``goto``, ``throw``,
+  ``raise``) add nothing, as in McCabe's definition and pmccabe
+- **Preprocessor (C/C++)**: a function is scored as its worst real
+  configuration (ADR-0002 §3). Arms the file proves dead are blanked before
+  parsing; each remaining ``#if``/``#ifdef`` chain is one choice among its
+  arms, chains on the same condition (``#ifdef X`` and a later ``#ifndef X``)
+  are one choice, and McCabe is the maximum over the combinations, never a
+  sum of arms no build compiles together. Conditions are compared as
+  written, so logically linked conditions spelled differently count as
+  independent. A function with more than 64 combinations (one in the six C
+  corpora) keeps every arm counted. No build facts are needed. How a user
+  could supply them to narrow the configurations is an open design question
+  across all of knots' languages, not only C. knots 1.18.0 and earlier
+  summed every arm. pmccabe keeps the
+  first arm, which accounts for nearly all remaining differences
 - **Thresholds**: ≤10 good, 11–20 moderate, 21+ consider refactoring
-- **Validated**: 100% match with ``pmccabe`` output across a 32,205-function corpus
+- **Validated**: agrees with pmccabe's "traditional" count (each ``case``
+  counted, McCabe's definition) on 29,852 of 30,461 C functions (98.00%)
+  across six corpora pinned by commit. 597 of the 609 differing functions
+  contain ``#if`` arms (above). Most of the other 12 are macro artifacts: a
+  ``switch`` whose ``case`` labels come from macros (neither tool sees them;
+  knots counts the switch as one decision, pmccabe as none), or an ``if``
+  inside a macro argument, which pmccabe's token scan counts and a parser
+  cannot. Case labels that a statement-like macro makes the parser misread
+  (sqlite's ``deliberate_fall_through``) are recovered. Reproduce with
+  ``validation/pmccabe_compare.py`` (see ``validation/README.md``)
 
 Cognitive Complexity
 ---------------------
@@ -157,10 +223,43 @@ Key differences from McCabe:
 - Nested structures add more than flat ones (nesting penalty)
 - ``else``/``else if`` chains cost less than independent ``if`` chains
 - ``switch`` is a single increment regardless of arm count
+- The conditional operator (``?:``, Python's ``x if c else y``) is +1 plus
+  nesting and nests what it contains, like ``if`` (whitepaper 1.7, Appendix B).
+  knots 1.18.0 and earlier did not count it
+- In C/C++ the ``cognitive`` column is the function's worst real
+  preprocessor configuration, as for McCabe above
 
-Validated against Mozilla's
-`rust-code-analysis <https://github.com/mozilla/rust-code-analysis>`_ at
-1.004× mean ratio across 11,365 Rust functions (285k lines).
+Conformance is checked by ``validation/probes`` (see
+``validation/probes/README.md``): every known departure from the
+specification is listed, with its reason, in
+``validation/probes/conformance.toml``. Follows the specification
+(whitepaper 1.7, 2023) on two points other implementations skip:
+
+- **Recursion**: +1 for each function in a recursion cycle, direct or
+  indirect (Appendix B1), once per function, not per call. Cycles are found
+  among the functions of one file, from the call syntax alone: a bare call
+  ``f()``, a call through ``self``/``this``, and in Rust ``Self::f`` or
+  ``Type::f`` inside ``Type``'s impl (called or passed as a value). A method
+  called on any other receiver (``child.depth()``) is not followed, since
+  its type isn't known; following it by name scored a third of Rust
+  functions as recursive, almost all of them delegations like
+  ``self.0.fmt(f)``. A cycle through another file is not seen either. In
+  Rust a bare call resolves through the enclosing ``fn`` and ``mod``
+  scopes, so same-named functions in different modules are kept apart.
+- **break/continue to a label** (Rust ``break 'outer``): +1 (Appendix B1).
+  A plain ``break`` or ``continue`` adds nothing.
+- **throw/raise**: no increment (Appendix B1; Appendix C scores every
+  ``throw`` 0). ``goto`` keeps its +1.
+
+Compared against Mozilla's
+`rust-code-analysis <https://github.com/mozilla/rust-code-analysis>`_: a
+1.004× mean ratio over **17 matched high-complexity functions**, drawn from
+11,365 Rust functions scanned (285k lines; the corpus was not pinned by
+commit), measured before knots added the recursion increment, which
+rust-code-analysis omits. Agreement with another implementation is
+evidence, not ground truth: on the Rust probes rust-code-analysis also
+scores the whitepaper's own logical-operator example 5 instead of 4 and a
+bare ``loop`` with a nested ``if`` 1 instead of 3 (``validation/probes/TOOLS.md``).
 
 Nesting Depth
 -------------
@@ -174,8 +273,28 @@ Maximum depth of nested control structures (``if``, ``for``, ``while``,
 SLOC (Source Lines of Code)
 ----------------------------
 
-Non-blank, non-comment lines of code within the function body.
+Physical source lines of the function that hold code (Park, *Software Size
+Measurement*, CMU/SEI-92-TR-20, 1992): blank lines and lines holding only
+comments don't count, and a line with code and a comment does.
 
+- **What is a comment comes from the parse**, not from a scan for ``//``,
+  ``/*`` or ``#``: a line counts when any token that isn't part of a comment
+  has text on it. So comment markers inside a string, a template literal or a
+  regular expression are code, and Rust's nested block comments end where
+  Rust says. In C, C++, Rust, Python, JavaScript/TypeScript, Go, Java, C#,
+  PHP, Kotlin, Swift and Scala. Ada, Lua and Fortran still use a scan for
+  their line-comment markers.
+- **Agreement**: on the definition probes knots matches every row; sloccount,
+  cloc, tokei and scc each miss at least one (``validation/probes/TOOLS.md``).
+  Per function on the pinned corpora it agrees with sloccount on 99.77% of
+  Lua's and 98.22% of curl's functions; most of the rest are arms of ``#if``
+  that the substrate proves dead and blanks before measuring, which
+  sloccount counts.
+- **Not yet decided**: a Python docstring counts as code (each line with
+  text), where sloccount, cloc, scc, radon and lizard count it as comment; and
+  the lines of a function nested in another (an arrow callback included) are
+  left out of the outer function's SLOC, where whole-file counters and
+  rust-code-analysis keep them.
 - Useful in combination with complexity metrics
 - Functions >50 SLOC often benefit from decomposition
 - Threshold flag: ``--sloc-threshold``
@@ -302,6 +421,15 @@ Each ratio is capped at 1 before it is weighted (a negative ``test_score`` or
 ``state_coupling`` is the explicit parameter count plus the number of
 distinct ``self``/``this`` fields the function touches.
 
+AIRD reads the source **as written**. Its ``cognitive`` input (and the McCabe
+behind ``test_score``) counts every live ``#if`` arm, where the ``mccabe`` and
+``cognitive`` columns report the worst real configuration. McCabe and
+Cognitive Complexity are published definitions of one program; AIRD models an
+AI working on the text, which reads, greps and cuts the file with every arm
+in it and has to work out which arm a change concerns. AICP's inputs (SLOC,
+external calls) are as written too. Whether the number of configurations
+itself adds difficulty is a question for the validation study.
+
 With ``--recursive``, the clamped score is then multiplied by a file-level
 coupling factor and rounded and clamped again:
 
@@ -384,9 +512,12 @@ are secondary. Documentation (doc_score) reduces difficulty.
 
 **Recommended CI threshold**: ``--aird-threshold 85``
 
-Validated empirically against Sonnet 4.6 and Opus 4.8: functions scoring
-≥85 were consistently rated significantly harder to modify than mid-band
-or low-band functions.
+**Evidence so far is a pilot, not a validation.** Sonnet 4.6 and Opus 4.8
+rated nine functions (three per AIRD band) on one task. The top band
+separated, the middle band did not, and one function falsified the gate:
+``hostapd_config_read_eap_user`` scored the highest AIRD in the pilot and
+was rated as easy as the low band. A pre-registered validation study is
+designed but not yet run.
 
 **Distribution**: heavily right-skewed. In mature codebases, 67–88% of
 functions score ≤10. The ≥76 bucket accounts for 1–2% of all functions.

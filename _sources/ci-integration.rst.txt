@@ -19,9 +19,10 @@ function exceeds the specified value. Use these as CI gates:
         --cognitive-threshold 15 \
         --nesting-threshold 5
 
-The recommended starting point is ``--aird-threshold 85``, which was
-empirically validated against Sonnet 4.6 and Opus 4.8. See
-:doc:`metrics-reference` for AIRD formula and corpus distribution.
+The suggested starting point is ``--aird-threshold 85``. It comes from a
+nine-function pilot with Sonnet 4.6 and Opus 4.8, not a validation study, and
+one pilot function falsified it. See :doc:`metrics-reference` for the AIRD
+formula, the pilot and the corpus distribution.
 
 Adopting on a Legacy Codebase
 -----------------------------
