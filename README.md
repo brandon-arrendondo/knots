@@ -175,6 +175,18 @@ knots parses every language with [tree-sitter](https://tree-sitter.github.io/)
 and its community grammars. The validation corpora are open-source projects,
 pinned in [validation/README.md](validation/README.md).
 
+## Upstream contributions
+
+Fixes in other metric tools that came out of reading their sources against the
+published definitions, listed once the maintainers have merged them:
+
+- **[multimetric](https://github.com/priv-kweihmann/multimetric)**: the
+  `--bugpredict old` Halstead estimate multiplied effort by 2/3 instead of
+  raising it to the 2/3 power (Halstead's E^(2/3)/3000). Reported in
+  [issue #213](https://github.com/priv-kweihmann/multimetric/issues/213) and
+  fixed by the maintainer in
+  [PR #214](https://github.com/priv-kweihmann/multimetric/pull/214).
+
 ## License
 
 MIT
