@@ -136,6 +136,8 @@ Full documentation is in the `docs/` directory (Sphinx/RST):
 - [knots.toml & Inline Suppression](docs/config.rst) — TOML thresholds/exclusion, `tools:off`/`tools:suppress` comments
 - [Test Quality Analysis](docs/test-complexity.rst) — knots-test-complexity companion tool
 - [Alternatives Comparison](docs/alternatives.rst) — vs. lizard, rust-code-analysis, clippy; cognitive algorithm differences
+- [Architecture](docs/architecture.rst) — substrate and consumer responsibilities
+- [Architecture Decision Records](docs/adr/README.md) — metric definitions and gate decisions
 - [Troubleshooting](docs/troubleshooting.rst)
 
 ## Acknowledgements

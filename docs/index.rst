@@ -27,3 +27,15 @@ assistance.
    architecture
    troubleshooting
    releasing
+
+Contributor references
+----------------------
+
+The `Architecture Decision Records
+<https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/README.md>`_
+explain metric definitions and gate decisions. They remain Markdown documents
+in the repository. See `AGENTS.md
+<https://github.com/brandon-arrendondo/knots/blob/main/AGENTS.md>`_ for contributor
+instructions and `CLAUDE.md
+<https://github.com/brandon-arrendondo/knots/blob/main/CLAUDE.md>`_ for the technical
+guide.
