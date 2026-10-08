@@ -1,0 +1,94 @@
+# ADR-0006: A published artifact cites its sources, ships as a sanitized export, names its accountable reviewer, and discloses AI use
+
+**Status:** Proposed, 2026-10-08. Awaiting review and acceptance.
+
+## Context
+
+Knots publishes source, documentation, release packages and validation records;
+its metrics also appear in papers and the associated book. Correct counts do
+not by themselves make the resulting artifact ready to publish. Citations,
+licences, private working material and responsibility need the same review.
+
+[ADR-0001](0001-the-definition-is-the-authority.md) and
+[ADR-0003](0003-gate-defaults-have-a-recorded-basis.md) govern definitions and
+measurement evidence. [ADR-0004](0004-changelog-is-for-users.md) proposes the
+user-facing release-note policy. This decision adds artifact-wide conditions;
+it does not weaken those decisions or the public-file rules in AGENTS.md.
+
+## Decision
+
+Before an artifact is submitted or published, it must meet four conditions.
+An artifact is anything that leaves BISSELL: the public repository and its
+site, a release archive, dataset, paper or book.
+
+1. **It cites sources correctly and is free of plagiarism.**
+   - Verify every citation against the primary source: the work itself first,
+     then its DOI registry record. Do not write a citation from memory or a
+     model's output. Verify authors, title, date and publication details.
+   - Learn from sources without copying material their licences do not allow.
+     Identify quotations as quotations and cite them. This applies to text,
+     figures and code.
+   - A derived file retains its original licence notice and records what
+     changed, who changed it and when, and where the unmodified original is.
+     Modified bibliography styles are included in this requirement.
+2. **It is released only as a sanitized export.**
+   - Submit a clean archive containing only what the recipient needs to build
+     the artifact, in the recipient's required form, together with the final
+     output such as the PDF or release build. Do not submit the working
+     repository or incidental build artifacts.
+   - Export no personal information or intellectual property beyond what is
+     intended for publication. Internal machine names and hostnames, IP
+     addresses, local filesystem paths, tracking references and internal URLs
+     do not ship. Do not locate third-party defects that have not been fixed
+     upstream.
+   - The exception is authorship already made public by Git: commit author
+     names and email addresses, including Brandon Arrendondo
+     (brandon.arrendondo@bissell.com). Name any other BISSELL Associate only
+     with permission obtained before submission.
+3. **It names the accountable BISSELL Associate.** Record with the artifact
+   who holds final review responsibility. That is Brandon Arrendondo unless
+   the artifact explicitly names someone else.
+4. **It discloses AI use in the form appropriate to the artifact.** Use the
+   README's AI Assistance section for the tool, front matter for the book,
+   and a statement in each paper. Commit trailers are not the disclosure
+   mechanism. Contributor attribution rules remain in AGENTS.md.
+
+Every artifact goes through **BISSELL legal review before submission or
+publication**. **BISSELL Homecare, Inc. is the primary copyright holder**.
+Knots is licensed under **MIT**, as recorded in the root LICENSE and the
+companion's LICENSE-MIT. Other holders are credited through the licensing and
+provenance record, third-party licence notices, or citation; the MIT licence
+for knots does not replace an incorporated source's own licence obligations.
+
+These conditions carry out the BISSELL AI Acceptable Use Policy's principles
+of accountability, data protection, intellectual property, data quality and
+AI attribution. The legal and copyright requirements are retained in full;
+they are not an unresolved exception for knots.
+
+## Consequences
+
+- This is policy, not the export procedure. Maintainers maintain the
+  pre-publication checklist and sanitized-export process; procedural changes
+  do not relax these conditions. The draft does not claim that automation or
+  any particular artifact has completed legal review.
+- The repository is already a published artifact. Citation, sanitization and
+  disclosure conditions apply to every commit reaching origin, not only to
+  tagged releases. Existing definition, evidence and changelog obligations
+  continue to apply.
+- Where source material is not public, sanitize at export. Keep verification
+  notes and working records in their source workspace; do not strip them in
+  advance. A working note that prints into the artifact, for example through
+  a bibliography field, is fixed in the artifact.
+- Verify a citation when added and again when its artifact is submitted or
+  published; this does not require a separate check of every unchanged
+  citation for every tool release.
+- Fix a leak found in published text at the head. Whether to rewrite Git
+  history or replace an already-published artifact is a separate maintainer
+  decision; this ADR grants no blanket history-rewrite authorization.
+
+Origin: adaptation of aurora-lint ADR-0016, “A published artifact cites its
+sources, ships as a sanitized export, names its accountable reviewer, and
+discloses AI use”. Its legal and copyright clauses apply equally; knots uses
+MIT rather than aurora-lint's Apache-2.0 licence.
+
+Source record: [aurora-lint ADR](https://github.com/brandon-arrendondo/aurora-lint/blob/8ad31a842e9d02f97a6d4b3a8cbeef5a9264cf0b/docs/adr/0016-published-artifacts.md).
