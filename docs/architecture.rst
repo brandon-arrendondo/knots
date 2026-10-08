@@ -212,12 +212,9 @@ for a size marker:
 Interpreting results
 ^^^^^^^^^^^^^^^^^^^^
 
-The filters and annotations above cut the obvious noise, but the output
-still needs a human in the loop. What follows is guidance distilled from
-actually acting on a real report end to end (see ``MOLDY_DUP_FEEDBACK.md``
-in the repo root) — a 5.9k-line, 4-file Rust codebase where 16 reported
-groups broke down as 3 genuinely worth fixing, several trivial-boilerplate
-groups, and 2 that looked identical but were a trap to merge.
+The filters and annotations above reduce noise, but every reported group
+still needs contextual review before extraction. Check the matched bodies,
+the surrounding types and the proposed shared interface.
 
 **Shape equality is not behavioral equality.** The hash matches AST node
 kinds, not identifiers, literals, or intent. A 3-line test function that's
