@@ -255,7 +255,7 @@ jobs:
           Section: devel
           Priority: optional
           Architecture: amd64
-          Maintainer: Brandon Arrendondo <brandon@arrendondo.dev>
+          Maintainer: Brandon Arrendondo <brandon.arrendondo@bissell.com>
           Homepage: https://github.com/brandon-arrendondo/knots
           Description: Multi-language code complexity analyzer
            A fast, powerful code complexity analyzer for C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua
