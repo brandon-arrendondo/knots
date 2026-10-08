@@ -5,198 +5,30 @@ Several tools measure code complexity for C, C++, Rust, Python, JavaScript, Type
 This page compares knots against the most commonly used alternatives, with
 empirical validation data where available.
 
-Feature Comparison
-------------------
+Comparison Scope
+----------------
 
-.. list-table::
-   :header-rows: 1
-   :widths: 36 12 12 15 12
+Knots' compiled registry currently contains 16 languages; run
+``knots --supported-languages`` for the complete extension list. It offers
+traditional metrics, AIRD/AICP, threshold gates, baselines and changed-function
+scoping. Outputs are text, JSON, NDJSON, CSV and SARIF; see
+:doc:`output-formats` for their different selection and field behavior.
+The companion C test-quality heuristic is described in :doc:`test-complexity`.
 
-   * - Feature
-     - knots
-     - `lizard <https://github.com/terryyin/lizard>`_
-     - `rust-code-analysis <https://github.com/mozilla/rust-code-analysis>`_
-     - `clippy <https://github.com/rust-lang/rust-clippy>`_
-   * - **Languages**
-     -
-     -
-     -
-     -
-   * - C / C++
-     - ✓
-     - ✓
-     - ✓
-     - ✗
-   * - Rust
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-   * - Python
-     - ✓
-     - ✓
-     - ✓
-     - ✗
-   * - JavaScript
-     - ✓
-     - ✓
-     - ✓
-     - ✗
-   * - TypeScript
-     - ✓
-     - ✓
-     - ✓
-     - ✗
-   * - Go
-     - ✓
-     - ✓
-     - ✗
-     - ✗
-   * - Java
-     - ✓
-     - ✓
-     - ✓
-     - ✗
-   * - C#
-     - ✓
-     - ✓
-     - ✗
-     - ✗
-   * - Ada
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - Swift
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - Language count
-     - 16
-     - ~25
-     - 11
-     - 1 (Rust only)
-   * - **Metrics**
-     -
-     -
-     -
-     -
-   * - McCabe cyclomatic
-     - ✓
-     - ✓
-     - ✓
-     - lint only
-   * - Cognitive complexity (Campbell spec)
-     - ✓
-     - ✓
-     - ✓
-     - ✗ (see note)
-   * - Nesting depth
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - SLOC
-     - ✓
-     - ✓
-     - ✓
-     - ✗
-   * - ABC complexity
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - Halstead / MI
-     - ✗
-     - ✗
-     - ✓
-     - ✗
-   * - Test scoring
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - AIRD (AI reasoning difficulty)
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - AICP (AI context pressure)
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - External call count
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - **Output**
-     -
-     -
-     -
-     -
-   * - Human-readable text
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-   * - JSON
-     - ✓
-     - ✓
-     - ✓
-     - ✗
-   * - NDJSON (find/xargs composable)
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - CSV
-     - ✓
-     - ✓
-     - ✗
-     - ✗
-   * - SARIF (VS Code / GitHub)
-     - ✓
-     - ✗
-     - ✗
-     - ✓
-   * - Testability matrix
-     - ✓
-     - ✗
-     - ✗
-     - ✗
-   * - **Integration**
-     -
-     -
-     -
-     -
-   * - CI threshold flags
-     - ✓
-     - ✓
-     - partial
-     - ✓
-   * - Pre-commit hook (native)
-     - ✓
-     - manual
-     - ✗
-     - manual
-   * - No compiler / build required
-     - ✓
-     - ✓
-     - ✗
-     - ✗
-   * - pmccabe-compatible output
-     - ✓
-     - ✓
-     - ✗
-     - ✗
-   * - Tree-sitter based
-     - ✓
-     - ✗
-     - ✗
-     - ✗
+Compare actual counts using the `pinned definition probes
+<https://github.com/brandon-arrendondo/knots/blob/main/validation/probes/TOOLS.md>`_,
+which name tool versions and report differences from the definitions. A
+shared metric name or a feature checklist does not establish conformance.
+
+For each alternative's current language, metric and export support, consult
+its primary documentation:
+
+- `lizard <https://github.com/terryyin/lizard>`_
+- `rust-code-analysis <https://github.com/mozilla/rust-code-analysis>`_;
+  its library and CLI use tree-sitter, and analysis does not require building
+  the project being measured.
+- `Clippy <https://github.com/rust-lang/rust-clippy>`_; distinguish native
+  Cargo diagnostics from formats produced by external converters.
 
 Cognitive Complexity: Algorithm Differences
 -------------------------------------------
@@ -230,7 +62,7 @@ When to Choose Each Tool
 
 **Choose an alternative when:**
 
-- **lizard**: you need 30+ language support, or you're already using it and
+- **lizard**: its supported-language set covers your project, or you already use it and
   don't need AI metrics
 - **rust-code-analysis**: you need Halstead metrics or Maintainability Index
   for Rust/Java/Python
