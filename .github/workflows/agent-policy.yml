@@ -1,0 +1,46 @@
+name: Agent and commit policy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  agent-policy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+      - name: Install pre-commit
+        run: pip install pre-commit
+      - name: Run all hooks
+        run: pre-commit run --all-files
+      - name: Guard regression tests
+        run: python3 -W error::ResourceWarning -m unittest discover -s scripts -p 'test_check_*.py' -v
+      - name: Check new commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          message=$(mktemp)
+          trap 'rm -f "$message"' EXIT
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            commits=$(git rev-list -1 "$HEAD_SHA")
+          else
+            commits=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+          fi
+          for commit in $commits; do
+            git show -s --format=%B "$commit" > "$message"
+            pre-commit run --hook-stage commit-msg --commit-msg-filename "$message"
+          done

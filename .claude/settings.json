@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git commit --no-verify)",
+      "Bash(git commit --no-verify *)",
+      "Bash(git commit * --no-verify)",
+      "Bash(git commit * --no-verify *)",
+      "Bash(git * commit * --no-verify *)",
+      "Bash(git commit -n)",
+      "Bash(git commit -n *)",
+      "Bash(git commit * -n)",
+      "Bash(git commit * -n *)",
+      "Bash(git * commit * -n *)",
+      "Bash(git * commit --no-verify)",
+      "Bash(git * commit --no-verify *)",
+      "Bash(git * commit * --no-verify)",
+      "Bash(git * commit -n)",
+      "Bash(git * commit -n *)",
+      "Bash(git * commit * -n)",
+      "Bash(git commit -n*)",
+      "Bash(git commit * -n*)",
+      "Bash(git commit -sn*)",
+      "Bash(git commit * -sn*)",
+      "Bash(git * commit -n*)",
+      "Bash(git * commit -sn*)"
+    ]
+  }
+}

@@ -1,5 +1,7 @@
 # knots — developer guide for Claude
 
+@AGENTS.md
+
 knots is a multi-language complexity analyzer (McCabe, Cognitive, SLOC, ABC, AIRD, AICP, etc.)
 built on tree-sitter. All metrics are language-neutral; only the node-kind names differ per grammar.
 

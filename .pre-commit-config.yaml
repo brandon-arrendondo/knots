@@ -1,3 +1,6 @@
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
 # Pre-commit hooks for knots
 # Install: pre-commit install
 # Run manually: pre-commit run --all-files
@@ -40,3 +43,17 @@ repos:
         types: [rust]
         pass_filenames: true
         verbose: true
+
+  - repo: local
+    hooks:
+      - id: commit-message-policy
+        name: DCO sign-off and no AI attribution trailers
+        entry: python3 scripts/check_commit_message.py
+        language: system
+        stages: [commit-msg]
+      - id: agent-guard-tests
+        name: agent and commit guard regression tests
+        entry: python3 -W error::ResourceWarning -m unittest discover -s scripts -p test_check_*.py
+        language: system
+        pass_filenames: false
+        files: ^scripts/(check_|test_check_).*\.py$
