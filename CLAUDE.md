@@ -22,8 +22,10 @@ not a local knots registry. Keep metric and function-discovery changes here.
 
 ### 1. Add parsing support in the substrate
 
-Follow the substrate's developer guide: add the optional grammar dependency
-and feature, registry metadata and extension dispatch in `src/registry.rs`,
+Follow `lang_parsing_substrate/CLAUDE.md` in the substrate repository: add
+the optional grammar dependency and its feature, include that feature in
+`all-languages` (knots uses the substrate's default features), and add
+registry metadata and extension dispatch in `src/registry.rs`,
 and the cfg-gated grammar re-export in `src/lib.rs`. Test parsing and registry
 behavior there, and release that change before updating this consumer.
 
