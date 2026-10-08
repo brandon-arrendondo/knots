@@ -37,7 +37,7 @@ def git_arguments(tokens):
     iterator = iter(tokens[1:])
     hooks_override = False
     for token in iterator:
-        if token == "-c":
+        if token in {"-c", "--config-env"}:
             config = next(iterator, "")
             hooks_override |= config.lower().startswith("core.hookspath=")
         elif token.startswith("-c"):

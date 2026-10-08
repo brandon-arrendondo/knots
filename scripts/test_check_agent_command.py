@@ -36,6 +36,22 @@ class AgentCommandTests(unittest.TestCase):
             "git --config-env=user.name=AUTHOR_NAME commit -s -m change"
         ))
 
+    def test_config_env_separate_token_is_consumed(self):
+        for key in ["core.hooksPath", "core.hookspath", "CORE.HOOKSPATH"]:
+            with self.subTest(key=key):
+                self.assertTrue(blocked_command(
+                    f"git --config-env {key}=HOOK_DIR commit -m change"
+                ))
+        self.assertFalse(blocked_command(
+            "git --config-env user.name=AUTHOR_NAME commit -s -m change"
+        ))
+        self.assertTrue(blocked_command(
+            "git --config-env user.name=AUTHOR_NAME commit -n -m change"
+        ))
+        self.assertFalse(blocked_command(
+            "git --config-env core.hooksPath=HOOK_DIR status"
+        ))
+
     def test_normal_commands_and_message_text_are_allowed(self):
         for command in [
             "git commit -s -m change", "git commit -m '--no-verify'",
