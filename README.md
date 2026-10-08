@@ -187,6 +187,12 @@ published definitions, listed once the maintainers have merged them:
   fixed by the maintainer in
   [PR #214](https://github.com/priv-kweihmann/multimetric/pull/214).
 
+## AI Assistance
+
+knots was developed with assistance from [Claude](https://claude.ai) (Anthropic), used for code generation, the metrics and language support, bug fixes, and documentation. From October 2026, [Codex](https://openai.com/codex/) (OpenAI) also contributed documentation fixes and the tooling that enforces the agent and commit guidelines. Each of its changes was reviewed before it was merged.
+
+Many earlier commits have a `Co-Authored-By: Claude` trailer, but not every AI-assisted commit does, so the trailers are not a complete record. From October 2026 the contribution is acknowledged once, here, and not with a co-author trailer on each commit.
+
 ## License
 
 MIT

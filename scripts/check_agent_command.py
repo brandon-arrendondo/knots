@@ -42,7 +42,7 @@ def git_arguments(tokens):
             hooks_override |= config.lower().startswith("core.hookspath=")
         elif token.startswith("-c"):
             hooks_override |= token[2:].lower().startswith("core.hookspath=")
-        elif token.startswith("--config-env=core.hooksPath="):
+        elif token.lower().startswith("--config-env=core.hookspath="):
             hooks_override = True
         elif token in {"-C", "--git-dir", "--work-tree", "--namespace"}:
             next(iterator, None)
