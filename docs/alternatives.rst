@@ -73,7 +73,7 @@ Feature Comparison
      - ✗
      - ✗
    * - Language count
-     - 12
+     - 16
      - ~25
      - 11
      - 1 (Rust only)
