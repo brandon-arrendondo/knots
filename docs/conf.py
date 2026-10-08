@@ -2,7 +2,7 @@
 
 project = 'Knots'
 author = 'Brandon Arrendondo'
-copyright = '2026, Brandon Arrendondo'
+copyright = '2025-2026, BISSELL Homecare, Inc.'
 
 extensions = []
 
