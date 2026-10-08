@@ -1,8 +1,13 @@
 Metrics Reference
 =================
 
-Knots computes 13 metrics per function. All are present in JSON, NDJSON,
-and CSV output.
+Knots computes 13 metrics per function. The structured field list is in
+:doc:`output-formats`; add
+``--score-components`` for state coupling and AI-score components.
+
+Named functions appear by default. Use ``--count-anonymous-closures`` for
+independent anonymous-function entries; this does not change the attribution
+rules described below.
 
 Python Language Support
 -----------------------
@@ -125,9 +130,8 @@ the general-purpose rules do not cover:
 
 Other notes:
 
-- **McCabe**: also counts ``if``, ``elsif``, every ``loop`` statement (plain,
-  ``while``, and ``for``), each ``when`` alternative of a ``case``, and each
-  exception handler
+- **McCabe**: also counts ``if``, ``elsif`` and each exception handler;
+  loop and case-alternative counting follows the rules above
 - **Cognitive**: ``loop``, ``case``, and exception handlers are nesting
   structures; a ``case`` costs +1 plus the nesting penalty once, however many
   alternatives it has
@@ -147,9 +151,9 @@ Other notes:
    a ``case`` used as a dispatch table scores its arm count whether the arms
    are one-line mappings or nested logic. Cognitive charges the ``case`` once.
    At knots 1.17.0, two dispatch functions in the HAC corpus (``Compute`` and
-   ``Eval``, from an Advent of Code puzzle, ``~/toolchain/hac`` at ``b0fa2e5``)
+   ``Eval``, from an Advent of Code puzzle, HAC at ``b0fa2e5``)
    score McCabe 1,682 and Cognitive 5; the AES ``Encrypt`` functions in Ada-Util
-   (``~/toolchain/ada-util`` at ``bd635f5``) score McCabe 119 and Cognitive 82
+   (Ada-Util at ``bd635f5``) score McCabe 119 and Cognitive 82
    from their SubBytes ``case`` statements.
 
    For Ada codebases, prefer ``--cognitive-threshold`` as the primary gate. If
@@ -314,7 +318,7 @@ Assignment, Branch, Condition magnitude vector.
   calibration, not a validated value: it is the 97.6th percentile of function
   ABC magnitude across twelve pinned Rust crates, and the 88th across six
   held-out C corpora. ABC magnitude grows with function size, so one number
-  does not suit every language. See ``docs/adr/0003``.
+  does not suit every language. See `ADR-0003`_.
 
 Preprocessor Dead-Code Exclusion (C/C++, Swift, C#)
 -----------------------------------------------------
@@ -513,13 +517,13 @@ sloc       200
 nesting    8
 =========  =====
 
-The ceilings have not moved, but the counts have (``docs/adr/0001``). Measured
+The ceilings have not moved, but the counts have (`ADR-0001`_). Measured
 at this version on the same six corpora (32,999 functions), the 99th
 percentiles are cognitive 81, SLOC 180 and nesting 6. On six C corpora the
 ceilings never saw (12,248 functions), they are cognitive 75, SLOC 161 and
 nesting 6. Cognitive 75 and SLOC 200 therefore still sit near p99 of C;
 nesting 8 is nearer p99.5, and nesting seldom approaches it.
-``docs/adr/0003`` records the method and the figures.
+`ADR-0003`_ records the method and the figures.
 
 Cognitive complexity is the dominant driver. SLOC, nesting, and testability
 are secondary. Documentation (doc_score) reduces difficulty.
@@ -548,7 +552,7 @@ functions score ≤10. The ≥76 bucket accounts for 1–2% of all functions.
 
    These ceilings need tuning on non-C languages. Rust is the same: the 99th percentile of cognitive complexity is 14 and of
    SLOC 86 across twelve crates, so ``--aird-threshold 85`` selects 0.04% of
-   their functions, against about 1% of C (``docs/adr/0003``).
+   their functions, against about 1% of C (`ADR-0003`_).
 
    For JS/TS/React projects, pair the AIRD gate with explicit McCabe and
    cognitive thresholds::
@@ -651,3 +655,7 @@ cognitive complexity are themselves terms. A model that regresses AIRD on
 SLOC, cognitive complexity or McCabe has those predictors partly inside the
 outcome. In practice ``doc_score`` takes only a few values (0, 2 and 4 are
 typical), so ``aird_doc`` is usually 0, -3 or -6.
+
+.. _ADR-0001: https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0001-the-definition-is-the-authority.md
+
+.. _ADR-0003: https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0003-gate-defaults-have-a-recorded-basis.md

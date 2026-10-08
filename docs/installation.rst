@@ -29,7 +29,8 @@ From crates.io
 
     cargo install knots
 
-This installs both ``knots`` and ``knots-test-complexity``.
+This installs ``knots``. Install the separate companion package with
+``cargo install knots-test-complexity``.
 
 From Source
 -----------
@@ -38,24 +39,41 @@ From Source
 
     git clone https://github.com/brandon-arrendondo/knots.git
     cd knots
-    cargo build --release
+    cargo build --release --workspace
     ./target/release/knots --version
 
 Requirements
 ------------
 
-A Rust toolchain (install via `rustup <https://rustup.rs>`_). No C compiler,
-Python interpreter, build system, or language server required — knots uses
-tree-sitter grammars bundled as Rust dependencies.
+Source builds require a Rust toolchain (install via `rustup
+<https://rustup.rs>`_) and a native C/C++ compiler for the bundled tree-sitter
+grammars. Prebuilt wheels do not require that toolchain. Analysis does not
+require compiling your project or running its language server.
 
 Supported Languages
 -------------------
 
-Knots analyzes source files with these extensions:
+Run ``knots --supported-languages`` for the compiled registry. It currently
+contains 16 languages:
 
-* ``.c`` — C
-* ``.cpp``, ``.cc``, ``.cxx`` — C++
-* ``.hpp``, ``.hxx`` — C++ headers
-* ``.rs`` — Rust
-* ``.py`` — Python 3 (including decorated functions and class methods)
-* ``.js``, ``.mjs``, ``.cjs`` — JavaScript (ES2015+, including class methods and generators)
+* C: ``.c``, ``.h``
+* C++: ``.cpp``, ``.cc``, ``.cxx``, ``.hpp``, ``.hxx``
+* Rust: ``.rs``
+* Python: ``.py``
+* JavaScript: ``.js``, ``.mjs``, ``.cjs``, ``.jsx``
+* TypeScript: ``.ts``, ``.tsx``
+* Ada: ``.adb``, ``.ada``, ``.ads``
+* Go: ``.go``
+* Java: ``.java``
+* C#: ``.cs``
+* Kotlin: ``.kt``, ``.kts``
+* Swift: ``.swift``
+* PHP: ``.php``
+* Free-form Fortran: ``.f90``, ``.f95``, ``.f03``, ``.f08`` and uppercase variants
+* Scala: ``.scala``, ``.sc``
+* Lua: ``.lua``
+
+Recursive scans include headers, including ``.h`` and ``.ads``. The registry
+labels these as explicit-only, but knots uses its broader parseable-extension
+predicate for recursive discovery. Fixed-form Fortran (``.f``, ``.for``,
+``.f77`` and uppercase variants) is not supported by the current substrate.

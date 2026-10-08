@@ -201,58 +201,19 @@ Feature Comparison
 Cognitive Complexity: Algorithm Differences
 -------------------------------------------
 
-All four tools claim to measure "cognitive complexity," but they are **not
-computing the same thing**. This was validated empirically against 285k lines
-of Rust in a real-world codebase (11,365 functions from ``tools_sqc``).
+The algorithms differ despite sharing the name. A historical comparison
+scanned 11,365 Rust functions and paired 17 high-complexity functions: knots
+and rust-code-analysis had a mean ratio of 1.004 and median 1.000. The corpus
+was not pinned, and the comparison preceded knots' recursion increment,
+which rust-code-analysis omits. It does not establish current conformance;
+see :doc:`metrics-reference` and the `definition probes
+<https://github.com/brandon-arrendondo/knots/blob/main/validation/probes/TOOLS.md>`_.
 
-**knots and rust-code-analysis produce essentially identical scores** (mean
-ratio 1.004, median 1.000 across 17 matched high-complexity functions). Both
-implement the `G. Ann Campbell cognitive complexity specification
-<https://www.sonarsource.com/resources/cognitive-complexity/>`_: loops,
-conditionals, and match expressions each add ``1 + nesting_level``, where
-nesting level accumulates through nested control flow including closures.
-
-**Clippy's ``cognitive_complexity`` lint uses a fundamentally different
-algorithm** that diverges from the Campbell spec in three major ways (sourced
-from ``clippy_lints/src/cognitive_complexity.rs``):
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 35 35
-
-   * - Aspect
-     - Campbell spec / knots / RCA
-     - Clippy
-   * - ``for`` / ``while`` / ``loop``
-     - +1 + nesting_level each
-     - **not counted**
-   * - Nesting penalty
-     - accumulated per level
-     - **no nesting penalty**
-   * - Closures
-     - increase nesting level for inner code
-     - **analyzed as separate functions**
-   * - ``match``
-     - +1 + nesting_level
-     - +1 if >1 arms (flat, no nesting)
-   * - Guard clauses
-     - not counted separately
-     - +1 per arm guard
-   * - ``return`` statements
-     - not counted
-     - +1 (minus adjustment for Result types)
-
-The practical result: **clippy reports 3–4× lower scores** than knots or
-rust-code-analysis for the same functions (mean 0.29×, range 0.16×–0.50×).
-A function that knots scores at ~75 will typically score ~25 in clippy —
-right at clippy's default threshold of 25.
-
-**Threshold equivalence**: clippy threshold 25 ≈ knots/RCA threshold 75–100.
-
-Neither implementation is wrong in an absolute sense; they measure different
-things under the same name. Knots and rust-code-analysis follow the published
-spec; clippy's lint is a simplified heuristic tuned to fire at
-Rust-idiomatic complexity boundaries.
+In that sample, Clippy's scores were lower (mean ratio 0.29, range
+0.16–0.50). Its lint uses different counting rules for loops, nesting,
+closures, guards and returns. These sample ratios do not give a portable
+threshold conversion. Calibrate each tool on the project's own functions;
+knots' authority is the published definition, not agreement with a tool.
 
 When to Choose Each Tool
 -------------------------

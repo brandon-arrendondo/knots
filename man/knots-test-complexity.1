@@ -1,13 +1,14 @@
 .TH KNOTS-TEST-COMPLEXITY 1 "2026-09-30" "knots 1.18.0" "User Commands"
 .SH NAME
-knots-test-complexity \- test quality analyzer for C/C++/Rust/Python/JavaScript unit tests
+knots-test-complexity \- test quality heuristic for C unit tests
 .SH SYNOPSIS
 .B knots-test-complexity
 [\fIOPTIONS\fR] <\fITEST_FILE\fR> <\fISOURCE_FILE\fR>
 .SH DESCRIPTION
 .B knots-test-complexity
-validates that unit tests have sufficient complexity and boundary coverage
-relative to the source code they test.
+compares C test complexity with source complexity and looks for boundary
+testing patterns. Both inputs use the C grammar. It does not execute tests
+or prove boundary coverage or test adequacy.
 It compares the complexity of test functions against source functions and
 checks for boundary value testing patterns.
 .PP
@@ -50,7 +51,10 @@ Tests meet quality thresholds, or enforcement level is set to \fBwarn\fR.
 .TP
 .B 1
 Tests do not meet quality thresholds and enforcement level is \fBerror\fR,
-or an error occurred (file not found, invalid arguments).
+or an error occurred (file not found, invalid threshold value or level).
+.TP
+.B 2
+Command-line usage error.
 .SH EXAMPLES
 Check test quality with default thresholds:
 .RS

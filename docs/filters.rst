@@ -42,7 +42,7 @@ Filter JSON files support the following fields (all are optional):
 
 Glob-style patterns for matching file paths. Supports:
 
-- ``*`` — matches any characters except ``/``
+- ``*`` — wildcard matching from ``globset::Glob``
 - ``**`` — matches any characters including ``/``
 - ``!pattern`` — negation (exclude files matching this pattern)
 
@@ -55,10 +55,12 @@ Glob-style patterns for matching file paths. Supports:
 
 **Behavior:**
 
-- **Include filter:** file must match at least one positive pattern AND not
-  match any negation patterns
-- **Exclude filter:** file matching any pattern (positive or negative) is
-  excluded
+- Both filters use the same predicate: match at least one positive pattern
+  (if any), and match no negated pattern. A negative-only list matches every
+  path except those negated.
+- An include filter keeps matching files; an exclude filter removes matching
+  files. Use positive patterns to exclude directories. A negative-only
+  exclude list would remove their complement instead.
 
 ``function_patterns`` (array of strings)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -113,7 +115,7 @@ Example 1: Analyze only high-complexity functions
 
     knots -r . --include filter-high-complexity.json
 
-Example 2: Exclude test files and low-complexity functions
+Example 2: Exclude test files and test functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``filter-no-tests.json``:
@@ -122,14 +124,13 @@ Example 2: Exclude test files and low-complexity functions
 
     {
       "file_patterns": [
-        "!**/test_*.c",
-        "!**/*_test.c",
-        "!**/tests/**"
+        "**/test_*.c",
+        "**/*_test.c",
+        "**/tests/**"
       ],
       "function_patterns": [
         "^test_.*"
-      ],
-      "max_complexity": 100
+      ]
     }
 
 .. code-block:: bash
@@ -199,9 +200,11 @@ Exclude filter (blacklist)
 
 When ``--exclude`` is specified:
 
-1. If a file matches ``file_patterns``, it's excluded
-2. If a function matches ``function_patterns`` AND complexity bounds, it's
-   excluded
+1. If a file matches ``file_patterns``, it is excluded
+   during discovery, independently of function criteria
+2. For remaining files, functions must match all specified function
+   criteria to be excluded: name patterns AND complexity bounds when both
+   are supplied; either criterion alone is sufficient when the other is absent
 
 Combined filters
 ~~~~~~~~~~~~~~~~~
@@ -218,7 +221,12 @@ Notes
 -----
 
 - All filter criteria are optional — specify only the ones you need.
-- Empty arrays mean "match everything" for that criterion.
+- Empty arrays mean "match everything" for that criterion. In the current
+  CLI, an exclude file with missing or empty ``file_patterns`` therefore
+  excludes every file during discovery, even if it specifies function
+  patterns or bounds. For function-only exclusions, use ``knots.toml``
+  (see :doc:`config`). This is a discovery limitation, not an AND relation
+  between file and function criteria.
 - File patterns are matched against the full file path.
 - Function patterns use Rust's regex syntax.
 - Invalid regex patterns are silently ignored (the function won't match).

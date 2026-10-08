@@ -1,17 +1,16 @@
 Test Quality Analysis (knots-test-complexity)
 =============================================
 
-``knots-test-complexity`` is a companion tool that validates unit tests have
-sufficient complexity and boundary coverage to thoroughly exercise their
-corresponding source files.
+``knots-test-complexity`` is a C test-quality heuristic. It compares test and
+source complexity and looks for boundary-testing patterns. It parses both
+inputs with the C grammar, does not execute tests, and cannot prove coverage
+or test adequacy.
 
 Overview
 --------
 
-Traditional code coverage can be misleading: 100% branch coverage doesn't
-guarantee all edge cases are tested. ``knots-test-complexity`` enforces that
-tests have adequate cyclomatic complexity *relative to* the source code they
-cover, and validates that boundary conditions are explicitly tested.
+Use the ratios as review signals alongside executed tests and coverage,
+not as evidence that every edge case is tested.
 
 ::
 
@@ -27,17 +26,16 @@ cover, and validates that boundary conditions are explicitly tested.
 Key Features
 ------------
 
-- **Complexity Ratio Analysis**: ensures test complexity is proportional to source complexity
-- **Boundary Value Detection**: validates tests cover critical boundary conditions (0, MAX, overflow)
+- **Complexity Ratio Analysis**: compares test complexity with source complexity
+- **Boundary Value Detection**: looks for boundary patterns (0, MAX, overflow)
 - **Ceedling Integration**: parses ``TEST_SOURCE_FILE`` macro to locate source files automatically
 - **Pre-commit Integration**: enforce test quality standards at commit time
 
 Pre-commit Hook
 ---------------
 
-The ``test-complexity`` hook is designed for the **Ceedling** test framework.
-It automatically locates source files by parsing the ``TEST_SOURCE_FILE`` macro
-in test files:
+The hook wrapper defaults to naming-convention source lookup. Choose
+``--framework=ceedling`` to locate sources using ``TEST_SOURCE_FILE`` macros:
 
 .. code-block:: yaml
 
@@ -65,3 +63,9 @@ if your tests live in a non-default location (``test/``, ``Tests/``, ``tests/``)
 
 For complete documentation, see ``knots-test-complexity/README.md`` in the
 repository.
+
+``--framework`` and ``--test-dir`` belong to the hook wrapper, not the
+``knots-test-complexity`` binary. The binary takes test and source paths
+explicitly. Its 0.70 ratio and 0.80 boundary thresholds are defaults with no
+recorded calibration; see `ADR-0003
+<https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0003-gate-defaults-have-a-recorded-basis.md>`_.

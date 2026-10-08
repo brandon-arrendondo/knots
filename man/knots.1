@@ -22,7 +22,8 @@ computes the following metrics for each function:
 .TP
 .B McCabe Cyclomatic Complexity
 Counts decision points (if, while, for, do, switch, ternary, logical operators).
-Validated to match pmccabe output exactly.
+Published definitions govern counting. Pinned comparisons and departures
+are recorded in validation/README.md and docs/metrics-reference.rst.
 .TP
 .B Cognitive Complexity
 Measures difficulty to understand code, emphasizing nesting and structural
@@ -53,23 +54,28 @@ function-like macros).
 .B AIRD \(em AI Reasoning Difficulty
 Normalized 0\(en100 score predicting how much reasoning effort an AI model needs
 to safely modify a function.
-Formula: (cognitive/75 \(mu 55) + (sloc/200 \(mu 15) + (nesting/8 \(mu 15) +
-(test_score/20 \(mu 15) \(mi (doc_score/10 \(mu 15).
-Corpus-validated; recommended CI threshold: 85.
+Each positive term is capped at its ceiling: cognitive/75 times 55,
+sloc/200 times 15, nesting/8 times 15, max(test_score, 0)/20 times 15,
+and state_coupling/12 times 10; subtract capped max(doc_score, 0)/10 times 15.
+The sum is rounded and clamped to 0\(en100. In recursive mode, file-level
+Ce multiplies that score by 1 + min(Ce/10, 1) times 0.2, then rounds and clamps.
+The Cognitive input includes all live preprocessor arms as written, unlike
+the reported worst-configuration Cognitive metric.
+Ceilings and the suggested gate of 85 are predominantly C-calibrated;
+the nine-function pilot did not validate predictive accuracy.
 .TP
 .B AICP \(em AI Context Pressure
 Normalized 0\(en100 score predicting how much context an AI model must load before
 it can act. Complements AIRD: a function can be cheap to load but hard to reason
 about, or expensive to load but trivial once context is assembled.
-Formula: (external_calls/20 \(mu 60) + (sloc/200 \(mu 40) \(mi (doc_score/10 \(mu 15).
+Formula: min(external_calls/20, 1) times 60 + min(sloc/200, 1) times 40
+minus min(max(doc_score, 0)/10, 1) times 15, rounded and clamped to 0\(en100.
 .SH OPTIONS
 .TP
 .BR \-r ", " \-\-recursive
 Recursively process all supported source files in directories.
-When used, a
-.I report.txt
-file is generated with per-function details.
-Header files (.h, .hpp, .hxx) are skipped by default.
+Headers, including .h, .hpp, .hxx and .ads, are included by default.
+Detailed report files require \fB\-\-report\fR in multi-file text mode.
 .TP
 .BI \-l " LANG" ", " \-\-language " LANG"
 Restrict analysis to files of the given language.
@@ -166,7 +172,8 @@ Exit 1 if any function exceeds this return count.
 .TP
 .BI \-\-aird\-threshold " N"
 Exit 1 if any function exceeds this AIRD score.
-Recommended value: 85 (empirically validated against Sonnet 4.6 and Opus 4.8).
+Suggested value: 85, calibrated predominantly on C. See the metrics reference
+and ADR-0003 before choosing project gates.
 .TP
 .BI \-\-aicp\-threshold " N"
 Exit 1 if any function exceeds this AICP score.
@@ -188,6 +195,57 @@ Print help message.
 .TP
 .BR \-V ", " \-\-version
 Print version information.
+.TP
+.B \-\-supported\-languages
+List compiled languages and extensions, then exit; no files required.
+.TP
+.B \-\-quiet
+Suppress normal output; retain threshold-violation lines.
+.TP
+.B \-\-count\-anonymous\-closures
+Emit anonymous functions as separate entries with synthesized labels. Default: off.
+.TP
+.B \-\-exclude\-path PATTERN
+Exclude paths matching this regex; repeatable.
+.TP
+.B \-\-unreachable\-blocks\-threshold N
+Exit 1 if any function exceeds this unreachable basic-block count (C/C++/Rust only).
+.TP
+.B \-\-report FILE
+Write detailed per-function output in multi-file text mode. Ignored in single-file, matrix and structured modes.
+.TP
+.B \-\-baseline FILE
+Gate only new over-threshold functions or regressions relative to this snapshot.
+.TP
+.B \-\-write\-baseline
+Write current scores to --baseline and exit without gating; requires --baseline.
+.TP
+.B \-\-since REF
+Gate functions overlapping lines changed between REF and the working tree. Output selection is unchanged.
+.TP
+.B \-\-changed
+Equivalent to --since HEAD, including untracked files; mutually exclusive with --since.
+.TP
+.B \-\-explain METRIC
+Explain a metric and how to lower it, then exit; no files required.
+.TP
+.B \-\-find\-duplicates
+Report structural duplicates in recursive text mode. Shape equality does not prove safe extraction.
+.TP
+.B \-\-tier function|block
+Select duplicate fingerprint granularity (default: function).
+.TP
+.B \-\-include\-fixture\-pairs
+Retain intentional compliant/noncompliant fixture pairs in duplicate output.
+.TP
+.B \-\-include\-trivial\-duplicates
+Retain small-body, low-repeat duplicate groups.
+.TP
+.B \-\-dump\-duplicates FILE
+Write a JSON duplicate snapshot alongside --find-duplicates.
+.TP
+.B \-\-diff\-duplicates BEFORE AFTER
+Compare two duplicate snapshots and exit; no corpus files required.
 .SH FILTERS
 Filter rules are specified in JSON files with the following optional fields:
 .TP
@@ -214,6 +272,14 @@ Example filter file:
 }
 .fi
 .RE
+.PP
+Include and exclude file filters use the same matching predicate: at least
+one positive pattern (if any), and no negative matches. Use positive patterns
+to exclude directories; a negative-only exclude list removes their complement.
+File exclusions happen at discovery; function criteria apply separately.
+.PP
+SARIF emits only functions with max(McCabe, cognitive) greater than 10,
+independently of threshold flags. Use JSON or NDJSON for all score records.
 .SH COMPLEXITY INDICATORS
 .B knots
 uses visual emoji indicators based on the maximum of McCabe and
@@ -233,8 +299,14 @@ Cognitive complexity:
 Successful analysis, no threshold violations.
 .TP
 .B 1
-Error occurred (file not found, parse error, invalid arguments), or one or more
+Error occurred (file not found, parse error, configuration error), or one or more
 threshold violations were detected (when any \fB\-\-*\-threshold\fR flag is set).
+.TP
+.B 2
+Command-line usage error.
+.PP
+Multi-file scans currently warn and skip unreadable or unparseable files.
+Exit 0 does not guarantee every discovered input was analyzed.
 .SH EXAMPLES
 Analyze a single file:
 .RS
@@ -288,14 +360,14 @@ knots \-r \-l f90 path/to/project/
 Corpus analysis \(em one JSON record per function, composable across files:
 .RS
 .nf
-find . \-name "*.c" \-o \-name "*.rs" | xargs knots \-\-format ndjson > metrics.ndjson
+find . \-type f \e( \-name "*.c" \-o \-name "*.rs" \e) \-print0 | xargs \-0 \-r knots \-\-format ndjson > metrics.ndjson
 .fi
 .RE
 .PP
 Filter high-AIRD functions via jq:
 .RS
 .nf
-find src/ \-name "*.rs" | xargs knots \-\-format ndjson | jq 'select(.aird > 70)'
+find src/ \-type f \-name "*.rs" \-print0 | xargs \-0 \-r knots \-\-format ndjson | jq 'select(.aird > 70)'
 .fi
 .RE
 .PP
@@ -314,8 +386,8 @@ knots \-r \-\-format sarif src/ > knots.sarif
 .RE
 .SH FILES
 .TP
-.I report.txt
-Generated in the current directory when using \fB\-r\fR mode.
+.I report file
+Written only with \fB\-\-report FILE\fR in multi-file text mode.
 Contains per-function complexity details.
 .TP
 .I compile_commands.json

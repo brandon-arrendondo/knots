@@ -23,9 +23,25 @@ Options
 ``-r``, ``--recursive``
     Recursively process all supported source files in directories. See
     :doc:`installation` for the full list of recognized extensions. Header
-    files (``.h``, ``.hpp``, ``.hxx``) are skipped unless explicitly included
-    via a filter. A per-function report file is written only when ``--report``
-    is given.
+    files (including ``.h``, ``.hpp``, ``.hxx`` and ``.ads``) are included
+    by default; use filters to exclude them. A per-function report file is
+    written only when ``--report`` is given.
+
+``--supported-languages``
+    List the compiled language registry and extensions, then exit. No files
+    are required.
+
+``-l <LANG>``, ``--language <LANG>``
+    Restrict analysis to this language or extension alias, case-insensitively
+    (e.g. ``rust``, ``c++``, ``f90``). Repeat for multiple languages.
+
+``-q``, ``--quiet``
+    Suppress normal output, retaining threshold-violation lines. Exit status
+    still reflects violations.
+
+``--count-anonymous-closures``
+    Emit anonymous functions as independent entries with synthesized labels
+    such as ``<anonymous>@line:col``. Default: named functions only.
 
 ``-v``, ``--verbose``
     Show detailed per-function analysis including all test scoring sub-axes.
@@ -51,8 +67,9 @@ Options
     syntax as a pre-commit ``exclude:`` entry.
 
 ``--report <FILE>``
-    Write a detailed per-function report to ``<FILE>``. Opt-in — omit to
-    suppress the file.
+    Write a detailed report in multi-file text mode (including recursive
+    scans and compilation databases). It is not written in single-file,
+    matrix, or structured-output modes. Opt-in — omit to suppress the file.
 
 ``--format <FORMAT>``
     Output format. One of:
@@ -111,7 +128,7 @@ exceeds the specified value.
 
 ``--aird-threshold <N>``
     AIRD (AI Reasoning Difficulty) score. Suggested starting value: ``85``,
-    from a nine-function pilot, not a validation (see
+    from C-corpus calibration, not validated by the nine-function pilot (see
     :doc:`metrics-reference`). Run
     ``knots --explain aird`` for what drives the score and how to lower it.
 
@@ -120,6 +137,9 @@ exceeds the specified value.
 
 ``--external-calls-threshold <N>``
     External call count.
+
+``--unreachable-blocks-threshold <N>``
+    Unreachable basic-block count. Currently nonzero only for C/C++/Rust.
 
 Baseline / Ratchet Mode
 -----------------------
@@ -184,7 +204,8 @@ functions, and among those, only fail on new or worsened ones.
 .. note::
 
    Scoping affects **gating only** — text, JSON, SARIF, NDJSON, and CSV output
-   still report every analyzed function. Only the threshold check is narrowed.
+   retain their usual selection of analyzed functions (including SARIF
+   complexity-band filtering). Only the threshold check is narrowed.
 
 Duplicate Detection
 -------------------
@@ -276,7 +297,9 @@ Exit Status
 -----------
 
 ``0``
-    Successful analysis, no threshold violations.
+    No threshold violations among analyzed functions. Multi-file scans
+    currently warn and skip unreadable or unparseable files; status 0 does
+    not guarantee that every discovered input was analyzed.
 
 ``1``
     Error (file not found, parse error, unreadable baseline, unknown git ref or

@@ -9,7 +9,7 @@ are genuinely expensive to modify with AI assistance.
 
 - **Multiple Complexity Metrics**: McCabe, Cognitive, Nesting Depth, SLOC, ABC, Test Scoring
 - **AI Cost Metrics**: AIRD (reasoning difficulty) and AICP (context pressure) — ceilings calibrated on six open-source C codebases; predictive validation is a pilot so far (see [Metrics Reference](docs/metrics-reference.rst))
-- **Multi-Language**: C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua — same metrics and thresholds across all supported languages
+- **Multi-Language**: C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua — one CLI across supported languages; calibrate thresholds for your project
 - **Testability Matrix**: Categorize functions by complexity and testability
 - **Multiple Output Formats**: text, SARIF, JSON, NDJSON (find/xargs-composable), CSV
 - **CI Threshold Enforcement**: exit 1 on any threshold violation; recommended `--aird-threshold 85`
@@ -38,7 +38,9 @@ cd knots
 cargo build --release
 ```
 
-No C compiler or build system required.
+Running a prebuilt binary requires no C compiler or project build system.
+Building from source requires Rust and a native C/C++ compiler for the bundled
+tree-sitter grammars.
 
 ## Quick Start
 
@@ -62,12 +64,16 @@ knots -r src/ --aird-threshold 85 --changed
 # SARIF for GitHub Code Scanning
 knots -r --format sarif src/ > knots.sarif
 
-# Corpus analysis — one JSON record per function
-find . -name "*.c" -o -name "*.rs" | xargs knots --format ndjson > metrics.ndjson
+# Corpus analysis — one JSON record per function (GNU xargs)
+find . -type f \( -name "*.c" -o -name "*.rs" \) -print0 | xargs -0 -r knots --format ndjson > metrics.ndjson
 
 # Testability matrix
 knots -m src/main.c
 ```
+
+The AIRD gate is calibrated mainly on C; it rarely fires on Rust or JS/TS.
+See [ADR-0003](docs/adr/0003-gate-defaults-have-a-recorded-basis.md) before
+choosing project thresholds.
 
 ## Complexity Indicators
 
@@ -87,6 +93,11 @@ knots [OPTIONS] [FILE]...
 knots [OPTIONS] --compile-commands <FILE>
 
 Options:
+  --supported-languages            List compiled languages and extensions, then exit
+  -l, --language <LANG>             Restrict analysis to a language or extension (repeatable)
+  -q, --quiet                       Suppress normal output; retain threshold violations
+  --score-components               Add AIRD/AICP components to JSON, NDJSON, or CSV
+  --count-anonymous-closures        Emit anonymous functions as separate entries
   -r, --recursive                   Recursively process all supported source files in directories
   -v, --verbose                     Show detailed per-function analysis
   -m, --matrix                      Show testability matrix categorization
@@ -105,13 +116,14 @@ Options:
   --aicp-threshold <N>              Exit 1 if any function exceeds this AICP (AI Context Pressure) score
   --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
   --unreachable-blocks-threshold <N> Exit 1 if any function has more than this many unreachable (dead-code) basic blocks (C/C++/Rust only)
-  --report <FILE>                   Write a detailed per-function report to this file (opt-in)
+  --report <FILE>                   Write a detailed report in multi-file text mode (opt-in)
   --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see docs/baseline.rst)
   --write-baseline                  Snapshot current scores to --baseline and exit without gating
   --since <REF>                     Gate only functions overlapping lines changed since this git ref
   --changed                         Gate only functions changed in the working tree (sugar for --since HEAD)
   --explain <METRIC>                Explain a metric (e.g. aird, aicp) and how to lower it, then exit
   --find-duplicates                 Report structurally duplicated functions across the corpus (--recursive only)
+  --tier <function|block>           Select duplicate fingerprint granularity (default: function)
   --include-fixture-pairs           Keep tests/pass vs tests/fail fixture pairs in --find-duplicates output (excluded by default)
   --include-trivial-duplicates      Keep small-body, low-repeat groups (getters, one-assert tests) in --find-duplicates output (excluded by default)
   --dump-duplicates <FILE>          Write a JSON snapshot of --find-duplicates results, for later comparison via --diff-duplicates

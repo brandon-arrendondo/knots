@@ -2,10 +2,22 @@
 Benchmark Reference
 ====================
 
-Cross-language calibration results for knots against lizard, radon,
-rust-code-analysis (rca), tokei, and cloc.  These results informed the
-AIRD/AICP formula calibration and established per-language validation
-status.
+This page preserves the June 2026 comparison and performance snapshot,
+including knots v1.13.0 measurements. It is historical, not a claim of
+conformance for the current release. Counting rules and parser support have
+changed since these runs. A reference tool is comparison evidence, not the
+authority for a metric's definition.
+
+For pinned inputs, tool commits and reproducible current checks, use the
+`validation record
+<https://github.com/brandon-arrendondo/knots/blob/main/validation/README.md>`_,
+`definition probes
+<https://github.com/brandon-arrendondo/knots/blob/main/validation/probes/TOOLS.md>`_
+and `ADR-0003
+<https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0003-gate-defaults-have-a-recorded-basis.md>`_.
+Current support is listed by ``knots --supported-languages``. In particular,
+the current substrate supports free-form Fortran, not the fixed-form inputs
+in the archived tables below.
 
 Comparison Tools
 ================
@@ -16,36 +28,28 @@ Comparison Tools
 
    * - Tool
      - Version
-     - Location
+     - Installation used in the archived run
      - Metrics
    * - lizard
      - 1.23.0
-     - ``~/data-enterprise/venv/bin/lizard``
+     - Python package
      - McCabe, NLOC, token count
    * - radon
      - 6.0.1
-     - ``~/data-enterprise/venv/bin/radon``
+     - Python package
      - McCabe, Halstead (Python only)
    * - rust-code-analysis-cli (rca)
      - 0.0.25 (git HEAD)
-     - ``~/.cargo/bin/rust-code-analysis-cli``
+     - Cargo binary
      - Cyclomatic, Cognitive, Halstead, SLOC, ABC
    * - tokei
      - (cargo install)
-     - ``~/.cargo/bin/tokei``
+     - Cargo binary
      - SLOC by language
    * - cloc
      - (apt)
-     - ``/usr/bin/cloc``
+     - Distribution package
      - SLOC by language
-
-.. note::
-
-   rca 0.0.25 from crates.io fails to compile on rustc 1.95.  Install
-   from git HEAD::
-
-     cargo install --git https://github.com/mozilla/rust-code-analysis \
-       rust-code-analysis-cli
 
 Benchmark Corpora
 =================
@@ -80,19 +84,19 @@ Cross-language calibration
    * - todo-sqlite-cli
      - Rust
      - 36
-     - ~/toolchain/todo-sqlite-cli
+     - todo-sqlite-cli (local corpus checkout)
    * - curl
      - C
      - 744
-     - ~/toolchain/curl
+     - curl (local corpus checkout)
    * - mosquitto
      - C++
      - 974
-     - ~/toolchain/mosquitto
+     - mosquitto (local corpus checkout)
    * - gnatcoll-core
      - Ada
      - 452
-     - ~/toolchain/gnatcoll-core
+     - gnatcoll-core (local corpus checkout)
    * - lua/testes
      - Lua
      - 34
@@ -252,8 +256,8 @@ supersedes the single-row entry in the cross-language table above (same corpus,
 same run).  All ``.f`` files are passed explicitly (they are explicit-only in
 knots; ``--recursive`` does not pick them up).
 
-Corpora on disk: ``~/toolchain/lapack``, ``~/toolchain/fortran-stdlib``,
-``~/toolchain/arpack-ng``.
+Corpora on disk: ``lapack (local corpus checkout)``, ``fortran-stdlib (local corpus checkout)``,
+``arpack-ng (local corpus checkout)``.
 
 .. list-table::
    :header-rows: 1
@@ -274,8 +278,8 @@ Corpora on disk: ``~/toolchain/lapack``, ``~/toolchain/fortran-stdlib``,
      - +2%
      - Good agreement.  knots avg McCabe 33.1 vs lizard 22.9 (+45%): knots
        counts ``.AND.``/``.OR.`` operators per the original McCabe definition;
-       lizard does not.  Use Cognitive complexity as the primary gate for
-       fixed-form Fortran.
+       lizard does not.  This fixed-form comparison does not apply to
+       current parser support.
    * - fortran-stdlib
      - Free-form ``.f90``/``.F90``
      - 411
@@ -338,9 +342,8 @@ Performance
 ===========
 
 Measured on the project benchmark machine (24-core, 2026-06-28, knots v1.13.0,
-hyperfine 1.15.0, lizard 1.23.0).  **Absolute times are machine-specific; the
-speedup ratios are the portable signal** and should be used for comparisons
-across versions.
+hyperfine 1.15.0, lizard 1.23.0).  Both absolute times and speedup ratios depend on the machine, corpus
+and build. They do not guarantee performance on another system or version.
 
 ``--jobs`` scaling
 ------------------
@@ -438,7 +441,7 @@ corpus is knots/lizard only.
      - 11.0s
      - 1.2s
 
-At full parallelism knots leads across the board: 1.3–1.4× faster than lizard
+In this archived run, at full parallelism knots led across the board: 1.3–1.4× faster than lizard
 and rca on C, 1.4× faster than rca and 1.9× faster than lizard on Java.  rca
 beats lizard on Java (Rust parser vs Python) but trails on C due to its
 per-file output overhead.
@@ -464,12 +467,10 @@ nodes whose declarator is a ``parenthesized_declarator`` (macro call
 pattern) are filtered from the nested-SLOC subtraction.  Only
 ``identifier`` declarators (genuine nested functions) are subtracted.
 
-Fortran explicit-only extension rejection
-------------------------------------------
+Historical explicit-only extension handling
+-------------------------------------------
 
-Before v1.13, explicit-only extensions (``.f``, ``.h``, ``.ads``) were
-silently rejected even when passed directly on the command line.  Fixed
-by introducing ``is_parseable_extension`` in ``src/lib.rs`` — the
-command-line path now uses this (includes both recursive and
-explicit-only extensions) rather than ``is_source_extension`` (recursive
-discovery only).
+The pre-v1.13 CLI rejected some explicit-only extensions. The current CLI
+uses the substrate's ``is_parseable_extension`` for explicit paths and
+recursive discovery, including ``.h`` and ``.ads``. That fix does not imply
+current support for fixed-form Fortran; see :doc:`installation`.
