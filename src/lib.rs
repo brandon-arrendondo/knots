@@ -457,43 +457,10 @@ fn get_lua_assignment_name(node: Node, source_code: &str) -> Option<String> {
     }
 }
 
-/// Extract the name of an arrow_function or anonymous function_expression from
-/// the surrounding assignment context. Returns None for truly anonymous usage
-/// (callbacks, IIFEs, return values, etc.).
-fn get_name_from_assignment_context(node: Node, source_code: &str) -> Option<String> {
-    let parent = node.parent()?;
-    match parent.kind() {
-        // const foo = () => {}  or  const foo = function() {}
-        "variable_declarator" => parent
-            .child_by_field_name("name")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string()),
-        // { foo: () => {} }
-        "pair" => parent
-            .child_by_field_name("key")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string()),
-        // class { foo = () => {} }
-        "public_field_definition" => parent
-            .child_by_field_name("name")
-            .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
-            .map(|s| s.to_string()),
-        _ => None,
-    }
-}
-
 fn name_field(node: Node, source_code: &str) -> Option<String> {
     node.child_by_field_name("name")
         .and_then(|n| n.utf8_text(source_code.as_bytes()).ok())
         .map(|s| s.to_string())
-}
-
-fn name_in_child(node: Node, child_kind: &str, source_code: &str) -> Option<String> {
-    let mut cursor = node.walk();
-    let child = node
-        .children(&mut cursor)
-        .find(|c| c.kind() == child_kind)?;
-    name_field(child, source_code)
 }
 
 fn get_c_name(node: Node, source_code: &str) -> Option<String> {
@@ -515,101 +482,23 @@ fn get_c_name(node: Node, source_code: &str) -> Option<String> {
 /// on `node.kind()` to the right strategy per grammar: a direct `name`
 /// field for most languages, a declarator walk for C, and
 /// assignment-context inference for anonymous JS/Lua function expressions.
-/// Returns `None` for genuinely anonymous nodes (callbacks, IIFEs) that
+/// Uses the substrate for the matching name-extraction cases and keeps
+/// the iterative declarator fallback here. Returns `None` for genuinely
+/// anonymous nodes (callbacks, IIFEs) that
 /// [`collect_function_metrics`] may still record under a synthetic
 /// `<anonymous>@line:col` name when `count_anonymous_closures` is set.
 pub fn get_function_name(node: Node, source_code: &str) -> Option<String> {
-    let kind = node.kind();
-    if NAME_FIELD_FUNCTIONS.contains(&kind) {
-        return name_field(node, source_code);
-    }
-    if let Some((_, header)) = FORTRAN_HEADERS.iter().find(|(k, _)| *k == kind) {
-        return name_in_child(node, header, source_code);
-    }
-    match kind {
-        "function_declaration" => name_field(node, source_code)
-            .or_else(|| child_text_of_kind(node, "simple_identifier", source_code)),
-
+    match node.kind() {
+        // Keep C/C++ declarator resolution iterative: chain depth is controlled
+        // by the input, so walking it must not consume call-stack depth.
         "function_definition" => name_field(node, source_code)
             .or_else(|| get_c_name(node, source_code))
             .or_else(|| get_lua_assignment_name(node, source_code)),
-
-        "function_expression" => name_field(node, source_code)
-            .or_else(|| get_name_from_assignment_context(node, source_code)),
-
-        "arrow_function" => get_name_from_assignment_context(node, source_code),
-
-        "init_declaration" => Some("init".to_string()),
-
-        "func_literal" => None,
-
-        "subprogram_body" | "expression_function_declaration" => ada_name(node, source_code),
-
-        "task_body" => child_text_of_kind(node, "identifier", source_code),
-
-        "program" => fortran_program_name(node, source_code),
-
+        kind if is_function_kind(kind) => {
+            lang_parsing_substrate::get_function_name(node, source_code)
+        }
         _ => get_c_name(node, source_code),
     }
-}
-
-/// Function kinds whose name is in a `name` field.
-const NAME_FIELD_FUNCTIONS: &[&str] = &[
-    "function_item",
-    "method_definition",
-    "generator_function_declaration",
-    "generator_function",
-    "method_declaration",
-    "constructor_declaration",
-    "local_function_statement",
-];
-
-/// Fortran subprogram kinds and the header statement that holds the name.
-const FORTRAN_HEADERS: &[(&str, &str)] = &[
-    ("function", "function_statement"),
-    ("subroutine", "subroutine_statement"),
-    ("module_procedure", "module_procedure_statement"),
-];
-
-fn child_text_of_kind(node: Node, kind: &str, source_code: &str) -> Option<String> {
-    let mut cursor = node.walk();
-    let found = node.children(&mut cursor).find(|c| c.kind() == kind);
-    found
-        .and_then(|c| c.utf8_text(source_code.as_bytes()).ok())
-        .map(|s| s.to_string())
-}
-
-/// Ada: the name is in the function or procedure specification.
-fn ada_name(node: Node, source_code: &str) -> Option<String> {
-    let mut cursor = node.walk();
-    let spec = node.children(&mut cursor).find(|c| {
-        matches!(
-            c.kind(),
-            "function_specification" | "procedure_specification"
-        )
-    })?;
-    name_field(spec, source_code)
-}
-
-/// Fortran main program: the name in `program NAME`, else "program".
-fn fortran_program_name(node: Node, source_code: &str) -> Option<String> {
-    // Other grammars' root node is also `program`; only Fortran's has a
-    // program_statement, and that is the only case with a name.
-    let statement = child_of_kind(node, "program_statement")?;
-    let text = first_named_child(statement).and_then(|n| n.utf8_text(source_code.as_bytes()).ok());
-    Some(text.unwrap_or("program").to_string())
-}
-
-fn child_of_kind<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    let mut cursor = node.walk();
-    let found = node.children(&mut cursor).find(|c| c.kind() == kind);
-    found
-}
-
-fn first_named_child(node: Node) -> Option<Node> {
-    let mut cursor = node.walk();
-    let first = node.named_children(&mut cursor).next();
-    first
 }
 
 // Iterative, not recursive: C's declarator grammar wraps at most one
@@ -661,6 +550,7 @@ fn get_declarator_name(root: Node, source_code: &str) -> Option<String> {
 
 /// Collects all function and macro names defined in this translation unit.
 /// Used to classify call sites as local vs. external.
+// Keep this collector using knots' iterative declarator resolution as well.
 pub fn collect_local_names(root: Node, source_code: &str) -> HashSet<String> {
     let mut names = HashSet::new();
     collect_local_names_recursive(root, source_code, &mut names);

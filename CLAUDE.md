@@ -70,12 +70,16 @@ Three places:
 | "method_declaration"   // Go example
 ```
 
-**`get_function_name`** — add a branch that extracts the function name.
-Most languages have a direct `name` field (like Rust's `function_item`).
-C/C++ is the exception that uses a declarator chain.
+**Name extraction** — add the matching node kind and name-extraction strategy
+to the substrate's `get_function_name`, then adopt its release. Knots delegates
+recognized function kinds to that helper except `function_definition` and
+the generic C/C++ declarator fallback, which retain iterative walks here to
+avoid recursion through deeply nested declarators. Most languages have a
+direct `name` field (like Rust's `function_item`).
 
 **`collect_local_names_recursive`** — add the same node kinds so locally-defined
-functions are excluded from external-call counts.
+functions are excluded from external-call counts. It uses `is_function_kind`
+and knots' stack-safe name resolver; keep those aligned with discovery.
 
 **`collect_function_metrics`** — the Python SLOC branch (`is_python`) is the only
 language-specific path here. Add a similar guard only if the new language needs a
