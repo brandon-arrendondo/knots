@@ -238,6 +238,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "infer"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4200d433cbd5178df7797c9c2e75b348b728e39631cf14520d1e2fc424201f4"
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -282,11 +288,12 @@ dependencies = [
 
 [[package]]
 name = "lang-parsing-substrate"
-version = "0.9.0"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04e1453eae3dad7f94a7f9d4be80ece0a7bf66ac7b0c77b9d1477f4e0103186b"
+checksum = "b446c5e5a1d964e9afd7cfd19d4dfd2ab66f7a12591ad61bb4e5d65c7ee9cb6c"
 dependencies = [
  "globset",
+ "infer",
  "tree-sitter",
  "tree-sitter-ada",
  "tree-sitter-c",
