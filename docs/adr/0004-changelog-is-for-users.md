@@ -48,7 +48,8 @@ ships a user-visible capability or fix, describe that effect instead.
 
 Do not publish internal tracking references or locate defects in another
 project that have not been fixed upstream. The changelog is part of the public
-record and will ship in release packages.
+record, and the intention is to ship it in release packages; today's packages
+do not include it.
 
 ## Consequences
 
@@ -61,12 +62,14 @@ record and will ship in release packages.
   or replacement of already-published archives.
 - Deprecated and Security headings are not used. A security fix is a Fixed
   entry, published only once fixed; if it involves another project, wait
-  until the fix has landed upstream.
+  until the fix has landed upstream. Nothing is deprecated yet; if something
+  is, add the Deprecated heading then.
 - Validation results stay in the pinned validation record. A counting-change
   entry points readers to that evidence without turning the changelog into
   a benchmark report.
 
-Origin: port of aurora-lint ADR-0009, “The changelog tells users what changed;
-it is not a git log or a task list”, restated for knots and its ADR-0001.
+Origin: port of aurora-lint ADR-0009, “The changelog tells users what changed
+in aurora-lint; it is not a git log or a task list”, restated for knots and its
+ADR-0001.
 
 Source record: [aurora-lint ADR](https://github.com/brandon-arrendondo/aurora-lint/blob/8ad31a842e9d02f97a6d4b3a8cbeef5a9264cf0b/docs/adr/0009-changelog-is-for-users-not-a-git-log.md).

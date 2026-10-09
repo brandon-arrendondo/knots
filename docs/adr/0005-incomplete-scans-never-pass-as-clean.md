@@ -10,7 +10,10 @@ only the inputs that happened to finish, not the entire selected corpus.
 `--write-baseline` discards the skip count, writes a snapshot of the partial
 set and returns success. Structured outputs record no lost-input completion
 signal, and SARIF has no `invocations` field. The import-graph pass silently
-drops failed files, so Ce can be calculated from a partial graph.
+drops failed files, so Ce can be calculated from a partial graph. A file named
+on the command line in a language knots cannot parse (for example a
+fixed-form Fortran `.f` file) is skipped without a message, and the run exits
+0 even when a threshold is set.
 
 Parsing, traversal and cross-file aggregation can also fail or reach work
 limits. Losing one unit's result should not discard unrelated completed work,
@@ -46,14 +49,17 @@ code lands.
    available, distinguishable from missing results.
 5. **The exit status reports incompleteness whether or not any threshold is
    set.** It is nonzero and distinguishable from an ordinary threshold
-   violation, and takes precedence over gate results. The implementation must specify the
-   status value and output contract before the CLI documentation changes.
+   violation, and takes precedence over gate results. The implementation must
+   specify the status value and output contract before the CLI documentation
+   changes.
 6. **Snapshots cannot hide gaps.** Do not silently write or replace a baseline
    from an incomplete scan, or present a partial validation run as evidence
    of agreement. Incomplete reusable cross-file facts must not become a
    complete cache for a later run.
 
-Files intentionally outside the selected language/file scope are not failures.
+Files that discovery leaves out because they are outside the selected
+language/file scope are not failures. A file named explicitly on the command
+line is selected input: if knots cannot analyse it, the scan is incomplete.
 An empty source file or a valid file without functions is not incomplete just
 because it yields no function records. Tree-sitter recovery nodes alone do
 not prove failure: preserve the recorded recovery and configuration rules in
@@ -75,7 +81,8 @@ finish that calculation; any unsound or truncated fallback must be visible.
 - Define partial-record serialization, aggregation dependencies and baseline
   refusal before shipping the new status. Preserve existing formats where
   possible; do not silently replace integer scores with zero for failed work.
-- No aurora rule-abandonment count, step budget or time limit is adopted here.
+- No aurora-lint rule-abandonment count, step budget or time limit is adopted
+  here.
   Knots' units are metric/function/file analysis, not aurora-lint's per-rule
   units.
 
