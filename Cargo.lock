@@ -282,8 +282,6 @@ dependencies = [
  "knots",
  "regex",
  "tree-sitter",
- "tree-sitter-c",
- "tree-sitter-cpp",
 ]
 
 [[package]]
