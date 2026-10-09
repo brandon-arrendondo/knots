@@ -6,11 +6,11 @@ knots-test-complexity \- test quality heuristic for C unit tests
 [\fIOPTIONS\fR] <\fITEST_FILE\fR> <\fISOURCE_FILE\fR>
 .SH DESCRIPTION
 .B knots-test-complexity
-compares C test complexity with source complexity and looks for boundary
-testing patterns. Both inputs use the C grammar. It does not execute tests
-or prove boundary coverage or test adequacy.
-It compares the complexity of test functions against source functions and
-checks for boundary value testing patterns.
+is a test-quality heuristic designed and tested for C.
+It compares test complexity with source complexity and looks for boundary
+testing patterns. The grammar follows each file's extension; boundary
+detection matches C-style source text. It does not execute tests or prove
+boundary coverage or test adequacy.
 .PP
 This tool is designed for use in CI/CD pipelines and pre-commit hooks to
 enforce test quality standards.
@@ -51,10 +51,10 @@ Tests meet quality thresholds, or enforcement level is set to \fBwarn\fR.
 .TP
 .B 1
 Tests do not meet quality thresholds and enforcement level is \fBerror\fR,
-or an error occurred (file not found, invalid threshold value or level).
+or an error occurred (file not found, out-of-range threshold value or invalid level).
 .TP
 .B 2
-Command-line usage error.
+Command-line usage error, including a non-numeric threshold value.
 .SH EXAMPLES
 Check test quality with default thresholds:
 .RS

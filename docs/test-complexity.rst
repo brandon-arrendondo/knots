@@ -1,10 +1,11 @@
 Test Quality Analysis (knots-test-complexity)
 =============================================
 
-``knots-test-complexity`` is a C test-quality heuristic. It compares test and
-source complexity and looks for boundary-testing patterns. It parses both
-inputs with the C grammar, does not execute tests, and cannot prove coverage
-or test adequacy.
+``knots-test-complexity`` is a test-quality heuristic designed and tested
+for C. It compares test and source complexity and looks for boundary-testing
+patterns. The grammar follows each file's extension; boundary detection
+matches C-style source text. It does not execute tests and cannot prove
+coverage or test adequacy.
 
 Overview
 --------

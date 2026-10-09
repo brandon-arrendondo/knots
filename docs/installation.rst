@@ -29,8 +29,9 @@ From crates.io
 
     cargo install knots
 
-This installs ``knots``. Install the separate companion package with
-``cargo install knots-test-complexity``.
+This installs ``knots``. The companion is not published on crates.io;
+install its prebuilt PyPI package as described above. From a source checkout,
+use ``cargo install --path knots-test-complexity``.
 
 From Source
 -----------

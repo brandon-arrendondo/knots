@@ -42,14 +42,14 @@ Filter JSON files support the following fields (all are optional):
 
 Glob-style patterns for matching file paths. Supports:
 
-- ``*`` — wildcard matching from ``globset::Glob``
+- ``*`` — matches zero or more characters, including ``/`` with the current matcher
 - ``**`` — matches any characters including ``/``
 - ``!pattern`` — negation (exclude files matching this pattern)
 
 **Examples:**
 
 - ``"src/**/*.c"`` — all ``.c`` files in ``src/`` and subdirectories
-- ``"lib/*.c"`` — ``.c`` files directly in ``lib/``
+- ``"lib/*.c"`` — ``.c`` files under ``lib/``, including nested directories
 - ``"!**/test_*.c"`` — exclude files starting with ``test_``
 - ``"!**/vendor/**"`` — exclude everything in vendor directories
 

@@ -1177,9 +1177,8 @@ pub fn collect_function_metrics(
     metrics
 }
 
-// The language-registry tests moved to lang-parsing-substrate along with the
-// registry itself (`every_registered_extension_maps_to_its_grammar`,
-// `fixed_form_fortran_sloc_mode`, etc.).
+// Language-registry tests live in lang-parsing-substrate with the registry
+// metadata and extension dispatch.
 
 #[cfg(test)]
 mod recursion_tests {

@@ -251,13 +251,13 @@ Function Count: knots vs. lizard
 Fortran Dialect Coverage
 ------------------------
 
-Three corpora cover the full range of Fortran dialects.  The lapack/SRC row
-supersedes the single-row entry in the cross-language table above (same corpus,
-same run).  All ``.f`` files are passed explicitly (they are explicit-only in
-knots; ``--recursive`` does not pick them up).
+The archived runs covered three Fortran corpora. The lapack/SRC row
+superseded the single-row entry in the cross-language table above (same corpus,
+same run). All ``.f`` files were passed explicitly: they were explicit-only
+in the version measured, so recursive discovery did not include them. The
+current substrate does not support fixed-form Fortran.
 
-Corpora on disk: ``lapack (local corpus checkout)``, ``fortran-stdlib (local corpus checkout)``,
-``arpack-ng (local corpus checkout)``.
+The corpora were LAPACK, fortran-stdlib and arpack-ng.
 
 .. list-table::
    :header-rows: 1
