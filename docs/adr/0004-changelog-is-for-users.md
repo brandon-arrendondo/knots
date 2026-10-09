@@ -9,15 +9,22 @@ when existing scores change meaning. A list of commits or completed work mixes
 those changes with implementation and measurement history. The validation
 record already holds comparison evidence; it is not a release note.
 
+Knots has no `CHANGELOG.md` today. The latest GitHub release bodies
+(v1.16.0–v1.18.0) contain only version-compare links rather than curated
+release notes. ADR-0001 refers to a changelog; this decision establishes it.
+
 [ADR-0001](0001-the-definition-is-the-authority.md) requires counting changes to
 be measured and listed under Changed. This decision keeps that requirement
 while defining the changelog's wider purpose.
 
 ## Decision
 
-`CHANGELOG.md` is a curated record for users of knots. Each release has one
-dated section, newest first, with Unreleased on top. Use these headings only
-when they have entries:
+Create `CHANGELOG.md` starting with the next release as a curated record for
+users of knots. Each release has one dated section, newest first, with
+Unreleased on top. Draw the GitHub release body from that release's section;
+a compare link may supplement the notes but does not replace them. Write the
+entry in the same change that ships the user-visible effect, under Unreleased.
+Use these headings only when they have entries:
 
 1. **Added:** a new metric, language, CLI option, output format or analysis
    capability. Describe what the user can now do.
@@ -41,7 +48,7 @@ ships a user-visible capability or fix, describe that effect instead.
 
 Do not publish internal tracking references or locate defects in another
 project that have not been fixed upstream. The changelog is part of the public
-record and ships in release archives.
+record and will ship in release packages.
 
 ## Consequences
 
@@ -49,9 +56,12 @@ record and ships in release archives.
   but cannot decide that every completed change deserves an entry.
 - Group related effects so a release remains readable. Absence of internal
   work from the changelog is correct, not missing attribution.
-- Existing release sections can be corrected to this standard. Git history
+- Backfilling older releases is a separate maintainer decision. Git history
   remains the implementation record; this ADR authorizes no history rewrite
   or replacement of already-published archives.
+- Deprecated and Security headings are not used. A security fix is a Fixed
+  entry, published only once fixed; if it involves another project, wait
+  until the fix has landed upstream.
 - Validation results stay in the pinned validation record. A counting-change
   entry points readers to that evidence without turning the changelog into
   a benchmark report.
