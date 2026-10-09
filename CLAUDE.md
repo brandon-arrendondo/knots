@@ -168,7 +168,7 @@ Grammar re-exports in `src/lib.rs` preserve the `knots::tree_sitter_*` API.
 | Kotlin | `.kt` `.kts` | — |
 | Swift | `.swift` | — |
 | PHP | `.php` | — |
-| Fortran | `.f90` `.f95` `.f03` `.f08` `.F90` `.F95` `.F03` `.F08` | `.f` `.for` `.f77` `.F` `.FOR` `.F77` |
+| Fortran | `.f90` `.f95` `.f03` `.f08` `.F90` `.F95` `.F03` `.F08` | — |
 | Scala | `.scala` `.sc` | — |
 | Lua | `.lua` | — |
 <!-- END:supported-languages -->
