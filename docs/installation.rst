@@ -74,7 +74,7 @@ contains 16 languages:
 * Scala: ``.scala``, ``.sc``
 * Lua: ``.lua``
 
-Recursive scans include headers, including ``.h`` and ``.ads``. The registry
-labels these as explicit-only, but knots uses its broader parseable-extension
-predicate for recursive discovery. Fixed-form Fortran (``.f``, ``.for``,
+Recursive scans include header files such as ``.h`` and ``.ads``. The
+registry labels these explicit-only, but knots discovers files with its broader
+parseable-extension predicate. Fixed-form Fortran (``.f``, ``.for``,
 ``.f77`` and uppercase variants) is not supported by the current substrate.
