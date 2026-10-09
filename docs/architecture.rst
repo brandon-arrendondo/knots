@@ -82,8 +82,9 @@ as written, plus recursion. Function regions, identifier resolution and
 unknown cases are interpreted in knots, where their metric meaning belongs.
 
 SLOC uses tree-sitter tokens for the default and Python modes: comment tokens
-are omitted, but comment markers inside strings remain code. Ada and Lua
-use a shared line-comment helper; Fortran uses its line-comment scan.
+are omitted, but comment markers inside strings remain code. Ada, Lua and
+Fortran use the shared line-comment helper: ``--`` for Ada/Lua and ``!`` for
+Fortran.
 ``function_sloc`` subtracts nested functions' own lines from their enclosing
 function. ``SlocMode`` dispatch comes from substrate metadata.
 
