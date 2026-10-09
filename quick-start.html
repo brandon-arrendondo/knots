@@ -101,22 +101,21 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="n">src</span><span class="o">/</span><span class="n">main</span><span class="o">.</span><span class="n">c</span>
 </pre></div>
 </div>
-<p>Output shows per-function metrics:</p>
+<p>Illustrative per-function output:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>😊 src/main.c:12:init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
 😠 src/main.c:30:process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
 </pre></div>
 </div>
 <p>Each line is prefixed with <code class="docutils literal notranslate"><span class="pre">file:line:</span></code> so an editor can jump straight to the
 function from any line of output (not just threshold violations).</p>
-<blockquote>
-<div><dl class="simple">
-<dt>Summary:</dt><dd><p>Total Functions: 2
-Average McCabe Complexity: 15.50
-Average AIRD Score: 45.50
-Average AICP Score: 40.00</p>
-</dd>
-</dl>
-</div></blockquote>
+<p>Illustrative summary:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Summary</span><span class="p">:</span>
+  <span class="n">Total</span> <span class="n">Functions</span><span class="p">:</span> <span class="mi">2</span>
+  <span class="n">Average</span> <span class="n">McCabe</span> <span class="n">Complexity</span><span class="p">:</span> <span class="mf">15.50</span>
+  <span class="n">Average</span> <span class="n">AIRD</span> <span class="n">Score</span><span class="p">:</span> <span class="mf">45.50</span>
+  <span class="n">Average</span> <span class="n">AICP</span> <span class="n">Score</span><span class="p">:</span> <span class="mf">40.00</span>
+</pre></div>
+</div>
 </section>
 <section id="verbose-mode">
 <h2>Verbose Mode<a class="headerlink" href="#verbose-mode" title="Link to this heading"></a></h2>
@@ -186,7 +185,8 @@ sequential processing.  Each thread owns its own parser, so there is no
 contention.</p>
 <p>Header files (<code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.ads</span></code>, etc.) are included by default in recursive
 mode — pushing logic into a header is not a way to hide it from the scan.
-To scan <em>only</em> headers, or exclude them, use an include/exclude filter:</p>
+For example, pass this JSON as <code class="docutils literal notranslate"><span class="pre">--include</span> <span class="pre">c-only.json</span></code> to keep only C
+source files and omit headers:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/*.c&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;!**/*.h&quot;</span><span class="p">]</span>
 <span class="p">}</span>
@@ -275,12 +275,12 @@ To scan <em>only</em> headers, or exclude them, use an include/exclude filter:</
 <span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">m</span> <span class="o">~/</span><span class="n">myproject</span><span class="o">/</span> <span class="o">--</span><span class="n">include</span> <span class="nb">complex</span><span class="o">.</span><span class="n">json</span>
 </pre></div>
 </div>
-<p>Analyze only files modified in the last commit:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">diff</span> <span class="o">--</span><span class="n">name</span><span class="o">-</span><span class="n">only</span> <span class="n">HEAD</span><span class="o">~</span><span class="mi">1</span> <span class="o">|</span> <span class="n">grep</span> <span class="o">-</span><span class="n">E</span> <span class="s1">&#39;\.(c|cpp|cc|cxx|rs|py|js|mjs|cjs)$&#39;</span> <span class="o">|</span> <span class="k">while</span> <span class="n">read</span> <span class="n">f</span><span class="p">;</span> <span class="n">do</span>
-    <span class="n">knots</span> <span class="s2">&quot;$f&quot;</span>
-<span class="n">done</span>
+<p>Gate functions changed since the previous commit:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">src</span><span class="o">/</span> <span class="o">--</span><span class="n">mccabe</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">20</span> <span class="o">--</span><span class="n">since</span> <span class="n">HEAD</span><span class="o">~</span><span class="mi">1</span>
 </pre></div>
 </div>
+<p>This compares the working tree with <code class="docutils literal notranslate"><span class="pre">HEAD~1</span></code>. Scoping narrows threshold
+checks; output still includes all analyzed functions.</p>
 <p>CMake/build system workflow:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cmake</span> <span class="o">-</span><span class="n">DCMAKE_EXPORT_COMPILE_COMMANDS</span><span class="o">=</span><span class="n">ON</span> <span class="o">-</span><span class="n">B</span> <span class="n">build</span>
 <span class="n">knots</span> <span class="o">--</span><span class="nb">compile</span><span class="o">-</span><span class="n">commands</span> <span class="n">build</span><span class="o">/</span><span class="n">compile_commands</span><span class="o">.</span><span class="n">json</span> <span class="o">-</span><span class="n">m</span>

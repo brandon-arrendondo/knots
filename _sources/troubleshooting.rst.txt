@@ -17,12 +17,12 @@ Convert the file to UTF-8::
 
     iconv -f ISO-8859-1 -t UTF-8 file.c > file_utf8.c
 
-Or exclude problematic files via a filter:
+Or pass this positive pattern in a JSON ``--exclude`` filter:
 
 .. code-block:: json
 
     {
-      "file_patterns": ["!**/legacy_encoding/**"]
+      "file_patterns": ["**/legacy_encoding/**"]
     }
 
 "No supported source files found in directory"
@@ -38,15 +38,14 @@ Check:
 - You're pointing at the right directory
 - Files aren't filtered out by an active include/exclude rule
 
-Metrics seem lower than expected for Rust (vs. clippy)
--------------------------------------------------------
+Rust Cognitive scores differ from Clippy
+----------------------------------------
 
-This is expected. See :doc:`alternatives` — Cognitive Complexity Algorithm
-Differences. Knots implements the Campbell spec, which counts loops and
-applies a nesting penalty. Clippy's ``cognitive_complexity`` lint does not
-count loops and has no nesting penalty, producing scores 3–4× lower.
-
-Clippy threshold 25 ≈ knots threshold 75–100 for equivalent strictness.
+The algorithms differ. Knots follows Campbell's specification, including
+loops and nesting penalties; Clippy's lint uses different counting rules.
+The old comparison sample had lower Clippy scores, but it does not establish
+a general threshold conversion. See :doc:`alternatives` and calibrate gates
+on your project's own distribution.
 
 Report file not generated
 -------------------------
@@ -60,8 +59,8 @@ SARIF has no results
 
 Knots omits SARIF results for functions with ``max(McCabe, cognitive) ≤ 10``
 (the 😊 "Good" band). If all functions score in that range, the SARIF file
-will contain a valid but empty results array. Use ``--include`` with
-``"min_complexity": 1`` to force all functions through if needed.
+will contain a valid but empty results array. Include filters and threshold flags do not override that band. Use
+``--format json`` or ``--format ndjson`` to export all analyzed functions.
 
 Metrics dropped after upgrading (C/C++, Swift, C#)
 ----------------------------------------------------

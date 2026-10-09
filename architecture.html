@@ -185,8 +185,9 @@ preprocessor configurations. AIRD uses Cognitive with all locally live arms
 as written, plus recursion. Function regions, identifier resolution and
 unknown cases are interpreted in knots, where their metric meaning belongs.</p>
 <p>SLOC uses tree-sitter tokens for the default and Python modes: comment tokens
-are omitted, but comment markers inside strings remain code. Ada and Lua
-use a shared line-comment helper; Fortran uses its line-comment scan.
+are omitted, but comment markers inside strings remain code. Ada, Lua and
+Fortran use the shared line-comment helper: <code class="docutils literal notranslate"><span class="pre">--</span></code> for Ada/Lua and <code class="docutils literal notranslate"><span class="pre">!</span></code> for
+Fortran.
 <code class="docutils literal notranslate"><span class="pre">function_sloc</span></code> subtracts nested functions’ own lines from their enclosing
 function. <code class="docutils literal notranslate"><span class="pre">SlocMode</span></code> dispatch comes from substrate metadata.</p>
 </section>

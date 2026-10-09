@@ -115,34 +115,51 @@ what the <code class="docutils literal notranslate"><span class="pre">knots-pre-
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cargo</span> <span class="n">install</span> <span class="n">knots</span>
 </pre></div>
 </div>
-<p>This installs both <code class="docutils literal notranslate"><span class="pre">knots</span></code> and <code class="docutils literal notranslate"><span class="pre">knots-test-complexity</span></code>.</p>
+<p>This installs <code class="docutils literal notranslate"><span class="pre">knots</span></code>. The companion is not published on crates.io;
+install its prebuilt PyPI package as described above. From a source checkout,
+use <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">install</span> <span class="pre">--path</span> <span class="pre">knots-test-complexity</span></code>.</p>
 </section>
 <section id="from-source">
 <h2>From Source<a class="headerlink" href="#from-source" title="Link to this heading"></a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">brandon</span><span class="o">-</span><span class="n">arrendondo</span><span class="o">/</span><span class="n">knots</span><span class="o">.</span><span class="n">git</span>
 <span class="n">cd</span> <span class="n">knots</span>
-<span class="n">cargo</span> <span class="n">build</span> <span class="o">--</span><span class="n">release</span>
+<span class="n">cargo</span> <span class="n">build</span> <span class="o">--</span><span class="n">release</span> <span class="o">--</span><span class="n">workspace</span>
 <span class="o">./</span><span class="n">target</span><span class="o">/</span><span class="n">release</span><span class="o">/</span><span class="n">knots</span> <span class="o">--</span><span class="n">version</span>
 </pre></div>
 </div>
 </section>
 <section id="requirements">
 <h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading"></a></h2>
-<p>A Rust toolchain (install via <a class="reference external" href="https://rustup.rs">rustup</a>). No C compiler,
-Python interpreter, build system, or language server required — knots uses
-tree-sitter grammars bundled as Rust dependencies.</p>
+<p>Source builds require a Rust toolchain (install via <a class="reference external" href="https://rustup.rs">rustup</a>) and a native C/C++ compiler for the bundled tree-sitter
+grammars. Prebuilt wheels do not require that toolchain. Analysis does not
+require compiling your project or running its language server.</p>
 </section>
 <section id="supported-languages">
 <h2>Supported Languages<a class="headerlink" href="#supported-languages" title="Link to this heading"></a></h2>
-<p>Knots analyzes source files with these extensions:</p>
+<p>Run <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--supported-languages</span></code> for the compiled registry. It currently
+contains 16 languages:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">.c</span></code> — C</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">.cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.cc</span></code>, <code class="docutils literal notranslate"><span class="pre">.cxx</span></code> — C++</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">.hpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.hxx</span></code> — C++ headers</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">.rs</span></code> — Rust</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">.py</span></code> — Python 3 (including decorated functions and class methods)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.mjs</span></code>, <code class="docutils literal notranslate"><span class="pre">.cjs</span></code> — JavaScript (ES2015+, including class methods and generators)</p></li>
+<li><p>C: <code class="docutils literal notranslate"><span class="pre">.c</span></code>, <code class="docutils literal notranslate"><span class="pre">.h</span></code></p></li>
+<li><p>C++: <code class="docutils literal notranslate"><span class="pre">.cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.cc</span></code>, <code class="docutils literal notranslate"><span class="pre">.cxx</span></code>, <code class="docutils literal notranslate"><span class="pre">.hpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.hxx</span></code></p></li>
+<li><p>Rust: <code class="docutils literal notranslate"><span class="pre">.rs</span></code></p></li>
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">.py</span></code></p></li>
+<li><p>JavaScript: <code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.mjs</span></code>, <code class="docutils literal notranslate"><span class="pre">.cjs</span></code>, <code class="docutils literal notranslate"><span class="pre">.jsx</span></code></p></li>
+<li><p>TypeScript: <code class="docutils literal notranslate"><span class="pre">.ts</span></code>, <code class="docutils literal notranslate"><span class="pre">.tsx</span></code></p></li>
+<li><p>Ada: <code class="docutils literal notranslate"><span class="pre">.adb</span></code>, <code class="docutils literal notranslate"><span class="pre">.ada</span></code>, <code class="docutils literal notranslate"><span class="pre">.ads</span></code></p></li>
+<li><p>Go: <code class="docutils literal notranslate"><span class="pre">.go</span></code></p></li>
+<li><p>Java: <code class="docutils literal notranslate"><span class="pre">.java</span></code></p></li>
+<li><p>C#: <code class="docutils literal notranslate"><span class="pre">.cs</span></code></p></li>
+<li><p>Kotlin: <code class="docutils literal notranslate"><span class="pre">.kt</span></code>, <code class="docutils literal notranslate"><span class="pre">.kts</span></code></p></li>
+<li><p>Swift: <code class="docutils literal notranslate"><span class="pre">.swift</span></code></p></li>
+<li><p>PHP: <code class="docutils literal notranslate"><span class="pre">.php</span></code></p></li>
+<li><p>Free-form Fortran: <code class="docutils literal notranslate"><span class="pre">.f90</span></code>, <code class="docutils literal notranslate"><span class="pre">.f95</span></code>, <code class="docutils literal notranslate"><span class="pre">.f03</span></code>, <code class="docutils literal notranslate"><span class="pre">.f08</span></code> and uppercase variants</p></li>
+<li><p>Scala: <code class="docutils literal notranslate"><span class="pre">.scala</span></code>, <code class="docutils literal notranslate"><span class="pre">.sc</span></code></p></li>
+<li><p>Lua: <code class="docutils literal notranslate"><span class="pre">.lua</span></code></p></li>
 </ul>
+<p>Recursive scans include header files such as <code class="docutils literal notranslate"><span class="pre">.h</span></code> and <code class="docutils literal notranslate"><span class="pre">.ads</span></code>. The
+registry labels these explicit-only, but knots discovers files with its broader
+parseable-extension predicate. Fixed-form Fortran (<code class="docutils literal notranslate"><span class="pre">.f</span></code>, <code class="docutils literal notranslate"><span class="pre">.for</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.f77</span></code> and uppercase variants) is not supported by the current substrate.</p>
 </section>
 </section>
 

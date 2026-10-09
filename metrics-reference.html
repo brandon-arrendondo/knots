@@ -107,8 +107,12 @@
              
   <section id="metrics-reference">
 <h1>Metrics Reference<a class="headerlink" href="#metrics-reference" title="Link to this heading"></a></h1>
-<p>Knots computes 13 metrics per function. All are present in JSON, NDJSON,
-and CSV output.</p>
+<p>Knots computes 13 metrics per function. The structured field list is in
+<a class="reference internal" href="output-formats.html"><span class="doc">Output Formats</span></a>; add
+<code class="docutils literal notranslate"><span class="pre">--score-components</span></code> for state coupling and AI-score components.</p>
+<p>Named functions appear by default. Use <code class="docutils literal notranslate"><span class="pre">--count-anonymous-closures</span></code> for
+independent anonymous-function entries; this does not change the attribution
+rules described below.</p>
 <section id="python-language-support">
 <h2>Python Language Support<a class="headerlink" href="#python-language-support" title="Link to this heading"></a></h2>
 <p>Knots supports Python (<code class="docutils literal notranslate"><span class="pre">.py</span></code>) alongside every other language listed by <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--supported-languages</span></code>.
@@ -228,9 +232,8 @@ specification charges for <code class="docutils literal notranslate"><span class
 </ul>
 <p>Other notes:</p>
 <ul class="simple">
-<li><p><strong>McCabe</strong>: also counts <code class="docutils literal notranslate"><span class="pre">if</span></code>, <code class="docutils literal notranslate"><span class="pre">elsif</span></code>, every <code class="docutils literal notranslate"><span class="pre">loop</span></code> statement (plain,
-<code class="docutils literal notranslate"><span class="pre">while</span></code>, and <code class="docutils literal notranslate"><span class="pre">for</span></code>), each <code class="docutils literal notranslate"><span class="pre">when</span></code> alternative of a <code class="docutils literal notranslate"><span class="pre">case</span></code>, and each
-exception handler</p></li>
+<li><p><strong>McCabe</strong>: also counts <code class="docutils literal notranslate"><span class="pre">if</span></code>, <code class="docutils literal notranslate"><span class="pre">elsif</span></code> and each exception handler;
+loop and case-alternative counting follows the rules above</p></li>
 <li><p><strong>Cognitive</strong>: <code class="docutils literal notranslate"><span class="pre">loop</span></code>, <code class="docutils literal notranslate"><span class="pre">case</span></code>, and exception handlers are nesting
 structures; a <code class="docutils literal notranslate"><span class="pre">case</span></code> costs +1 plus the nesting penalty once, however many
 alternatives it has</p></li>
@@ -250,9 +253,9 @@ functions, and their code is not attributed to any other function.</p></li>
 a <code class="docutils literal notranslate"><span class="pre">case</span></code> used as a dispatch table scores its arm count whether the arms
 are one-line mappings or nested logic. Cognitive charges the <code class="docutils literal notranslate"><span class="pre">case</span></code> once.
 At knots 1.17.0, two dispatch functions in the HAC corpus (<code class="docutils literal notranslate"><span class="pre">Compute</span></code> and
-<code class="docutils literal notranslate"><span class="pre">Eval</span></code>, from an Advent of Code puzzle, <code class="docutils literal notranslate"><span class="pre">~/toolchain/hac</span></code> at <code class="docutils literal notranslate"><span class="pre">b0fa2e5</span></code>)
+<code class="docutils literal notranslate"><span class="pre">Eval</span></code>, from an Advent of Code puzzle, HAC at <code class="docutils literal notranslate"><span class="pre">b0fa2e5</span></code>)
 score McCabe 1,682 and Cognitive 5; the AES <code class="docutils literal notranslate"><span class="pre">Encrypt</span></code> functions in Ada-Util
-(<code class="docutils literal notranslate"><span class="pre">~/toolchain/ada-util</span></code> at <code class="docutils literal notranslate"><span class="pre">bd635f5</span></code>) score McCabe 119 and Cognitive 82
+(Ada-Util at <code class="docutils literal notranslate"><span class="pre">bd635f5</span></code>) score McCabe 119 and Cognitive 82
 from their SubBytes <code class="docutils literal notranslate"><span class="pre">case</span></code> statements.</p>
 <p>For Ada codebases, prefer <code class="docutils literal notranslate"><span class="pre">--cognitive-threshold</span></code> as the primary gate. If
 you gate on McCabe, derive the threshold from the project’s own
@@ -414,7 +417,7 @@ The 20.0 in knots’ own self-check and in the <code class="docutils literal not
 calibration, not a validated value: it is the 97.6th percentile of function
 ABC magnitude across twelve pinned Rust crates, and the 88th across six
 held-out C corpora. ABC magnitude grows with function size, so one number
-does not suit every language. See <code class="docutils literal notranslate"><span class="pre">docs/adr/0003</span></code>.</p></li>
+does not suit every language. See <a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0003-gate-defaults-have-a-recorded-basis.md">ADR-0003</a>.</p></li>
 </ul>
 </section>
 <section id="preprocessor-dead-code-exclusion-c-c-swift-c">
@@ -613,13 +616,13 @@ six C corpora when the formula was calibrated):</p>
 </tr>
 </tbody>
 </table>
-<p>The ceilings have not moved, but the counts have (<code class="docutils literal notranslate"><span class="pre">docs/adr/0001</span></code>). Measured
+<p>The ceilings have not moved, but the counts have (<a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0001-the-definition-is-the-authority.md">ADR-0001</a>). Measured
 at this version on the same six corpora (32,999 functions), the 99th
 percentiles are cognitive 81, SLOC 180 and nesting 6. On six C corpora the
 ceilings never saw (12,248 functions), they are cognitive 75, SLOC 161 and
 nesting 6. Cognitive 75 and SLOC 200 therefore still sit near p99 of C;
 nesting 8 is nearer p99.5, and nesting seldom approaches it.
-<code class="docutils literal notranslate"><span class="pre">docs/adr/0003</span></code> records the method and the figures.</p>
+<a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0003-gate-defaults-have-a-recorded-basis.md">ADR-0003</a> records the method and the figures.</p>
 <p>Cognitive complexity is the dominant driver. SLOC, nesting, and testability
 are secondary. Documentation (doc_score) reduces difficulty.</p>
 <p><strong>Recommended CI threshold</strong>: <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code></p>
@@ -642,7 +645,7 @@ AIRD 85 — meaning the headline <code class="docutils literal notranslate"><spa
 functions that are genuinely hard to maintain.</p>
 <p>These ceilings need tuning on non-C languages. Rust is the same: the 99th percentile of cognitive complexity is 14 and of
 SLOC 86 across twelve crates, so <code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">85</span></code> selects 0.04% of
-their functions, against about 1% of C (<code class="docutils literal notranslate"><span class="pre">docs/adr/0003</span></code>).</p>
+their functions, against about 1% of C (<a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0003-gate-defaults-have-a-recorded-basis.md">ADR-0003</a>).</p>
 <p>For JS/TS/React projects, pair the AIRD gate with explicit McCabe and
 cognitive thresholds:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">--</span><span class="n">aird</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">85</span> <span class="o">--</span><span class="n">mccabe</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">20</span> <span class="o">--</span><span class="n">cognitive</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">25</span>

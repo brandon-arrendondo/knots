@@ -157,7 +157,7 @@ sdists, then publishes to PyPI. Watch it under the repo’s Actions tab.</p>
 <li><p><strong>Bump and tag the mirror.</strong> Once knots is on PyPI, point the shim at it:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>../knots-pre-commit
 ./bump.sh<span class="w"> </span>X.Y.Z
-git<span class="w"> </span>commit<span class="w"> </span>-am<span class="w"> </span><span class="s2">&quot;knots X.Y.Z&quot;</span>
+git<span class="w"> </span>commit<span class="w"> </span>-s<span class="w"> </span>-am<span class="w"> </span><span class="s2">&quot;knots X.Y.Z&quot;</span>
 git<span class="w"> </span>tag<span class="w"> </span>vX.Y.Z
 git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>main<span class="w"> </span>vX.Y.Z<span class="w">      </span><span class="c1"># push the tag explicitly</span>
 </pre></div>
@@ -184,13 +184,17 @@ pre-commit<span class="w"> </span>try-repo<span class="w"> </span>https://github
 <li><p>The publish step uses <code class="docutils literal notranslate"><span class="pre">skip-existing:</span> <span class="pre">true</span></code>, so re-runs are idempotent:
 already-published files are skipped rather than failing on “file already exists”.</p></li>
 <li><p><strong>Partial publish</strong> (one package uploaded, the other failed — e.g. a
-trusted-publisher misconfiguration): fix the cause, then re-push the tag
-(<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">push</span> <span class="pre">-f</span> <span class="pre">origin</span> <span class="pre">vX.Y.Z</span></code>). The rebuild re-runs publish; the package already
-on PyPI is skipped and the missing one uploads.</p></li>
+trusted-publisher misconfiguration): fix the cause, then re-run the original
+tag-triggered workflow from its Actions run
+(Re-run failed jobs, or Re-run all jobs). That preserves the tag ref used
+by the publish condition; already-published files are skipped. Pushing an
+unchanged tag does not create a new push event.</p></li>
 <li><p>PyPI versions are immutable — a published version cannot be re-uploaded or
 overwritten. To ship a fix, cut a new version.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">wheels.yml</span></code> can be run manually (Actions → “Wheels (PyPI)” → Run workflow) to
-validate the build matrix without publishing (publish is gated to tags).</p></li>
+validate the build matrix without publishing when dispatched on a branch.
+The publish condition checks for a <code class="docutils literal notranslate"><span class="pre">refs/tags/v</span></code> ref, not the event type;
+do not select a version tag for a build-only manual run.</p></li>
 </ul>
 </section>
 </section>

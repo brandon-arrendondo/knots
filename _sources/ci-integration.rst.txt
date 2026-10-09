@@ -170,7 +170,7 @@ format:
 ::
 
     # Analyze entire project, one record per function
-    find . -name "*.c" -o -name "*.rs" | xargs knots --format ndjson > metrics.ndjson
+    find . -type f \( -name "*.c" -o -name "*.rs" \) -print0 | xargs -0 -r knots --format ndjson > metrics.ndjson
 
     # Functions above AIRD threshold
     jq 'select(.aird > 85)' metrics.ndjson

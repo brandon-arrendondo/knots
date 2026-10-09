@@ -61,7 +61,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#path-is-a-directory-use-r-recursive">“Path is a directory. Use -r/–recursive”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#warning-skipping-file-stream-did-not-contain-valid-utf-8">“Warning: Skipping &lt;file&gt;: stream did not contain valid UTF-8”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#no-supported-source-files-found-in-directory">“No supported source files found in directory”</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#metrics-seem-lower-than-expected-for-rust-vs-clippy">Metrics seem lower than expected for Rust (vs. clippy)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rust-cognitive-scores-differ-from-clippy">Rust Cognitive scores differ from Clippy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#report-file-not-generated">Report file not generated</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sarif-has-no-results">SARIF has no results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#metrics-dropped-after-upgrading-c-c-swift-c">Metrics dropped after upgrading (C/C++, Swift, C#)</a></li>
@@ -111,9 +111,9 @@
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">iconv</span> <span class="o">-</span><span class="n">f</span> <span class="n">ISO</span><span class="o">-</span><span class="mi">8859</span><span class="o">-</span><span class="mi">1</span> <span class="o">-</span><span class="n">t</span> <span class="n">UTF</span><span class="o">-</span><span class="mi">8</span> <span class="n">file</span><span class="o">.</span><span class="n">c</span> <span class="o">&gt;</span> <span class="n">file_utf8</span><span class="o">.</span><span class="n">c</span>
 </pre></div>
 </div>
-<p>Or exclude problematic files via a filter:</p>
+<p>Or pass this positive pattern in a JSON <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> filter:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;!**/legacy_encoding/**&quot;</span><span class="p">]</span>
+<span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/legacy_encoding/**&quot;</span><span class="p">]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -131,13 +131,13 @@ and <code class="docutils literal notranslate"><span class="pre">.ads</span></co
 <li><p>Files aren’t filtered out by an active include/exclude rule</p></li>
 </ul>
 </section>
-<section id="metrics-seem-lower-than-expected-for-rust-vs-clippy">
-<h2>Metrics seem lower than expected for Rust (vs. clippy)<a class="headerlink" href="#metrics-seem-lower-than-expected-for-rust-vs-clippy" title="Link to this heading"></a></h2>
-<p>This is expected. See <a class="reference internal" href="alternatives.html"><span class="doc">Alternatives Comparison</span></a> — Cognitive Complexity Algorithm
-Differences. Knots implements the Campbell spec, which counts loops and
-applies a nesting penalty. Clippy’s <code class="docutils literal notranslate"><span class="pre">cognitive_complexity</span></code> lint does not
-count loops and has no nesting penalty, producing scores 3–4× lower.</p>
-<p>Clippy threshold 25 ≈ knots threshold 75–100 for equivalent strictness.</p>
+<section id="rust-cognitive-scores-differ-from-clippy">
+<h2>Rust Cognitive scores differ from Clippy<a class="headerlink" href="#rust-cognitive-scores-differ-from-clippy" title="Link to this heading"></a></h2>
+<p>The algorithms differ. Knots follows Campbell’s specification, including
+loops and nesting penalties; Clippy’s lint uses different counting rules.
+The old comparison sample had lower Clippy scores, but it does not establish
+a general threshold conversion. See <a class="reference internal" href="alternatives.html"><span class="doc">Alternatives Comparison</span></a> and calibrate gates
+on your project’s own distribution.</p>
 </section>
 <section id="report-file-not-generated">
 <h2>Report file not generated<a class="headerlink" href="#report-file-not-generated" title="Link to this heading"></a></h2>
@@ -150,8 +150,8 @@ count loops and has no nesting penalty, producing scores 3–4× lower.</p>
 <h2>SARIF has no results<a class="headerlink" href="#sarif-has-no-results" title="Link to this heading"></a></h2>
 <p>Knots omits SARIF results for functions with <code class="docutils literal notranslate"><span class="pre">max(McCabe,</span> <span class="pre">cognitive)</span> <span class="pre">≤</span> <span class="pre">10</span></code>
 (the 😊 “Good” band). If all functions score in that range, the SARIF file
-will contain a valid but empty results array. Use <code class="docutils literal notranslate"><span class="pre">--include</span></code> with
-<code class="docutils literal notranslate"><span class="pre">&quot;min_complexity&quot;:</span> <span class="pre">1</span></code> to force all functions through if needed.</p>
+will contain a valid but empty results array. Include filters and threshold flags do not override that band. Use
+<code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">json</span></code> or <code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">ndjson</span></code> to export all analyzed functions.</p>
 </section>
 <section id="metrics-dropped-after-upgrading-c-c-swift-c">
 <h2>Metrics dropped after upgrading (C/C++, Swift, C#)<a class="headerlink" href="#metrics-dropped-after-upgrading-c-c-swift-c" title="Link to this heading"></a></h2>

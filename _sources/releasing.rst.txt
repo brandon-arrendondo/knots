@@ -64,7 +64,7 @@ Release steps
 
        cd ../knots-pre-commit
        ./bump.sh X.Y.Z
-       git commit -am "knots X.Y.Z"
+       git commit -s -am "knots X.Y.Z"
        git tag vX.Y.Z
        git push origin main vX.Y.Z      # push the tag explicitly
 
@@ -89,10 +89,14 @@ Notes & recovery
 - The publish step uses ``skip-existing: true``, so re-runs are idempotent:
   already-published files are skipped rather than failing on "file already exists".
 - **Partial publish** (one package uploaded, the other failed — e.g. a
-  trusted-publisher misconfiguration): fix the cause, then re-push the tag
-  (``git push -f origin vX.Y.Z``). The rebuild re-runs publish; the package already
-  on PyPI is skipped and the missing one uploads.
+  trusted-publisher misconfiguration): fix the cause, then re-run the original
+  tag-triggered workflow from its Actions run
+  (Re-run failed jobs, or Re-run all jobs). That preserves the tag ref used
+  by the publish condition; already-published files are skipped. Pushing an
+  unchanged tag does not create a new push event.
 - PyPI versions are immutable — a published version cannot be re-uploaded or
   overwritten. To ship a fix, cut a new version.
 - ``wheels.yml`` can be run manually (Actions → "Wheels (PyPI)" → Run workflow) to
-  validate the build matrix without publishing (publish is gated to tags).
+  validate the build matrix without publishing when dispatched on a branch.
+  The publish condition checks for a ``refs/tags/v`` ref, not the event type;
+  do not select a version tag for a build-only manual run.

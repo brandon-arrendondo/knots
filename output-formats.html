@@ -143,28 +143,30 @@ serialized keys come out in alphabetical order):</p>
 invocations concatenates cleanly without array merging — ideal for corpus
 analysis via <code class="docutils literal notranslate"><span class="pre">find</span></code>/<code class="docutils literal notranslate"><span class="pre">xargs</span></code>.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Composable across files (C/C++ project)</span>
-<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.cpp&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">&gt;</span> <span class="n">all_metrics</span><span class="o">.</span><span class="n">ndjson</span>
+<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="nb">type</span> <span class="n">f</span> \<span class="p">(</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.cpp&quot;</span> \<span class="p">)</span> <span class="o">-</span><span class="n">print0</span> <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="mi">0</span> <span class="o">-</span><span class="n">r</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">&gt;</span> <span class="n">all_metrics</span><span class="o">.</span><span class="n">ndjson</span>
 
 <span class="c1"># Python project corpus</span>
-<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.py&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.aird &gt; 70)&#39;</span>
+<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="nb">type</span> <span class="n">f</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.py&quot;</span> <span class="o">-</span><span class="n">print0</span> <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="mi">0</span> <span class="o">-</span><span class="n">r</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.aird &gt; 70)&#39;</span>
 
 <span class="c1"># Rust project corpus</span>
-<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.rs&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.cognitive &gt; 20)&#39;</span>
+<span class="n">find</span> <span class="o">.</span> <span class="o">-</span><span class="nb">type</span> <span class="n">f</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.rs&quot;</span> <span class="o">-</span><span class="n">print0</span> <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="mi">0</span> <span class="o">-</span><span class="n">r</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.cognitive &gt; 20)&#39;</span>
 
 <span class="c1"># JavaScript project corpus</span>
-<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.js&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.mjs&quot;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.mccabe &gt; 10)&#39;</span>
+<span class="n">find</span> <span class="n">src</span><span class="o">/</span> <span class="o">-</span><span class="nb">type</span> <span class="n">f</span> \<span class="p">(</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.js&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.mjs&quot;</span> \<span class="p">)</span> <span class="o">-</span><span class="n">print0</span> <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="mi">0</span> <span class="o">-</span><span class="n">r</span> <span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">|</span> <span class="n">jq</span> <span class="s1">&#39;select(.mccabe &gt; 10)&#39;</span>
 
-<span class="c1"># Parallel per-file analysis (all supported languages)</span>
-<span class="n">find</span> <span class="o">.</span> \<span class="p">(</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.c&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.cpp&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.rs&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.py&quot;</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span><span class="n">name</span> <span class="s2">&quot;*.js&quot;</span> \<span class="p">)</span> \
-    <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="n">P4</span> <span class="o">-</span><span class="n">I</span><span class="p">{}</span> <span class="n">sh</span> <span class="o">-</span><span class="n">c</span> <span class="s1">&#39;knots --format ndjson </span><span class="si">{}</span><span class="s1"> &gt;&gt; metrics.ndjson&#39;</span>
+<span class="c1"># Parallel analysis with one writer (all supported languages)</span>
+<span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">-</span><span class="n">j</span> <span class="mi">4</span> <span class="o">--</span><span class="nb">format</span> <span class="n">ndjson</span> <span class="o">.</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">ndjson</span>
 </pre></div>
 </div>
+<p>The <code class="docutils literal notranslate"><span class="pre">xargs</span> <span class="pre">-r</span></code> examples use GNU xargs to avoid running on an empty file list.
+Null-delimited paths preserve filenames containing spaces. Avoid concurrent
+processes appending to one NDJSON file: records can interleave.</p>
 </section>
 <section id="csv">
 <h2>CSV<a class="headerlink" href="#csv" title="Link to this heading"></a></h2>
-<p>Header row followed by one row per function. Column order matches the JSON
-field order.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">--</span><span class="nb">format</span> <span class="n">csv</span> <span class="n">src</span><span class="o">/</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">csv</span>
+<p>Header row followed by one row per function. Column order follows the field list above (<code class="docutils literal notranslate"><span class="pre">file</span></code>, <code class="docutils literal notranslate"><span class="pre">function</span></code>,
+<code class="docutils literal notranslate"><span class="pre">start_line</span></code>, …), not the alphabetical JSON serialization order.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="o">--</span><span class="nb">format</span> <span class="n">csv</span> <span class="n">src</span><span class="o">/</span> <span class="o">&gt;</span> <span class="n">metrics</span><span class="o">.</span><span class="n">csv</span>
 </pre></div>
 </div>
 <p>Import directly into spreadsheets, pandas, or any SQL tool.</p>
@@ -216,8 +218,10 @@ exceeds 10. Severity follows the emoji thresholds:</p>
 </tr>
 </tbody>
 </table>
-<p>Each result carries a <code class="docutils literal notranslate"><span class="pre">properties</span></code> bag with all 15 metrics so downstream
-tools can filter on individual values.</p>
+<p>Each result carries seven properties: <code class="docutils literal notranslate"><span class="pre">mccabe</span></code>, <code class="docutils literal notranslate"><span class="pre">cognitive</span></code>, <code class="docutils literal notranslate"><span class="pre">nesting</span></code>,
+<code class="docutils literal notranslate"><span class="pre">sloc</span></code>, <code class="docutils literal notranslate"><span class="pre">abcMagnitude</span></code>, <code class="docutils literal notranslate"><span class="pre">returnCount</span></code> and <code class="docutils literal notranslate"><span class="pre">testScore</span></code>. The fixed
+complexity band is independent of threshold flags; include filters cannot
+force functions at or below 10 into SARIF. Use JSON/NDJSON for all records.</p>
 <p><strong>GitHub Code Scanning</strong>: upload with <code class="docutils literal notranslate"><span class="pre">github/codeql-action/upload-sarif&#64;v3</span></code>
 to surface findings as PR annotations.</p>
 <p><strong>VS Code</strong>: install the <em>SARIF Viewer</em> extension and open <code class="docutils literal notranslate"><span class="pre">knots.sarif</span></code>.</p>

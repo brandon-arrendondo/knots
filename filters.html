@@ -62,7 +62,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#example-1-analyze-only-high-complexity-functions">Example 1: Analyze only high-complexity functions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#example-2-exclude-test-files-and-low-complexity-functions">Example 2: Exclude test files and low-complexity functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-2-exclude-test-files-and-test-functions">Example 2: Exclude test files and test functions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#example-3-focus-on-specific-modules-with-concerning-complexity">Example 3: Focus on specific modules with concerning complexity</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#example-4-exclude-vendor-code-and-simple-functions">Example 4: Exclude vendor code and simple functions</a></li>
 </ul>
@@ -144,23 +144,25 @@ knots<span class="w"> </span>-r<span class="w"> </span>/path/to/code<span class=
 <h3><code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> (array of strings)<a class="headerlink" href="#file-patterns-array-of-strings" title="Link to this heading"></a></h3>
 <p>Glob-style patterns for matching file paths. Supports:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">*</span></code> — matches any characters except <code class="docutils literal notranslate"><span class="pre">/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">*</span></code> — matches zero or more characters, including <code class="docutils literal notranslate"><span class="pre">/</span></code> with the current matcher</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">**</span></code> — matches any characters including <code class="docutils literal notranslate"><span class="pre">/</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">!pattern</span></code> — negation (exclude files matching this pattern)</p></li>
 </ul>
 <p><strong>Examples:</strong></p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;src/**/*.c&quot;</span></code> — all <code class="docutils literal notranslate"><span class="pre">.c</span></code> files in <code class="docutils literal notranslate"><span class="pre">src/</span></code> and subdirectories</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lib/*.c&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">.c</span></code> files directly in <code class="docutils literal notranslate"><span class="pre">lib/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lib/*.c&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">.c</span></code> files under <code class="docutils literal notranslate"><span class="pre">lib/</span></code>, including nested directories</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;!**/test_*.c&quot;</span></code> — exclude files starting with <code class="docutils literal notranslate"><span class="pre">test_</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;!**/vendor/**&quot;</span></code> — exclude everything in vendor directories</p></li>
 </ul>
 <p><strong>Behavior:</strong></p>
 <ul class="simple">
-<li><p><strong>Include filter:</strong> file must match at least one positive pattern AND not
-match any negation patterns</p></li>
-<li><p><strong>Exclude filter:</strong> file matching any pattern (positive or negative) is
-excluded</p></li>
+<li><p>Both filters use the same predicate: match at least one positive pattern
+(if any), and match no negated pattern. A negative-only list matches every
+path except those negated.</p></li>
+<li><p>An include filter keeps matching files; an exclude filter removes matching
+files. Use positive patterns to exclude directories. A negative-only
+exclude list would remove their complement instead.</p></li>
 </ul>
 </section>
 <section id="function-patterns-array-of-strings">
@@ -212,19 +214,18 @@ are filtered out.</p>
 </pre></div>
 </div>
 </section>
-<section id="example-2-exclude-test-files-and-low-complexity-functions">
-<h3>Example 2: Exclude test files and low-complexity functions<a class="headerlink" href="#example-2-exclude-test-files-and-low-complexity-functions" title="Link to this heading"></a></h3>
+<section id="example-2-exclude-test-files-and-test-functions">
+<h3>Example 2: Exclude test files and test functions<a class="headerlink" href="#example-2-exclude-test-files-and-test-functions" title="Link to this heading"></a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">filter-no-tests.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;!**/test_*.c&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;!**/*_test.c&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;!**/tests/**&quot;</span>
+<span class="w">    </span><span class="s2">&quot;**/test_*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;**/*_test.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;**/tests/**&quot;</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="w">  </span><span class="nt">&quot;function_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="s2">&quot;^test_.*&quot;</span>
-<span class="w">  </span><span class="p">],</span>
-<span class="w">  </span><span class="nt">&quot;max_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span>
+<span class="w">  </span><span class="p">]</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -289,9 +290,11 @@ knots<span class="w"> </span>-r<span class="w"> </span>.<span class="w"> </span>
 <h3>Exclude filter (blacklist)<a class="headerlink" href="#exclude-filter-blacklist" title="Link to this heading"></a></h3>
 <p>When <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> is specified:</p>
 <ol class="arabic simple">
-<li><p>If a file matches <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code>, it’s excluded</p></li>
-<li><p>If a function matches <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> AND complexity bounds, it’s
-excluded</p></li>
+<li><p>If a file matches <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code>, it is excluded
+during discovery, independently of function criteria</p></li>
+<li><p>For remaining files, functions must match all specified function
+criteria to be excluded: name patterns AND complexity bounds when both
+are supplied; either criterion alone is sufficient when the other is absent</p></li>
 </ol>
 </section>
 <section id="combined-filters">
@@ -309,7 +312,12 @@ test files” (exclude).</p>
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>All filter criteria are optional — specify only the ones you need.</p></li>
-<li><p>Empty arrays mean “match everything” for that criterion.</p></li>
+<li><p>Empty arrays mean “match everything” for that criterion. In the current
+CLI, an exclude file with missing or empty <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> therefore
+excludes every file during discovery, even if it specifies function
+patterns or bounds. For function-only exclusions, use <code class="docutils literal notranslate"><span class="pre">knots.toml</span></code>
+(see <a class="reference internal" href="config.html"><span class="doc">knots.toml &amp; Inline Suppression</span></a>). This is a discovery limitation, not an AND relation
+between file and function criteria.</p></li>
 <li><p>File patterns are matched against the full file path.</p></li>
 <li><p>Function patterns use Rust’s regex syntax.</p></li>
 <li><p>Invalid regex patterns are silently ignored (the function won’t match).</p></li>

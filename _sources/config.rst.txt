@@ -6,11 +6,11 @@ In addition to the JSON :doc:`filter rules <filters>`, knots reads an optional
 ``knots.toml`` file for thresholds and exclusions, and recognizes inline
 ``tools:off`` / ``tools:suppress`` comments for per-function suppression. Both
 surfaces come from the shared ``lang-parsing-substrate`` crate, so the same
-syntax works identically across knots, moldy, and tools_sqc.
+comment syntax is shared across knots, moldy, and aurora-lint; each
+consumer decides which configuration features it implements.
 
-CLI flags (``--mccabe-threshold``, etc.) and the JSON ``--include``/``--exclude``
-sidecar always take precedence over ``knots.toml`` — this is an additive,
-optional layer, not a replacement.
+CLI threshold flags override TOML thresholds. JSON include/exclude filters
+and TOML exclusions are applied together; JSON does not replace TOML exclusions.
 
 ``knots.toml`` discovery
 ------------------------
@@ -40,8 +40,10 @@ off.
 
 Available keys: ``mccabe``, ``cognitive``, ``nesting``, ``sloc``, ``abc``,
 ``returns``, ``aird``, ``aicp``, ``external_calls``, ``unreachable_blocks``
-— same names as the ``--<key>-threshold`` CLI flags. ``unreachable_blocks``
-is only ever nonzero for C/C++/Rust files.
+— these are configuration keys, not literal CLI spellings. For example,
+``returns`` maps to ``--return-threshold`` and ``external_calls`` to
+``--external-calls-threshold``. ``unreachable_blocks`` is only ever nonzero
+for C/C++/Rust files.
 
 File/function exclusion
 ------------------------
@@ -72,7 +74,7 @@ immediately following) the comment:
 
 .. code-block:: rust
 
-    // tools:suppress knots:cognitive JUSTIFICATION:"legacy, JIRA-123"
+    // tools:suppress knots:cognitive JUSTIFICATION:"legacy dispatch table; reviewed exception"
     fn big_function() { /* ... */ }
 
 **Block region** — suppresses every knots metric for everything between the
@@ -98,9 +100,9 @@ Notes
 - ``knots.toml`` and inline suppression are both entirely optional — omit
   either (or both) and knots behaves as it always has.
 - Suppression is resolved once per file during analysis and attached to each
-  ``FunctionMetrics`` as ``suppressed`` — a suppressed metric never appears
-  in threshold-violation output, baseline writes, or JSON/SARIF output
-  filtering decisions.
+  ``FunctionMetrics`` as ``suppressed`` — suppressed metrics are not checked
+  against thresholds. Their measured values remain in structured output
+  and baseline snapshots; suppression does not remove score records.
 - See ``lang-parsing-substrate``'s ``docs/unified-config-spec.md`` for the
   full cross-tool spec (``suppress.toml``, per-tool config files, etc.) —
   this page documents only what knots currently implements.

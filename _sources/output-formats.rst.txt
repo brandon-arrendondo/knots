@@ -60,30 +60,33 @@ analysis via ``find``/``xargs``.
 ::
 
     # Composable across files (C/C++ project)
-    find . -name "*.c" -o -name "*.cpp" | xargs knots --format ndjson > all_metrics.ndjson
+    find . -type f \( -name "*.c" -o -name "*.cpp" \) -print0 | xargs -0 -r knots --format ndjson > all_metrics.ndjson
 
     # Python project corpus
-    find src/ -name "*.py" | xargs knots --format ndjson | jq 'select(.aird > 70)'
+    find src/ -type f -name "*.py" -print0 | xargs -0 -r knots --format ndjson | jq 'select(.aird > 70)'
 
     # Rust project corpus
-    find . -name "*.rs" | xargs knots --format ndjson | jq 'select(.cognitive > 20)'
+    find . -type f -name "*.rs" -print0 | xargs -0 -r knots --format ndjson | jq 'select(.cognitive > 20)'
 
     # JavaScript project corpus
-    find src/ -name "*.js" -o -name "*.mjs" | xargs knots --format ndjson | jq 'select(.mccabe > 10)'
+    find src/ -type f \( -name "*.js" -o -name "*.mjs" \) -print0 | xargs -0 -r knots --format ndjson | jq 'select(.mccabe > 10)'
 
-    # Parallel per-file analysis (all supported languages)
-    find . \( -name "*.c" -o -name "*.cpp" -o -name "*.rs" -o -name "*.py" -o -name "*.js" \) \
-        | xargs -P4 -I{} sh -c 'knots --format ndjson {} >> metrics.ndjson'
+    # Parallel analysis with one writer (all supported languages)
+    knots -r -j 4 --format ndjson . > metrics.ndjson
+
+The ``xargs -r`` examples use GNU xargs to avoid running on an empty file list.
+Null-delimited paths preserve filenames containing spaces. Avoid concurrent
+processes appending to one NDJSON file: records can interleave.
 
 CSV
 ---
 
-Header row followed by one row per function. Column order matches the JSON
-field order.
+Header row followed by one row per function. Column order follows the field list above (``file``, ``function``,
+``start_line``, ...), not the alphabetical JSON serialization order.
 
 ::
 
-    knots --format csv src/ > metrics.csv
+    knots -r --format csv src/ > metrics.csv
 
 Import directly into spreadsheets, pandas, or any SQL tool.
 
@@ -123,8 +126,10 @@ Max complexity   SARIF level  Emoji
 50+              ``error``    😢
 ===============  ===========  =====
 
-Each result carries a ``properties`` bag with all 15 metrics so downstream
-tools can filter on individual values.
+Each result carries seven properties: ``mccabe``, ``cognitive``, ``nesting``,
+``sloc``, ``abcMagnitude``, ``returnCount`` and ``testScore``. The fixed
+complexity band is independent of threshold flags; include filters cannot
+force functions at or below 10 into SARIF. Use JSON/NDJSON for all records.
 
 **GitHub Code Scanning**: upload with ``github/codeql-action/upload-sarif@v3``
 to surface findings as PR annotations.

@@ -120,9 +120,21 @@ Mutually exclusive with <code class="docutils literal notranslate"><span class="
 <dl>
 <dt><code class="docutils literal notranslate"><span class="pre">-r</span></code>, <code class="docutils literal notranslate"><span class="pre">--recursive</span></code></dt><dd><p>Recursively process all supported source files in directories. See
 <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a> for the full list of recognized extensions. Header
-files (<code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.hpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.hxx</span></code>) are skipped unless explicitly included
-via a filter. A per-function report file is written only when <code class="docutils literal notranslate"><span class="pre">--report</span></code>
-is given.</p>
+files (including <code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.hpp</span></code>, <code class="docutils literal notranslate"><span class="pre">.hxx</span></code> and <code class="docutils literal notranslate"><span class="pre">.ads</span></code>) are included
+by default; use filters to exclude them. A per-function report file is
+written only when <code class="docutils literal notranslate"><span class="pre">--report</span></code> is given.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--supported-languages</span></code></dt><dd><p>List the compiled language registry and extensions, then exit. No files
+are required.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-l</span> <span class="pre">&lt;LANG&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">--language</span> <span class="pre">&lt;LANG&gt;</span></code></dt><dd><p>Restrict analysis to this language or extension alias, case-insensitively
+(e.g. <code class="docutils literal notranslate"><span class="pre">rust</span></code>, <code class="docutils literal notranslate"><span class="pre">c++</span></code>, <code class="docutils literal notranslate"><span class="pre">f90</span></code>). Repeat for multiple languages.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-q</span></code>, <code class="docutils literal notranslate"><span class="pre">--quiet</span></code></dt><dd><p>Suppress normal output, retaining threshold-violation lines. Exit status
+still reflects violations.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--count-anonymous-closures</span></code></dt><dd><p>Emit anonymous functions as independent entries with synthesized labels
+such as <code class="docutils literal notranslate"><span class="pre">&lt;anonymous&gt;&#64;line:col</span></code>. Default: named functions only.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-v</span></code>, <code class="docutils literal notranslate"><span class="pre">--verbose</span></code></dt><dd><p>Show detailed per-function analysis including all test scoring sub-axes.</p>
 </dd>
@@ -141,8 +153,9 @@ Python, or JavaScript toolchains. Mutually exclusive with positional
 <dt><code class="docutils literal notranslate"><span class="pre">--exclude-path</span> <span class="pre">&lt;PATTERN&gt;</span></code></dt><dd><p>Exclude files whose path matches this regex. Repeatable; uses the same
 syntax as a pre-commit <code class="docutils literal notranslate"><span class="pre">exclude:</span></code> entry.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Write a detailed per-function report to <code class="docutils literal notranslate"><span class="pre">&lt;FILE&gt;</span></code>. Opt-in — omit to
-suppress the file.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Write a detailed report in multi-file text mode (including recursive
+scans and compilation databases). It is not written in single-file,
+matrix, or structured-output modes. Opt-in — omit to suppress the file.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">&lt;FORMAT&gt;</span></code></dt><dd><p>Output format. One of:</p>
 <table class="docutils align-default">
@@ -201,13 +214,15 @@ exceeds the specified value.</p>
 <dt><code class="docutils literal notranslate"><span class="pre">--return-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Return statement count.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--aird-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AIRD (AI Reasoning Difficulty) score. Suggested starting value: <code class="docutils literal notranslate"><span class="pre">85</span></code>,
-from a nine-function pilot, not a validation (see
+from C-corpus calibration, not validated by the nine-function pilot (see
 <a class="reference internal" href="metrics-reference.html"><span class="doc">Metrics Reference</span></a>). Run
 <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--explain</span> <span class="pre">aird</span></code> for what drives the score and how to lower it.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--aicp-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>AICP (AI Context Pressure) score. Run <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--explain</span> <span class="pre">aicp</span></code> for details.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--external-calls-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>External call count.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--unreachable-blocks-threshold</span> <span class="pre">&lt;N&gt;</span></code></dt><dd><p>Unreachable basic-block count. Currently nonzero only for C/C++/Rust.</p>
 </dd>
 </dl>
 </section>
@@ -269,7 +284,8 @@ knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </sp
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Scoping affects <strong>gating only</strong> — text, JSON, SARIF, NDJSON, and CSV output
-still report every analyzed function. Only the threshold check is narrowed.</p>
+retain their usual selection of analyzed functions (including SARIF
+complexity-band filtering). Only the threshold check is narrowed.</p>
 </div>
 </section>
 <section id="duplicate-detection">
@@ -353,7 +369,9 @@ mid-commit and don’t want to leave the terminal:</p>
 <section id="exit-status">
 <h2>Exit Status<a class="headerlink" href="#exit-status" title="Link to this heading"></a></h2>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">0</span></code></dt><dd><p>Successful analysis, no threshold violations.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">0</span></code></dt><dd><p>No threshold violations among analyzed functions. Multi-file scans
+currently warn and skip unreadable or unparseable files; status 0 does
+not guarantee that every discovered input was analyzed.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>Error (file not found, parse error, unreadable baseline, unknown git ref or
 not a git repository under <code class="docutils literal notranslate"><span class="pre">--since</span></code> / <code class="docutils literal notranslate"><span class="pre">--changed</span></code>), or one or more

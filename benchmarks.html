@@ -75,7 +75,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#known-implementation-notes">Known Implementation Notes</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#c-macro-pattern-vmcase-sloc-deflation">C macro pattern: vmcase SLOC deflation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#fortran-explicit-only-extension-rejection">Fortran explicit-only extension rejection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#historical-explicit-only-extension-handling">Historical explicit-only extension handling</a></li>
 </ul>
 </li>
 </ul>
@@ -111,10 +111,18 @@
              
   <section id="benchmark-reference">
 <h1>Benchmark Reference<a class="headerlink" href="#benchmark-reference" title="Link to this heading"></a></h1>
-<p>Cross-language calibration results for knots against lizard, radon,
-rust-code-analysis (rca), tokei, and cloc.  These results informed the
-AIRD/AICP formula calibration and established per-language validation
-status.</p>
+<p>This page preserves the June 2026 comparison and performance snapshot,
+including knots v1.13.0 measurements. It is historical, not a claim of
+conformance for the current release. Counting rules and parser support have
+changed since these runs. A reference tool is comparison evidence, not the
+authority for a metric’s definition.</p>
+<p>For pinned inputs, tool commits and reproducible current checks, use the
+<a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/validation/README.md">validation record</a>,
+<a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/validation/probes/TOOLS.md">definition probes</a>
+and <a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/0003-gate-defaults-have-a-recorded-basis.md">ADR-0003</a>.
+Current support is listed by <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--supported-languages</span></code>. In particular,
+the current substrate supports free-form Fortran, not the fixed-form inputs
+in the archived tables below.</p>
 <section id="comparison-tools">
 <h2>Comparison Tools<a class="headerlink" href="#comparison-tools" title="Link to this heading"></a></h2>
 <table class="docutils align-default">
@@ -127,47 +135,38 @@ status.</p>
 <thead>
 <tr class="row-odd"><th class="head"><p>Tool</p></th>
 <th class="head"><p>Version</p></th>
-<th class="head"><p>Location</p></th>
+<th class="head"><p>Installation used in the archived run</p></th>
 <th class="head"><p>Metrics</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>lizard</p></td>
 <td><p>1.23.0</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">~/data-enterprise/venv/bin/lizard</span></code></p></td>
+<td><p>Python package</p></td>
 <td><p>McCabe, NLOC, token count</p></td>
 </tr>
 <tr class="row-odd"><td><p>radon</p></td>
 <td><p>6.0.1</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">~/data-enterprise/venv/bin/radon</span></code></p></td>
+<td><p>Python package</p></td>
 <td><p>McCabe, Halstead (Python only)</p></td>
 </tr>
 <tr class="row-even"><td><p>rust-code-analysis-cli (rca)</p></td>
 <td><p>0.0.25 (git HEAD)</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">~/.cargo/bin/rust-code-analysis-cli</span></code></p></td>
+<td><p>Cargo binary</p></td>
 <td><p>Cyclomatic, Cognitive, Halstead, SLOC, ABC</p></td>
 </tr>
 <tr class="row-odd"><td><p>tokei</p></td>
 <td><p>(cargo install)</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">~/.cargo/bin/tokei</span></code></p></td>
+<td><p>Cargo binary</p></td>
 <td><p>SLOC by language</p></td>
 </tr>
 <tr class="row-even"><td><p>cloc</p></td>
 <td><p>(apt)</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">/usr/bin/cloc</span></code></p></td>
+<td><p>Distribution package</p></td>
 <td><p>SLOC by language</p></td>
 </tr>
 </tbody>
 </table>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>rca 0.0.25 from crates.io fails to compile on rustc 1.95.  Install
-from git HEAD:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cargo</span> <span class="n">install</span> <span class="o">--</span><span class="n">git</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">mozilla</span><span class="o">/</span><span class="n">rust</span><span class="o">-</span><span class="n">code</span><span class="o">-</span><span class="n">analysis</span> \
-  <span class="n">rust</span><span class="o">-</span><span class="n">code</span><span class="o">-</span><span class="n">analysis</span><span class="o">-</span><span class="n">cli</span>
-</pre></div>
-</div>
-</div>
 </section>
 <section id="benchmark-corpora">
 <h2>Benchmark Corpora<a class="headerlink" href="#benchmark-corpora" title="Link to this heading"></a></h2>
@@ -211,22 +210,22 @@ from git HEAD:</p>
 <tr class="row-even"><td><p>todo-sqlite-cli</p></td>
 <td><p>Rust</p></td>
 <td><p>36</p></td>
-<td><p>~/toolchain/todo-sqlite-cli</p></td>
+<td><p>github.com/brandon-arrendondo/todo-sqlite-cli</p></td>
 </tr>
 <tr class="row-odd"><td><p>curl</p></td>
 <td><p>C</p></td>
 <td><p>744</p></td>
-<td><p>~/toolchain/curl</p></td>
+<td><p>github.com/curl/curl</p></td>
 </tr>
 <tr class="row-even"><td><p>mosquitto</p></td>
 <td><p>C++</p></td>
 <td><p>974</p></td>
-<td><p>~/toolchain/mosquitto</p></td>
+<td><p>github.com/eclipse-mosquitto/mosquitto</p></td>
 </tr>
 <tr class="row-odd"><td><p>gnatcoll-core</p></td>
 <td><p>Ada</p></td>
 <td><p>452</p></td>
-<td><p>~/toolchain/gnatcoll-core</p></td>
+<td><p>github.com/AdaCore/gnatcoll-core</p></td>
 </tr>
 <tr class="row-even"><td><p>lua/testes</p></td>
 <td><p>Lua</p></td>
@@ -421,12 +420,15 @@ is refreshed or a new knots version ships.</p>
 </section>
 <section id="fortran-dialect-coverage">
 <h3>Fortran Dialect Coverage<a class="headerlink" href="#fortran-dialect-coverage" title="Link to this heading"></a></h3>
-<p>Three corpora cover the full range of Fortran dialects.  The lapack/SRC row
-supersedes the single-row entry in the cross-language table above (same corpus,
-same run).  All <code class="docutils literal notranslate"><span class="pre">.f</span></code> files are passed explicitly (they are explicit-only in
-knots; <code class="docutils literal notranslate"><span class="pre">--recursive</span></code> does not pick them up).</p>
-<p>Corpora on disk: <code class="docutils literal notranslate"><span class="pre">~/toolchain/lapack</span></code>, <code class="docutils literal notranslate"><span class="pre">~/toolchain/fortran-stdlib</span></code>,
-<code class="docutils literal notranslate"><span class="pre">~/toolchain/arpack-ng</span></code>.</p>
+<p>The archived runs covered three Fortran corpora. The lapack/SRC row
+superseded the single-row entry in the cross-language table above (same corpus,
+same run). All <code class="docutils literal notranslate"><span class="pre">.f</span></code> files were passed explicitly: they were explicit-only
+in the version measured, so recursive discovery did not include them. The
+current substrate does not support fixed-form Fortran, and the current knots
+reports nothing for a <code class="docutils literal notranslate"><span class="pre">.f</span></code> file passed explicitly: it prints no message and
+exits 0, even with a threshold set. These tables cannot be reproduced with the
+current release; ADR-0005 (proposed) treats such a file as lost input.</p>
+<p>The corpora were LAPACK, fortran-stdlib and arpack-ng.</p>
 <table class="docutils align-default">
 <colgroup>
 <col style="width: 20.0%" />
@@ -456,8 +458,8 @@ knots; <code class="docutils literal notranslate"><span class="pre">--recursive<
 <td><p>+2%</p></td>
 <td><p>Good agreement.  knots avg McCabe 33.1 vs lizard 22.9 (+45%): knots
 counts <code class="docutils literal notranslate"><span class="pre">.AND.</span></code>/<code class="docutils literal notranslate"><span class="pre">.OR.</span></code> operators per the original McCabe definition;
-lizard does not.  Use Cognitive complexity as the primary gate for
-fixed-form Fortran.</p></td>
+lizard does not.  This fixed-form comparison does not apply to
+current parser support.</p></td>
 </tr>
 <tr class="row-odd"><td><p>fortran-stdlib</p></td>
 <td><p>Free-form <code class="docutils literal notranslate"><span class="pre">.f90</span></code>/<code class="docutils literal notranslate"><span class="pre">.F90</span></code></p></td>
@@ -537,9 +539,8 @@ non-standard and should not be used as the comparison baseline.</p>
 <section id="performance">
 <h2>Performance<a class="headerlink" href="#performance" title="Link to this heading"></a></h2>
 <p>Measured on the project benchmark machine (24-core, 2026-06-28, knots v1.13.0,
-hyperfine 1.15.0, lizard 1.23.0).  <strong>Absolute times are machine-specific; the
-speedup ratios are the portable signal</strong> and should be used for comparisons
-across versions.</p>
+hyperfine 1.15.0, lizard 1.23.0).  Both absolute times and speedup ratios depend on the machine, corpus
+and build. They do not guarantee performance on another system or version.</p>
 <section id="jobs-scaling">
 <h3><code class="docutils literal notranslate"><span class="pre">--jobs</span></code> scaling<a class="headerlink" href="#jobs-scaling" title="Link to this heading"></a></h3>
 <p>knots processes files in parallel via rayon (<code class="docutils literal notranslate"><span class="pre">--jobs</span></code>/<code class="docutils literal notranslate"><span class="pre">-j</span></code>).  Both corpora
@@ -660,7 +661,7 @@ corpus is knots/lizard only.</p>
 </tr>
 </tbody>
 </table>
-<p>At full parallelism knots leads across the board: 1.3–1.4× faster than lizard
+<p>In this archived run, at full parallelism knots led across the board: 1.3–1.4× faster than lizard
 and rca on C, 1.4× faster than rca and 1.9× faster than lizard on Java.  rca
 beats lizard on Java (Rust parser vs Python) but trails on C due to its
 per-file output overhead.</p>
@@ -685,14 +686,12 @@ nodes whose declarator is a <code class="docutils literal notranslate"><span cla
 pattern) are filtered from the nested-SLOC subtraction.  Only
 <code class="docutils literal notranslate"><span class="pre">identifier</span></code> declarators (genuine nested functions) are subtracted.</p>
 </section>
-<section id="fortran-explicit-only-extension-rejection">
-<h3>Fortran explicit-only extension rejection<a class="headerlink" href="#fortran-explicit-only-extension-rejection" title="Link to this heading"></a></h3>
-<p>Before v1.13, explicit-only extensions (<code class="docutils literal notranslate"><span class="pre">.f</span></code>, <code class="docutils literal notranslate"><span class="pre">.h</span></code>, <code class="docutils literal notranslate"><span class="pre">.ads</span></code>) were
-silently rejected even when passed directly on the command line.  Fixed
-by introducing <code class="docutils literal notranslate"><span class="pre">is_parseable_extension</span></code> in <code class="docutils literal notranslate"><span class="pre">src/lib.rs</span></code> — the
-command-line path now uses this (includes both recursive and
-explicit-only extensions) rather than <code class="docutils literal notranslate"><span class="pre">is_source_extension</span></code> (recursive
-discovery only).</p>
+<section id="historical-explicit-only-extension-handling">
+<h3>Historical explicit-only extension handling<a class="headerlink" href="#historical-explicit-only-extension-handling" title="Link to this heading"></a></h3>
+<p>The pre-v1.13 CLI rejected some explicit-only extensions. The current CLI
+uses the substrate’s <code class="docutils literal notranslate"><span class="pre">is_parseable_extension</span></code> for explicit paths and
+recursive discovery, including <code class="docutils literal notranslate"><span class="pre">.h</span></code> and <code class="docutils literal notranslate"><span class="pre">.ads</span></code>. That fix does not imply
+current support for fixed-form Fortran; see <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a>.</p>
 </section>
 </section>
 </section>

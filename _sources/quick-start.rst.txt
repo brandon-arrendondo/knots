@@ -8,13 +8,15 @@ Single File
 
     knots src/main.c
 
-Output shows per-function metrics::
+Illustrative per-function output::
 
     😊 src/main.c:12:init_system (McCabe: 3, Cognitive: 2, Nesting: 2, SLOC: 15, ABC: 4.12, Returns: 1, TestScore: 5, AIRD: 4, AICP: 8, ExtCalls: 2)
     😠 src/main.c:30:process_data (McCabe: 28, Cognitive: 45, Nesting: 8, SLOC: 120, ABC: 35.71, Returns: 7, TestScore: 18, AIRD: 87, AICP: 72, ExtCalls: 14)
 
 Each line is prefixed with ``file:line:`` so an editor can jump straight to the
 function from any line of output (not just threshold violations).
+
+Illustrative summary::
 
     Summary:
       Total Functions: 2
@@ -94,7 +96,8 @@ contention.
 
 Header files (``.h``, ``.ads``, etc.) are included by default in recursive
 mode — pushing logic into a header is not a way to hide it from the scan.
-To scan *only* headers, or exclude them, use an include/exclude filter:
+For example, pass this JSON as ``--include c-only.json`` to keep only C
+source files and omit headers:
 
 .. code-block:: json
 
@@ -195,11 +198,12 @@ Find high-complexity, hard-to-test functions::
     echo '{"min_complexity": 15}' > complex.json
     knots -r -m ~/myproject/ --include complex.json
 
-Analyze only files modified in the last commit::
+Gate functions changed since the previous commit::
 
-    git diff --name-only HEAD~1 | grep -E '\.(c|cpp|cc|cxx|rs|py|js|mjs|cjs)$' | while read f; do
-        knots "$f"
-    done
+    knots -r src/ --mccabe-threshold 20 --since HEAD~1
+
+This compares the working tree with ``HEAD~1``. Scoping narrows threshold
+checks; output still includes all analyzed functions.
 
 CMake/build system workflow::
 
