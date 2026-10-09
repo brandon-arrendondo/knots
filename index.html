@@ -242,32 +242,16 @@ assistance.</p>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-1-language-registry-src-lib-rs">Layer 1 — Language Registry (<code class="docutils literal notranslate"><span class="pre">src/lib.rs</span></code>)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-2-metric-calculation-src-complexity-rs">Layer 2 — Metric Calculation (<code class="docutils literal notranslate"><span class="pre">src/complexity.rs</span></code>)</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#sloc-dispatch">SLOC dispatch</a></li>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#testscoring-note">TestScoring note</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-3a-cli-pipeline-src-main-rs">Layer 3a — CLI + Pipeline (<code class="docutils literal notranslate"><span class="pre">src/main.rs</span></code>)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#layer-3b-output-formatting-src-output-rs">Layer 3b — Output Formatting (<code class="docutils literal notranslate"><span class="pre">src/output.rs</span></code>)</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#pipeline-flow">Pipeline flow</a></li>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#output-mode-dispatch">Output mode dispatch</a></li>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#preprocessor-dead-code-awareness">Preprocessor dead-code awareness</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#tool-suite-vision">Tool Suite Vision</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#the-shared-substrate-parse-db">The Shared Substrate (<code class="docutils literal notranslate"><span class="pre">parse-db</span></code>)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#relationship-to-lsp">Relationship to LSP</a></li>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#coupling-and-the-ai-metrics">Coupling and the AI Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#module-ownership">Module ownership</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#language-registry-and-discovery">Language registry and discovery</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#analysis-pipeline">Analysis pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#metric-attribution">Metric attribution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#preprocessor-dead-code-awareness">Preprocessor dead-code awareness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#coupling-and-ai-scores">Coupling and AI scores</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="architecture.html#duplicate-code-detection-find-duplicates">Duplicate code detection (<code class="docutils literal notranslate"><span class="pre">--find-duplicates</span></code>)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="architecture.html#substrate-ecosystem-research-june-2026">Substrate — Ecosystem Research (June 2026)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#known-issues-and-coupling-hotspots">Known Issues and Coupling Hotspots</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#resolved-issues">Resolved Issues</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#what-works-well">What Works Well</a></li>
-<li class="toctree-l2"><a class="reference internal" href="architecture.html#adding-a-language-quick-reference">Adding a Language — Quick Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#adding-a-language">Adding a language</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a><ul>
@@ -291,6 +275,14 @@ assistance.</p>
 </li>
 </ul>
 </div>
+<section id="contributor-references">
+<h2>Contributor references<a class="headerlink" href="#contributor-references" title="Link to this heading"></a></h2>
+<p>The <a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/docs/adr/README.md">Architecture Decision Records</a>
+explain metric definitions and gate decisions. They remain Markdown documents
+in the repository. See <a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/AGENTS.md">AGENTS.md</a> for contributor
+instructions and <a class="reference external" href="https://github.com/brandon-arrendondo/knots/blob/main/CLAUDE.md">CLAUDE.md</a> for the technical
+guide.</p>
+</section>
 </section>
 
 
