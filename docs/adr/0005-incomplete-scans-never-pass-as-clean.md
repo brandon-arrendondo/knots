@@ -7,15 +7,20 @@
 Knots currently warns and skips unreadable or unparseable files in multi-file
 collection. The run may still exit 0. A zero threshold result then describes
 only the inputs that happened to finish, not the entire selected corpus.
+`--write-baseline` discards the skip count, writes a snapshot of the partial
+set and returns success. Structured outputs record no lost-input completion
+signal, and SARIF has no `invocations` field. The import-graph pass silently
+drops failed files, so Ce can be calculated from a partial graph.
 
 Parsing, traversal and cross-file aggregation can also fail or reach work
 limits. Losing one unit's result should not discard unrelated completed work,
 but a partial score is not a measured zero. Neither passing a gate nor writing
 a baseline should conceal that gap.
 
-This ADR defines the target. It does not claim that knots already contains
-panics, enforces budgets or exports incomplete-scan metadata. The current CLI
-and exit statuses remain documented in the CLI reference until code lands.
+This ADR defines the target. It does not claim that knots already provides
+panic containment, enforces budgets or exports incomplete-scan metadata. The
+current CLI and exit statuses remain documented in the CLI reference until
+code lands.
 
 ## Decision
 
@@ -35,12 +40,13 @@ and exit statuses remain documented in the CLI reference until code lands.
    and defaults require evidence from knots inputs, not copied constants.
 4. **Incomplete is never clean.** Selected inputs lost to reading, parsing,
    crashes or truncation are named on stderr and summarized. Machine-readable
-   consumers receive an explicit completion signal; SARIF records an
-   unsuccessful invocation and execution notification. Completed trustworthy
-   measurements remain available, distinguishable from missing results.
-5. **The exit status reports incompleteness without a threshold flag.** It is
-   nonzero and distinguishable from an ordinary threshold violation, and
-   takes precedence over gate results. The implementation must specify the
+   outputs carry an explicit completion signal; the implementation chooses its
+   form for each format (for SARIF, its standard invocation-status fields)
+   before the docs change. Completed trustworthy measurements remain
+   available, distinguishable from missing results.
+5. **The exit status reports incompleteness whether or not any threshold is
+   set.** It is nonzero and distinguishable from an ordinary threshold
+   violation, and takes precedence over gate results. The implementation must specify the
    status value and output contract before the CLI documentation changes.
 6. **Snapshots cannot hide gaps.** Do not silently write or replace a baseline
    from an incomplete scan, or present a partial validation run as evidence
@@ -70,7 +76,8 @@ finish that calculation; any unsound or truncated fallback must be visible.
   refusal before shipping the new status. Preserve existing formats where
   possible; do not silently replace integer scores with zero for failed work.
 - No aurora rule-abandonment count, step budget or time limit is adopted here.
-  Knots' units are metric/function/file analysis, not CERT rules.
+  Knots' units are metric/function/file analysis, not aurora-lint's per-rule
+  units.
 
 Origin: adaptation of aurora-lint ADR-0017, “A crash or a runaway costs one rule
 on one file, is always reported, and never passes as clean”.
