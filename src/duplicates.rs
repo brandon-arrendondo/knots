@@ -17,7 +17,7 @@
 //! `lang_parsing_substrate::function_fingerprints`; `Block` fingerprints
 //! loop/conditional/switch-shaped subtrees *inside* functions via
 //! `block_fingerprints` — useful when a caller already has one flagged
-//! region (e.g. a aurora-lint CERT-C violation) and wants to find other
+//! region (e.g. an aurora-lint CERT-C violation) and wants to find other
 //! places in the corpus with the same shape, not just whole-function
 //! clones. The two tiers never cross-match: `lang_parsing_substrate::
 //! duplicate_groups` groups by `(hash, tier)`, not `hash` alone.
