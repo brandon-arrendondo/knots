@@ -396,7 +396,7 @@ collaborators."
 /// `lang_parsing_substrate::FingerprintTier` (see `duplicate_tier_for`), kept
 /// as knots' own CLI-facing enum rather than deriving `ValueEnum` on the
 /// substrate type directly, since that's a shared library type other
-/// consumers (funky, tools_sqc) use without any CLI of their own.
+/// consumers (funky, aurora-lint) use without any CLI of their own.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 enum DuplicateTier {
     /// Whole function-like subtrees (default).
