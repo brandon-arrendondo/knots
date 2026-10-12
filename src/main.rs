@@ -1480,7 +1480,7 @@ fn should_process_file(
 
     // Check exclude rules (blacklist) - if it matches exclude, DON'T process
     if let Some(rules) = exclude_rules {
-        if rules.matches_file(file_path) {
+        if !rules.file_patterns.is_empty() && rules.matches_file(file_path) {
             return false;
         }
     }

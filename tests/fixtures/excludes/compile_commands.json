@@ -1,0 +1,4 @@
+[
+  {"directory": ".", "file": "first.c", "command": "cc -c first.c"},
+  {"directory": ".", "file": "second.c", "command": "cc -c second.c"}
+]
