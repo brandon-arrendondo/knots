@@ -290,7 +290,7 @@ knots<span class="w"> </span>-r<span class="w"> </span>.<span class="w"> </span>
 <h3>Exclude filter (blacklist)<a class="headerlink" href="#exclude-filter-blacklist" title="Link to this heading"></a></h3>
 <p>When <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> is specified:</p>
 <ol class="arabic simple">
-<li><p>If a file matches <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code>, it is excluded
+<li><p>If non-empty <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> are supplied and a file matches them, it is excluded
 during discovery, independently of function criteria</p></li>
 <li><p>For remaining files, functions must match all specified function
 criteria to be excluded: name patterns AND complexity bounds when both
@@ -312,12 +312,12 @@ test files” (exclude).</p>
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>All filter criteria are optional — specify only the ones you need.</p></li>
-<li><p>Empty arrays mean “match everything” for that criterion. In the current
-CLI, an exclude file with missing or empty <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> therefore
-excludes every file during discovery, even if it specifies function
-patterns or bounds. For function-only exclusions, use <code class="docutils literal notranslate"><span class="pre">knots.toml</span></code>
-(see <a class="reference internal" href="config.html"><span class="doc">knots.toml &amp; Inline Suppression</span></a>). This is a discovery limitation, not an AND relation
-between file and function criteria.</p></li>
+<li><p>Missing or empty <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> leave file discovery unrestricted.
+An exclude filter with only function patterns or complexity bounds applies
+at function level; an empty exclude object is a no-op. Include filters
+likewise impose no restriction for an omitted or empty criterion.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> exclusions (see <a class="reference internal" href="config.html"><span class="doc">knots.toml &amp; Inline Suppression</span></a>) remain an alternative for
+combining file and function criteria within one entry.</p></li>
 <li><p>File patterns are matched against the full file path.</p></li>
 <li><p>Function patterns use Rust’s regex syntax.</p></li>
 <li><p>Invalid regex patterns are silently ignored (the function won’t match).</p></li>

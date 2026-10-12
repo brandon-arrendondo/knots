@@ -200,7 +200,7 @@ Exclude filter (blacklist)
 
 When ``--exclude`` is specified:
 
-1. If a file matches ``file_patterns``, it is excluded
+1. If non-empty ``file_patterns`` are supplied and a file matches them, it is excluded
    during discovery, independently of function criteria
 2. For remaining files, functions must match all specified function
    criteria to be excluded: name patterns AND complexity bounds when both
@@ -221,12 +221,12 @@ Notes
 -----
 
 - All filter criteria are optional — specify only the ones you need.
-- Empty arrays mean "match everything" for that criterion. In the current
-  CLI, an exclude file with missing or empty ``file_patterns`` therefore
-  excludes every file during discovery, even if it specifies function
-  patterns or bounds. For function-only exclusions, use ``knots.toml``
-  (see :doc:`config`). This is a discovery limitation, not an AND relation
-  between file and function criteria.
+- Missing or empty ``file_patterns`` leave file discovery unrestricted.
+  An exclude filter with only function patterns or complexity bounds applies
+  at function level; an empty exclude object is a no-op. Include filters
+  likewise impose no restriction for an omitted or empty criterion.
+- ``knots.toml`` exclusions (see :doc:`config`) remain an alternative for
+  combining file and function criteria within one entry.
 - File patterns are matched against the full file path.
 - Function patterns use Rust's regex syntax.
 - Invalid regex patterns are silently ignored (the function won't match).
