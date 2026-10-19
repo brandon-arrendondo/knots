@@ -81,7 +81,7 @@ toolchain and no from-source compile:
 
     repos:
       - repo: https://github.com/brandon-arrendondo/knots-pre-commit
-        rev: v1.18.0            # pin to a released knots version
+        rev: v1.19.0            # pin to a released knots version
         hooks:
           - id: knots          # default thresholds
           # - id: knots-verbose  # same thresholds, per-function detail
@@ -98,7 +98,7 @@ already on your ``PATH`` (e.g. installed via ``pipx install knots`` — see
 
     repos:
       - repo: https://github.com/brandon-arrendondo/knots
-        rev: v1.18.0
+        rev: v1.19.0
         hooks:
           - id: knots          # language: rust — compiles from source
           # - id: knots-system   # language: system — uses knots from PATH
