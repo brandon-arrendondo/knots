@@ -966,6 +966,8 @@ fn raw_sloc(node: Node, bytes: &[u8], sloc_mode: SlocMode) -> u32 {
         SlocMode::Fortran => calculate_sloc_fortran(node, bytes),
         SlocMode::Lua => complexity::calculate_sloc_lua(node, bytes),
         SlocMode::Default => calculate_sloc(node, bytes),
+        // YAML, CMake and Markdown: knots discovers no functions in them.
+        SlocMode::Hash | SlocMode::Markdown => calculate_sloc(node, bytes),
     }
 }
 
