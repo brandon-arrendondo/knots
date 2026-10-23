@@ -98,7 +98,12 @@
 <section id="threshold-flags">
 <h2>Threshold Flags<a class="headerlink" href="#threshold-flags" title="Link to this heading"></a></h2>
 <p>Any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag causes knots to exit with status 1 if any
-function exceeds the specified value. Use these as CI gates:</p>
+function exceeds the specified value, whatever the <code class="docutils literal notranslate"><span class="pre">--format</span></code>. With a
+structured format the document is still written to stdout in full, and the
+violations are listed on stderr. A scan that could not analyse a selected
+file exits 3 instead, with or without a threshold, so a CI step that fails on
+any nonzero status also fails on an incomplete scan (see <a class="reference internal" href="cli-reference.html"><span class="doc">CLI Reference</span></a>,
+Exit Status). Use these as CI gates:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Fail if any function has AIRD &gt; 85 (recommended threshold)</span>
 <span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">src</span><span class="o">/</span> <span class="o">--</span><span class="n">aird</span><span class="o">-</span><span class="n">threshold</span> <span class="mi">85</span>
 

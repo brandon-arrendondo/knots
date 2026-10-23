@@ -53,10 +53,12 @@ one record for each selected function. Named functions are the default;
 ``--count-anonymous-closures`` adds synthesized anonymous entries.
 
 Multi-file collection uses rayon with a parser owned by each worker. Results
-are sorted by file and function. Unreadable or unparseable files currently
-produce warnings and are skipped; this is not complete-scan containment or
-a guarantee that status 0 covers every discovered input. See
-:doc:`cli-reference` for exit-status details.
+are sorted by file and function. Each file's read, parse and analysis is
+contained: a file that cannot be read or parsed, or whose analysis panics,
+is recorded as not analysed, and the rest of the scan goes on. The recursive
+import and duplicate passes skip such a file, and a panic in either pass
+loses only its own file. A scan that lost any selected file exits 3 (see
+:doc:`cli-reference` for exit-status details).
 
 In recursive mode, a separate corpus pass builds the import graph and applies
 file Ce to AIRD. Duplicate detection adds another opt-in parse pass. These

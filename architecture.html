@@ -162,10 +162,12 @@ structured output. The metric library discovers functions and calculates
 one record for each selected function. Named functions are the default;
 <code class="docutils literal notranslate"><span class="pre">--count-anonymous-closures</span></code> adds synthesized anonymous entries.</p>
 <p>Multi-file collection uses rayon with a parser owned by each worker. Results
-are sorted by file and function. Unreadable or unparseable files currently
-produce warnings and are skipped; this is not complete-scan containment or
-a guarantee that status 0 covers every discovered input. See
-<a class="reference internal" href="cli-reference.html"><span class="doc">CLI Reference</span></a> for exit-status details.</p>
+are sorted by file and function. Each file’s read, parse and analysis is
+contained: a file that cannot be read or parsed, or whose analysis panics,
+is recorded as not analysed, and the rest of the scan goes on. The recursive
+import and duplicate passes skip such a file, and a panic in either pass
+loses only its own file. A scan that lost any selected file exits 3 (see
+<a class="reference internal" href="cli-reference.html"><span class="doc">CLI Reference</span></a> for exit-status details).</p>
 <p>In recursive mode, a separate corpus pass builds the import graph and applies
 file Ce to AIRD. Duplicate detection adds another opt-in parse pass. These
 are consumer-owned aggregations, not a persistent shared parse database.</p>

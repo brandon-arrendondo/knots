@@ -131,7 +131,8 @@ are required.</p>
 (e.g. <code class="docutils literal notranslate"><span class="pre">rust</span></code>, <code class="docutils literal notranslate"><span class="pre">c++</span></code>, <code class="docutils literal notranslate"><span class="pre">f90</span></code>). Repeat for multiple languages.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">-q</span></code>, <code class="docutils literal notranslate"><span class="pre">--quiet</span></code></dt><dd><p>Suppress normal output, retaining threshold-violation lines. Exit status
-still reflects violations.</p>
+still reflects violations (1) and an incomplete scan (3), and the lines
+naming each file not analysed are still printed.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--count-anonymous-closures</span></code></dt><dd><p>Emit anonymous functions as independent entries with synthesized labels
 such as <code class="docutils literal notranslate"><span class="pre">&lt;anonymous&gt;&#64;line:col</span></code>. Default: named functions only.</p>
@@ -156,6 +157,11 @@ syntax as a pre-commit <code class="docutils literal notranslate"><span class="p
 <dt><code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Write a detailed report in multi-file text mode (including recursive
 scans and compilation databases). It is not written in single-file,
 matrix, or structured-output modes. Opt-in — omit to suppress the file.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">--completion-report</span> <span class="pre">&lt;FILE&gt;</span></code></dt><dd><p>Write what the scan analysed, and every selected file it could not
+analyse and why, to <code class="docutils literal notranslate"><span class="pre">FILE</span></code> as JSON. Works with any <code class="docutils literal notranslate"><span class="pre">--format</span></code> and
+with <code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code>; the format’s own output is unchanged. See
+<a class="reference internal" href="output-formats.html#completion-report"><span class="std std-ref">Completion report</span></a>.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">&lt;FORMAT&gt;</span></code></dt><dd><p>Output format. One of:</p>
 <table class="docutils align-default">
@@ -369,19 +375,52 @@ mid-commit and don’t want to leave the terminal:</p>
 <section id="exit-status">
 <h2>Exit Status<a class="headerlink" href="#exit-status" title="Link to this heading"></a></h2>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">0</span></code></dt><dd><p>No threshold violations among analyzed functions. Multi-file scans
-currently warn and skip unreadable or unparseable files; status 0 does
-not guarantee that every discovered input was analyzed.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">0</span></code></dt><dd><p>Every selected file was analysed, and no threshold was violated.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>Error (file not found, parse error, unreadable baseline, unknown git ref or
-not a git repository under <code class="docutils literal notranslate"><span class="pre">--since</span></code> / <code class="docutils literal notranslate"><span class="pre">--changed</span></code>), or one or more
-threshold violations when any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag is set. In
-<code class="docutils literal notranslate"><span class="pre">--baseline</span></code> mode, only new or worsened functions count as violations; under
+<dt><code class="docutils literal notranslate"><span class="pre">1</span></code></dt><dd><p>One or more threshold violations when any <code class="docutils literal notranslate"><span class="pre">--*-threshold</span></code> flag is set,
+in any <code class="docutils literal notranslate"><span class="pre">--format</span></code>; or an error that stops the run (an unreadable
+baseline or configuration, an unknown git ref
+or not a git repository under <code class="docutils literal notranslate"><span class="pre">--since</span></code> / <code class="docutils literal notranslate"><span class="pre">--changed</span></code>, or no
+functions found in any file of a multi-file scan). In <code class="docutils literal notranslate"><span class="pre">--baseline</span></code>
+mode, only new or worsened functions count as violations; under
 <code class="docutils literal notranslate"><span class="pre">--since</span></code> / <code class="docutils literal notranslate"><span class="pre">--changed</span></code> only touched functions are checked.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">2</span></code></dt><dd><p>Invalid arguments (e.g. <code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code> without <code class="docutils literal notranslate"><span class="pre">--baseline</span></code>).</p>
+<dt><code class="docutils literal notranslate"><span class="pre">2</span></code></dt><dd><p>The run cannot start as invoked: invalid arguments (e.g.
+<code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code> without <code class="docutils literal notranslate"><span class="pre">--baseline</span></code>), a path named on the
+command line that does not exist, or a directory named without <code class="docutils literal notranslate"><span class="pre">-r</span></code>.
+Nothing is analysed and no <code class="docutils literal notranslate"><span class="pre">--completion-report</span></code> is written.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">3</span></code></dt><dd><p>The scan is incomplete: at least one selected file was not analysed.
+This applies whether or not a threshold is set, and outranks status 1:
+any violation among the files that were analysed is still listed. Each
+file not analysed is named on stderr, and the last line of stderr says
+how many of the selected files were not analysed.</p>
 </dd>
 </dl>
+<p>A file is <em>selected</em> when discovery finds it under a directory passed with
+<code class="docutils literal notranslate"><span class="pre">-r</span></code>, when it is named on the command line, or when
+<code class="docutils literal notranslate"><span class="pre">compile_commands.json</span></code> lists it. A selected file is <em>not analysed</em> when:</p>
+<ul class="simple">
+<li><p>it cannot be read, or is not UTF-8;</p></li>
+<li><p>no grammar can parse it;</p></li>
+<li><p>its analysis panics (the rest of the scan goes on without it);</p></li>
+<li><p>it was named on the command line with an extension no language claims
+(see <code class="docutils literal notranslate"><span class="pre">--supported-languages</span></code>);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">compile_commands.json</span></code> lists it, but it is not on disk;</p></li>
+<li><p>a recursive walk cannot reach it: a directory knots cannot read counts as
+one file not analysed, and so does a dangling symlink with a source-file
+extension. A symlink loop loses nothing, since its target is walked
+anyway.</p></li>
+</ul>
+<p>A file that your own scope leaves out (<code class="docutils literal notranslate"><span class="pre">-l</span></code>, <code class="docutils literal notranslate"><span class="pre">--exclude-path</span></code>,
+<code class="docutils literal notranslate"><span class="pre">--include</span></code>/<code class="docutils literal notranslate"><span class="pre">--exclude</span></code> rules, or a <code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> <code class="docutils literal notranslate"><span class="pre">[[filter.exclude]]</span></code>
+entry with no <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code>) is not selected, so it never makes a
+scan incomplete, even when it is named, and it is left out before it is
+read. To pass a scan that loses a file, exclude that file explicitly. An empty
+file, or a valid file with no functions, is analysed. A file that parses
+only with syntax errors and yields no function is analysed too, and is
+reported on stderr and counted separately (“Syntax errors, no functions
+recovered”): error recovery alone does not prove that analysis failed.</p>
 </section>
 <section id="complexity-indicators">
 <h2>Complexity Indicators<a class="headerlink" href="#complexity-indicators" title="Link to this heading"></a></h2>

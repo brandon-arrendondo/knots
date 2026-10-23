@@ -186,6 +186,11 @@ numbers are <strong>deliberately omitted</strong> so the file does not churn whe
 <p>The file is normally generated, not hand-edited. <code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code> requires
 <code class="docutils literal notranslate"><span class="pre">--baseline</span> <span class="pre">&lt;FILE&gt;</span></code> (it names the file to write) and works with any
 <code class="docutils literal notranslate"><span class="pre">--format</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code> refuses an incomplete scan. If any selected file was not
+analysed, knots names it, leaves the baseline file as it was (or does not
+create it), and exits 3:
+the missing file’s functions would read as new on the next run. Fix the file,
+or exclude it explicitly, then write the baseline again.</p>
 </section>
 <section id="notes-limitations">
 <h2>Notes &amp; limitations<a class="headerlink" href="#notes-limitations" title="Link to this heading"></a></h2>

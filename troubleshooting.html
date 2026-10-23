@@ -59,7 +59,7 @@
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Troubleshooting</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#path-is-a-directory-use-r-recursive">“Path is a directory. Use -r/–recursive”</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#warning-skipping-file-stream-did-not-contain-valid-utf-8">“Warning: Skipping &lt;file&gt;: stream did not contain valid UTF-8”</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#warning-not-analysed-read-file-stream-did-not-contain-valid-utf-8">“Warning: Not analysed (read): &lt;file&gt;: stream did not contain valid UTF-8”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#no-supported-source-files-found-in-directory">“No supported source files found in directory”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#rust-cognitive-scores-differ-from-clippy">Rust Cognitive scores differ from Clippy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#report-file-not-generated">Report file not generated</a></li>
@@ -99,19 +99,23 @@
 <h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h1>
 <section id="path-is-a-directory-use-r-recursive">
 <h2>“Path is a directory. Use -r/–recursive”<a class="headerlink" href="#path-is-a-directory-use-r-recursive" title="Link to this heading"></a></h2>
-<p>You passed a directory without <code class="docutils literal notranslate"><span class="pre">-r</span></code>:</p>
+<p>You passed a directory without <code class="docutils literal notranslate"><span class="pre">-r</span></code>. Nothing is analysed and knots exits 2.
+Add <code class="docutils literal notranslate"><span class="pre">-r</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">directory</span><span class="o">/</span>
 </pre></div>
 </div>
 </section>
-<section id="warning-skipping-file-stream-did-not-contain-valid-utf-8">
-<h2>“Warning: Skipping &lt;file&gt;: stream did not contain valid UTF-8”<a class="headerlink" href="#warning-skipping-file-stream-did-not-contain-valid-utf-8" title="Link to this heading"></a></h2>
-<p>The file has encoding issues. Knots continues processing other files.</p>
+<section id="warning-not-analysed-read-file-stream-did-not-contain-valid-utf-8">
+<h2>“Warning: Not analysed (read): &lt;file&gt;: stream did not contain valid UTF-8”<a class="headerlink" href="#warning-not-analysed-read-file-stream-did-not-contain-valid-utf-8" title="Link to this heading"></a></h2>
+<p>The file has encoding issues. Knots goes on with the other files, but the
+scan is incomplete, so it exits 3.</p>
 <p>Convert the file to UTF-8:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">iconv</span> <span class="o">-</span><span class="n">f</span> <span class="n">ISO</span><span class="o">-</span><span class="mi">8859</span><span class="o">-</span><span class="mi">1</span> <span class="o">-</span><span class="n">t</span> <span class="n">UTF</span><span class="o">-</span><span class="mi">8</span> <span class="n">file</span><span class="o">.</span><span class="n">c</span> <span class="o">&gt;</span> <span class="n">file_utf8</span><span class="o">.</span><span class="n">c</span>
 </pre></div>
 </div>
-<p>Or pass this positive pattern in a JSON <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> filter:</p>
+<p>Or leave the file out of the scan with <code class="docutils literal notranslate"><span class="pre">--exclude-path</span></code>, or with this
+positive pattern in a JSON <code class="docutils literal notranslate"><span class="pre">--exclude</span></code> filter, so the scan is complete
+again:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/legacy_encoding/**&quot;</span><span class="p">]</span>
 <span class="p">}</span>
@@ -174,7 +178,10 @@ functions may now read as improvements against it; re-running with
 field from each entry. If your build ran from a different working directory
 than where you’re running knots, paths may not resolve. Regenerate the
 compile database from the project root, or ensure <code class="docutils literal notranslate"><span class="pre">directory</span></code> fields
-contain absolute paths.</p>
+contain absolute paths. Each entry whose file is not found is reported as
+<code class="docutils literal notranslate"><span class="pre">Not</span> <span class="pre">analysed</span> <span class="pre">(missing)</span></code>, and the scan exits 3. A file the build generates
+must exist before knots runs. A path named on the command line that does not
+exist is different: it stops the run with exit 2.</p>
 </section>
 </section>
 
