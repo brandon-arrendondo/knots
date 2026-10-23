@@ -152,10 +152,13 @@ contains 16 languages:</p>
 <li><p>Kotlin: <code class="docutils literal notranslate"><span class="pre">.kt</span></code>, <code class="docutils literal notranslate"><span class="pre">.kts</span></code></p></li>
 <li><p>Swift: <code class="docutils literal notranslate"><span class="pre">.swift</span></code></p></li>
 <li><p>PHP: <code class="docutils literal notranslate"><span class="pre">.php</span></code></p></li>
-<li><p>Free-form Fortran: <code class="docutils literal notranslate"><span class="pre">.f90</span></code>, <code class="docutils literal notranslate"><span class="pre">.f95</span></code>, <code class="docutils literal notranslate"><span class="pre">.f03</span></code>, <code class="docutils literal notranslate"><span class="pre">.f08</span></code> and uppercase variants</p></li>
+<li><p>Free-form Fortran: <code class="docutils literal notranslate"><span class="pre">.f90</span></code>, <code class="docutils literal notranslate"><span class="pre">.f95</span></code>, <code class="docutils literal notranslate"><span class="pre">.f03</span></code>, <code class="docutils literal notranslate"><span class="pre">.f08</span></code></p></li>
 <li><p>Scala: <code class="docutils literal notranslate"><span class="pre">.scala</span></code>, <code class="docutils literal notranslate"><span class="pre">.sc</span></code></p></li>
 <li><p>Lua: <code class="docutils literal notranslate"><span class="pre">.lua</span></code></p></li>
 </ul>
+<p>Extensions match in any case, so <code class="docutils literal notranslate"><span class="pre">A.C</span></code> and <code class="docutils literal notranslate"><span class="pre">B.H</span></code>, as Windows-built source
+trees often name them, are C, <code class="docutils literal notranslate"><span class="pre">.CPP</span></code> is C++ and <code class="docutils literal notranslate"><span class="pre">.F90</span></code> is Fortran. GCC’s
+convention that <code class="docutils literal notranslate"><span class="pre">.C</span></code> is C++ is not followed.</p>
 <p>Recursive scans include header files such as <code class="docutils literal notranslate"><span class="pre">.h</span></code> and <code class="docutils literal notranslate"><span class="pre">.ads</span></code>. The
 registry labels these explicit-only, but knots discovers files with its broader
 parseable-extension predicate. Fixed-form Fortran (<code class="docutils literal notranslate"><span class="pre">.f</span></code>, <code class="docutils literal notranslate"><span class="pre">.for</span></code>,

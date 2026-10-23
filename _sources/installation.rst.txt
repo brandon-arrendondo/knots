@@ -70,9 +70,13 @@ contains 16 languages:
 * Kotlin: ``.kt``, ``.kts``
 * Swift: ``.swift``
 * PHP: ``.php``
-* Free-form Fortran: ``.f90``, ``.f95``, ``.f03``, ``.f08`` and uppercase variants
+* Free-form Fortran: ``.f90``, ``.f95``, ``.f03``, ``.f08``
 * Scala: ``.scala``, ``.sc``
 * Lua: ``.lua``
+
+Extensions match in any case, so ``A.C`` and ``B.H``, as Windows-built source
+trees often name them, are C, ``.CPP`` is C++ and ``.F90`` is Fortran. GCC's
+convention that ``.C`` is C++ is not followed.
 
 Recursive scans include header files such as ``.h`` and ``.ads``. The
 registry labels these explicit-only, but knots discovers files with its broader
