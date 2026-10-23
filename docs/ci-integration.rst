@@ -5,7 +5,9 @@ Threshold Flags
 ---------------
 
 Any ``--*-threshold`` flag causes knots to exit with status 1 if any
-function exceeds the specified value. Use these as CI gates:
+function exceeds the specified value, whatever the ``--format``. With a
+structured format the document is still written to stdout in full, and the
+violations are listed on stderr. Use these as CI gates:
 
 ::
 

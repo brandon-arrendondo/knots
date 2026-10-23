@@ -1235,7 +1235,15 @@ fn run_structured_output_mode(
         OutputFormat::Ndjson => emit_ndjson(&all_metrics, ctx.score_components),
         OutputFormat::Csv => emit_csv(&all_metrics, ctx.score_components),
         OutputFormat::Text => Ok(()),
-    }
+    }?;
+    // Gate after the document is complete: stdout stays one well-formed
+    // document, and the violations go to stderr as in text mode.
+    check_thresholds(
+        &all_metrics,
+        &ctx.thresholds,
+        ctx.baseline.as_ref(),
+        ctx.changed.as_ref(),
+    )
 }
 
 fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {

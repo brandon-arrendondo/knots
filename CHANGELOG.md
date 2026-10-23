@@ -16,6 +16,10 @@ existing scores and gate results can move. See
 - An `#include` that spells a known extension in upper case, such as
   `#include "B.H"`, now resolves to the file it names, so it counts toward
   Ce, Ca and AIRD's coupling factor instead of being dropped.
+- A threshold now gates the run with `--format json`, `ndjson`, `csv` or
+  `sarif` as it does with text output: a violation exits 1 and is listed on
+  stderr, after the full document is written. Previously a structured format
+  ignored every threshold and exited 0.
 
 ## 1.19.0 - 2026-10-19
 
