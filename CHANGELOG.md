@@ -8,6 +8,15 @@ existing scores and gate results can move. See
 
 ## Unreleased
 
+### Fixed
+
+- Files with upper- or mixed-case extensions, such as `A.C` and `B.H` from
+  Windows-built source trees, are analysed: `-r` finds them, `--language c`
+  keeps them, and naming one is accepted. `.C` is C, not C++.
+- An `#include` that spells a known extension in upper case, such as
+  `#include "B.H"`, now resolves to the file it names, so it counts toward
+  Ce, Ca and AIRD's coupling factor instead of being dropped.
+
 ## 1.19.0 - 2026-10-19
 
 ### Changed

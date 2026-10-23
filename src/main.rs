@@ -1388,6 +1388,16 @@ fn load_compile_commands(
     Ok(files)
 }
 
+/// Whether `--language` (`filter`, when given) keeps a file with `ext`. Folded,
+/// as the substrate folds an extension before looking it up: the filter's
+/// lists are lowercase, so `A.C` passes `--language c`.
+fn language_allows(filter: &Option<HashSet<&'static str>>, ext: &std::ffi::OsStr) -> bool {
+    filter.as_ref().is_none_or(|set| {
+        ext.to_str()
+            .is_some_and(|e| set.contains(e.to_ascii_lowercase().as_str()))
+    })
+}
+
 /// Collect files to process based on the path and recursive flag
 fn collect_files(
     path: &PathBuf,
@@ -1399,11 +1409,7 @@ fn collect_files(
 ) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
-    let ext_allowed = |ext: &std::ffi::OsStr| -> bool {
-        language_filter
-            .as_ref()
-            .is_none_or(|set| ext.to_str().map(|e| set.contains(e)).unwrap_or(false))
-    };
+    let ext_allowed = |ext: &std::ffi::OsStr| language_allows(language_filter, ext);
 
     if path.is_file() {
         // Single file mode — accepts explicit-only extensions (e.g. .f, .h) in addition to
@@ -1512,7 +1518,10 @@ fn collect_all_metrics(
             let (tree, source_code) = match parse_file(file, &source_code) {
                 Ok(t) => t,
                 Err(_) => {
-                    let hint = if file.extension().and_then(|e| e.to_str()) == Some("h") {
+                    let hint = if file
+                        .extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("h"))
+                    {
                         " (if this file contains C++, rename to .hpp)"
                     } else {
                         ""

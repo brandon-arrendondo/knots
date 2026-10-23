@@ -248,7 +248,9 @@ fn module_key(file_path: &str) -> String {
 
 /// Reduces a raw import string down to the single trailing identifier most
 /// likely to match a corpus file's stem: strip a path prefix, then a known
-/// source-file extension, then a namespace separator (`::` or `.`).
+/// source-file extension, then a namespace separator (`::` or `.`). The
+/// extension matches in any case, as the substrate matches a file's, so
+/// `#include "FOO.H"` names `FOO`, not `H`.
 fn resolve_candidate(import: &str, known_extensions: &HashSet<&str>) -> String {
     let mut candidate = import.trim();
 
@@ -258,7 +260,7 @@ fn resolve_candidate(import: &str, known_extensions: &HashSet<&str>) -> String {
 
     if let Some(idx) = candidate.rfind('.') {
         let ext = &candidate[idx + 1..];
-        if known_extensions.contains(ext) {
+        if known_extensions.contains(ext.to_ascii_lowercase().as_str()) {
             candidate = &candidate[..idx];
         }
     }
@@ -313,6 +315,33 @@ mod tests {
             .find(|c| c.file_path == "src/Main.java")
             .unwrap();
         assert_eq!(main.ce, 1);
+    }
+
+    #[test]
+    fn an_upper_case_include_keeps_its_edge() {
+        let files = [("src/A.C", vec!["B.H".to_string()]), ("src/B.H", vec![])];
+        let refs: Vec<(&str, &[String])> = files.iter().map(|(p, i)| (*p, i.as_slice())).collect();
+        let coupling = build_import_graph(refs).coupling();
+        let a = coupling.iter().find(|c| c.file_path == "src/A.C").unwrap();
+        let b = coupling.iter().find(|c| c.file_path == "src/B.H").unwrap();
+        assert_eq!((a.ce, b.ca), (1, 1));
+    }
+
+    #[test]
+    fn a_known_extension_is_stripped_in_any_case() {
+        let known = known_source_extensions();
+        for (import, stem) in [
+            ("FOO.H", "FOO"),
+            ("foo.h", "foo"),
+            ("dir/Foo.Hpp", "Foo"),
+            // Fortran's upper-case forms, listed by the substrate, as before.
+            ("solver.F90", "solver"),
+            ("solver.f90", "solver"),
+            // Not an extension: the namespace separator still applies.
+            ("com.example.Helper", "Helper"),
+        ] {
+            assert_eq!(resolve_candidate(import, &known), stem, "{import}");
+        }
     }
 
     #[test]
