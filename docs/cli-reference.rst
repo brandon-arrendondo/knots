@@ -317,9 +317,9 @@ Exit Status
 
 ``2``
     The run cannot start as invoked: invalid arguments (e.g.
-    ``--write-baseline`` without ``--baseline``), or a path named on the
-    command line that does not exist. Nothing is analysed and no
-    ``--completion-report`` is written.
+    ``--write-baseline`` without ``--baseline``), a path named on the
+    command line that does not exist, or a directory named without ``-r``.
+    Nothing is analysed and no ``--completion-report`` is written.
 
 ``3``
     The scan is incomplete: at least one selected file was not analysed.

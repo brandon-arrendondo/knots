@@ -81,8 +81,9 @@ and 5).
    analysed. It applies whether or not a threshold is set and outranks status
    1; violations among the analysed functions are still listed. Status 1 is
    a threshold violation or an error that stops the run. Status 2 is a run
-   that cannot start as invoked: invalid arguments, which clap reports, or a
-   path named on the command line that does not exist. Status 2 and status 3
+   that cannot start as invoked: invalid arguments, which clap reports, a
+   path named on the command line that does not exist, or a directory named
+   without `-r`. Status 2 and status 3
    mean the same in every tool of the suite, as in aurora-lint ADR-0017.
    There is no flag to accept an incomplete scan: excluding a file puts it
    out of scope, and that is the way to pass a scan that cannot read it.

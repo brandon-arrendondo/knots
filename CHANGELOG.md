@@ -41,8 +41,8 @@ existing scores and gate results can move. See
   read; exclude a file to pass a scan that cannot read it. A file that
   parses only with syntax errors and yields no function is reported, but is
   not counted as not analysed.
-- A path named on the command line that does not exist now exits 2, as an
-  invocation error, instead of 1.
+- A path named on the command line that does not exist, or a directory
+  named without `-r`, now exits 2, as an invocation error, instead of 1.
 - The text summary's FILES PROCESSED block is renamed and always complete:
   "Total files found" is now "Total files selected", "Successfully
   processed" is now "Analysed", and the "Skipped (encoding/parse errors)"

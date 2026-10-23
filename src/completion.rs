@@ -19,7 +19,7 @@ use std::path::Path;
 pub(crate) const INCOMPLETE_EXIT: u8 = 3;
 
 /// Exit status of an invocation that cannot run: clap's invalid arguments,
-/// and a named path that does not exist.
+/// a named path that does not exist, and a directory named without `-r`.
 pub(crate) const INVOCATION_EXIT: u8 = 2;
 
 /// A run that cannot start as invoked; `main` maps it to [`INVOCATION_EXIT`].

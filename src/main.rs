@@ -68,7 +68,8 @@ struct Args {
     #[arg(long)]
     supported_languages: bool,
 
-    /// Recursively process all supported source files in directories
+    /// Recursively process all supported source files in directories. A
+    /// directory named without it exits 2.
     #[arg(short, long)]
     recursive: bool,
 
@@ -1302,7 +1303,8 @@ fn select_files(args: &Args, scope: &Scope) -> Result<(Vec<PathBuf>, Vec<LostInp
 
 /// The files the named paths select, and the inputs lost on the way: a named
 /// file knots cannot analyse, and what a recursive walk could not reach. A
-/// named path that does not exist is an invocation error, which exits 2.
+/// named path that does not exist, or a directory named without `-r`, is an
+/// invocation error, which exits 2.
 fn select_named_paths(args: &Args, scope: &Scope) -> Result<(Vec<PathBuf>, Vec<LostInput>)> {
     if args.files.is_empty() {
         anyhow::bail!("Either FILE or --compile-commands must be specified");
@@ -1596,10 +1598,11 @@ fn collect_files(
         );
     }
     if !recursive {
-        anyhow::bail!(
+        let message = format!(
             "Path '{}' is a directory. Use -r/--recursive to process directories recursively.",
             path.display()
         );
+        return Err(InvocationError(message).into());
     }
     let (files, lost) = walk_dir(path, scope);
     if files.is_empty() && lost.is_empty() {

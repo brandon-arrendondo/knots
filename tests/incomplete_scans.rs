@@ -141,6 +141,22 @@ fn a_named_path_that_does_not_exist_is_an_invocation_error() {
 }
 
 #[test]
+fn a_directory_named_without_recursive_is_an_invocation_error() {
+    for args in [vec!["src"], vec!["src/good.c", "src"]] {
+        let path = scratch("directory");
+        let mut all = args.clone();
+        all.extend(["--completion-report", path.to_str().unwrap()]);
+        let output = knots(&all);
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(stderr(&output).contains("Path 'src' is a directory"));
+        assert!(
+            !path.exists(),
+            "{args:?}: a run that cannot start writes no report"
+        );
+    }
+}
+
+#[test]
 fn an_excluded_named_file_is_not_lost() {
     for args in [
         vec!["--exclude-path", "A\\.Z", "named/A.Z"],

@@ -4,7 +4,8 @@ Troubleshooting
 "Path is a directory. Use -r/--recursive"
 ------------------------------------------
 
-You passed a directory without ``-r``::
+You passed a directory without ``-r``. Nothing is analysed and knots exits 2.
+Add ``-r``::
 
     knots -r path/to/directory/
 
