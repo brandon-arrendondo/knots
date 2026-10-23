@@ -71,6 +71,12 @@ Options
     scans and compilation databases). It is not written in single-file,
     matrix, or structured-output modes. Opt-in — omit to suppress the file.
 
+``--completion-report <FILE>``
+    Write what the scan analysed, and every selected file it could not
+    analyse and why, to ``FILE`` as JSON. Works with any ``--format`` and
+    with ``--write-baseline``; the format's own output is unchanged. See
+    :ref:`completion-report`.
+
 ``--format <FORMAT>``
     Output format. One of:
 
@@ -297,19 +303,46 @@ Exit Status
 -----------
 
 ``0``
-    No threshold violations among analyzed functions. Multi-file scans
-    currently warn and skip unreadable or unparseable files; status 0 does
-    not guarantee that every discovered input was analyzed.
+    Every selected file was analysed, and no threshold was violated.
 
 ``1``
-    Error (file not found, parse error, unreadable baseline, unknown git ref or
-    not a git repository under ``--since`` / ``--changed``), or one or more
-    threshold violations when any ``--*-threshold`` flag is set. In
-    ``--baseline`` mode, only new or worsened functions count as violations; under
+    One or more threshold violations when any ``--*-threshold`` flag is set,
+    in any ``--format``; or an error that stops the run (a path that does
+    not exist, an unreadable baseline or configuration, an unknown git ref
+    or not a git repository under ``--since`` / ``--changed``, or no
+    functions found in any file of a multi-file scan). In ``--baseline``
+    mode, only new or worsened functions count as violations; under
     ``--since`` / ``--changed`` only touched functions are checked.
 
 ``2``
     Invalid arguments (e.g. ``--write-baseline`` without ``--baseline``).
+
+``3``
+    The scan is incomplete: at least one selected file was not analysed.
+    This applies whether or not a threshold is set, and outranks status 1:
+    any violation among the files that were analysed is still listed. Each
+    file not analysed is named on stderr, and the last line of stderr says
+    how many of the selected files were not analysed.
+
+A file is *selected* when discovery finds it under a directory passed with
+``-r``, when it is named on the command line, or when
+``compile_commands.json`` lists it. A selected file is *not analysed* when:
+
+- it cannot be read, or is not UTF-8;
+- no grammar can parse it;
+- its analysis panics (the rest of the scan goes on without it);
+- it was named on the command line with an extension no language claims
+  (see ``--supported-languages``);
+- ``compile_commands.json`` lists it, but it is not on disk.
+
+A file that your own scope leaves out (``-l``, ``--exclude-path``,
+``--include``/``--exclude`` rules, or ``knots.toml`` excludes) is not
+selected, so it never makes a scan incomplete, even when it is named. To
+pass a scan that loses a file, exclude that file explicitly. An empty
+file, or a valid file with no functions, is analysed. A file that parses
+only with syntax errors and yields no function is analysed too, and is
+reported on stderr and counted separately ("Syntax errors, no functions
+recovered"): error recovery alone does not prove that analysis failed.
 
 Complexity Indicators
 ---------------------

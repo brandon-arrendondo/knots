@@ -12,7 +12,7 @@ are genuinely expensive to modify with AI assistance.
 - **Multi-Language**: C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua — one CLI across supported languages; calibrate thresholds for your project
 - **Testability Matrix**: Categorize functions by complexity and testability
 - **Multiple Output Formats**: text, SARIF, JSON, NDJSON (find/xargs-composable), CSV
-- **CI Threshold Enforcement**: exit 1 on any threshold violation; recommended `--aird-threshold 85`
+- **CI Threshold Enforcement**: exit 1 on any threshold violation, and exit 3 when a selected file could not be analysed; recommended `--aird-threshold 85`
 - **Pre-commit Hook**: native integration, no shim scripts required
 - **Validated**: McCabe agrees with pmccabe's traditional (per-`case`) count on 98.00% of 30,461 C functions across six pinned corpora (nearly all differences are in functions with `#if` arms); Cognitive follows the SonarSource specification, including the recursion increment other implementations omit. See [Metrics Reference](docs/metrics-reference.rst)
 
@@ -117,6 +117,7 @@ Options:
   --external-calls-threshold <N>    Exit 1 if any function exceeds this external call count
   --unreachable-blocks-threshold <N> Exit 1 if any function has more than this many unreachable (dead-code) basic blocks (C/C++/Rust only)
   --report <FILE>                   Write a detailed report in multi-file text mode (opt-in)
+  --completion-report <FILE>        Write what the scan analysed, and each file it could not, as JSON (any --format)
   --baseline <FILE>                 Ratchet mode: gate only on regressions vs. this snapshot (see docs/baseline.rst)
   --write-baseline                  Snapshot current scores to --baseline and exit without gating
   --since <REF>                     Gate only functions overlapping lines changed since this git ref

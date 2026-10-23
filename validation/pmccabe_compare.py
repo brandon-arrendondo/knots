@@ -29,6 +29,8 @@ def knots_rows(knots: str, root: Path, files: list[str]) -> dict:
     for i in range(0, len(files), 500):
         r = subprocess.run([knots, "--format", "ndjson", *files[i:i + 500]], cwd=root,
                            capture_output=True, text=True)
+        if r.returncode == 3:  # incomplete: a partial set is not a comparison
+            sys.exit(f"knots could not analyse every file in {root}: {r.stderr[-800:]}")
         for line in r.stdout.splitlines():
             if line.startswith("{"):
                 d = json.loads(line)

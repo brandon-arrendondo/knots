@@ -7,7 +7,10 @@ Threshold Flags
 Any ``--*-threshold`` flag causes knots to exit with status 1 if any
 function exceeds the specified value, whatever the ``--format``. With a
 structured format the document is still written to stdout in full, and the
-violations are listed on stderr. Use these as CI gates:
+violations are listed on stderr. A scan that could not analyse a selected
+file exits 3 instead, with or without a threshold, so a CI step that fails on
+any nonzero status also fails on an incomplete scan (see :doc:`cli-reference`,
+Exit Status). Use these as CI gates:
 
 ::
 

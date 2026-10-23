@@ -8,6 +8,12 @@ existing scores and gate results can move. See
 
 ## Unreleased
 
+### Added
+
+- `--completion-report FILE` writes what a scan analysed, and every selected
+  file it could not analyse and why, to `FILE` as JSON. It works with any
+  `--format`, whose own output is unchanged.
+
 ### Fixed
 
 - Files with upper- or mixed-case extensions, such as `A.C` and `B.H` from
@@ -20,6 +26,28 @@ existing scores and gate results can move. See
   `sarif` as it does with text output: a violation exits 1 and is listed on
   stderr, after the full document is written. Previously a structured format
   ignored every threshold and exited 0.
+
+### Changed
+
+- A scan that could not analyse a selected file now exits 3, whether or not
+  a threshold is set, instead of 0 or 1. A file is not analysed when it
+  cannot be read or is not UTF-8, no grammar can parse it, its analysis
+  crashes, it is named with an extension knots does not support (such as
+  `a.txt`, or a fixed-form Fortran `.f`), or `compile_commands.json` lists
+  it but it is not on disk. Each such file is named on stderr. Files that
+  `-l` or an exclude leaves out do not count; exclude a file to pass a scan
+  that cannot read it. A file that parses only with syntax errors and
+  yields no function is reported, but is not counted as not analysed.
+- The text summary always prints the selected, analysed and not-analysed
+  file counts, and the count of files with syntax errors and no functions,
+  including zeros. Its "Skipped (encoding/parse errors)" line is gone.
+- SARIF output carries `invocations`: `executionSuccessful` is false when a
+  selected file was not analysed, with one notification per such file.
+- `--write-baseline` refuses a scan that could not analyse a selected file:
+  it leaves the baseline file unchanged and exits 3.
+- In recursive mode, a file that could not be analysed still counts as the
+  target of an `#include` or import, so the files that include it keep
+  their Ce and AIRD coupling factor.
 
 ## 1.19.0 - 2026-10-19
 

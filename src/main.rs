@@ -15,17 +15,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use tree_sitter::Tree;
 
+mod completion;
 mod config;
 mod duplicate_diff;
 mod duplicates;
 mod output;
+use completion::{contain, finish, Completion, IncompleteScan, LostInput, Stage, INCOMPLETE_EXIT};
 use config::KnotsToml;
 use knots::{
     collect_function_metrics, is_parseable_extension, is_source_extension,
-    language_for_header_content, language_info_for_file, languages, FilterRules, FunctionMetrics,
+    language_for_header_content, language_info_for_file, languages, visit_functions, FilterRules,
+    FunctionMetrics,
 };
 use output::*;
 
@@ -149,6 +151,12 @@ struct Args {
     /// Write detailed per-function report to this file (opt-in; omit to suppress the file)
     #[arg(long, value_name = "FILE")]
     report: Option<PathBuf>,
+
+    /// Write what the scan analysed, and every selected file it could not
+    /// analyse and why, to FILE as JSON. Works with any --format. A scan
+    /// that could not analyse a selected file exits 3 either way.
+    #[arg(long, value_name = "FILE")]
+    completion_report: Option<PathBuf>,
 
     /// Ratchet against a baseline file: gate only on regressions (a new
     /// over-threshold function, or a baselined one whose score got worse).
@@ -511,6 +519,29 @@ struct RunContext {
     duplicate_filters: duplicates::DuplicateFilters,
     /// See `--dump-duplicates`.
     dump_duplicates: Option<PathBuf>,
+    /// See `--completion-report`.
+    completion_report: Option<PathBuf>,
+}
+
+impl RunContext {
+    fn collect_all_metrics(
+        &self,
+        files: &[PathBuf],
+        completion: &mut Completion,
+    ) -> Vec<FunctionMetrics> {
+        collect_all_metrics(
+            files,
+            &self.include_rules,
+            &self.exclude_rules,
+            &self.toml_exclude,
+            self.count_anonymous_closures,
+            completion,
+        )
+    }
+
+    fn finish(&self, completion: &Completion, gate: Result<()>) -> Result<()> {
+        finish(completion, self.completion_report.as_deref(), gate)
+    }
 }
 
 impl Thresholds {
@@ -1097,7 +1128,22 @@ fn early_exit_mode(args: &Args) -> Option<Result<()>> {
     None
 }
 
-fn main() -> Result<()> {
+fn main() -> std::process::ExitCode {
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("Error: {err:?}");
+            let code = if err.is::<IncompleteScan>() {
+                INCOMPLETE_EXIT
+            } else {
+                1
+            };
+            std::process::ExitCode::from(code)
+        }
+    }
+}
+
+fn run() -> Result<()> {
     let args = Args::parse();
     configure_thread_pool(args.jobs);
 
@@ -1125,27 +1171,19 @@ fn main() -> Result<()> {
         .collect();
     let language_filter = resolve_language_filter(&args.languages)?;
 
-    let files = if let Some(cc) = &args.compile_commands {
-        load_compile_commands(cc, &include_rules, &exclude_rules)?
-    } else if !args.files.is_empty() {
-        let mut collected = Vec::new();
-        for path in &args.files {
-            collected.extend(collect_files(
-                path,
-                args.recursive,
-                &include_rules,
-                &exclude_rules,
-                &exclude_path_patterns,
-                &language_filter,
-            )?);
-        }
-        collected
-    } else {
-        anyhow::bail!("Either FILE or --compile-commands must be specified");
-    };
-
-    if files.is_empty() {
+    let (files, lost) = select_files(
+        &args,
+        &include_rules,
+        &exclude_rules,
+        &exclude_path_patterns,
+        &language_filter,
+    )?;
+    if files.is_empty() && lost.is_empty() {
         return Ok(());
+    }
+    let mut completion = Completion::new(files.len(), lost);
+    if files.is_empty() {
+        return finish(&completion, args.completion_report.as_deref(), Ok(()));
     }
 
     let cli_thresholds = Thresholds {
@@ -1173,24 +1211,15 @@ fn main() -> Result<()> {
     // gating. Handled before format/mode dispatch so `--write-baseline` behaves
     // identically regardless of --format. clap's `requires` guarantees a path.
     if args.write_baseline {
-        let (all_metrics, _) = collect_all_metrics(
+        let all_metrics = collect_all_metrics(
             &files,
             &include_rules,
             &exclude_rules,
             &toml_exclude,
             args.count_anonymous_closures,
+            &mut completion,
         );
-        let path = args
-            .baseline
-            .as_ref()
-            .expect("--write-baseline requires --baseline (enforced by clap)");
-        write_baseline(path, &all_metrics)?;
-        eprintln!(
-            "Wrote baseline: {} function(s) -> {}",
-            all_metrics.len(),
-            path.display()
-        );
-        return Ok(());
+        return run_write_baseline(&args, &all_metrics, &completion);
     }
 
     let ctx = build_run_context(
@@ -1202,35 +1231,108 @@ fn main() -> Result<()> {
     )?;
 
     if args.format != OutputFormat::Text {
-        return run_structured_output_mode(args.format, &files, &ctx);
+        return run_structured_output_mode(args.format, &files, &ctx, completion);
     }
 
     if args.matrix {
-        return run_matrix_mode(&files, &ctx);
+        return run_matrix_mode(&files, &ctx, completion);
     }
 
     if files.len() == 1 {
-        return run_single_file_mode(&files[0], &ctx);
+        return run_single_file_mode(&files[0], &ctx, completion);
     }
 
-    run_multi_file_mode(&files, args.report.as_deref(), &ctx)
+    run_multi_file_mode(&files, args.report.as_deref(), &ctx, completion)
+}
+
+/// The files a run selected, and the selected inputs lost before any is read:
+/// a file named on the command line in a language knots cannot analyse, or a
+/// compile_commands.json entry that is not on disk. A file that the user's own
+/// scope (`--language`, excludes) leaves out is neither.
+fn select_files(
+    args: &Args,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+    exclude_path_patterns: &[regex::Regex],
+    language_filter: &Option<HashSet<&'static str>>,
+) -> Result<(Vec<PathBuf>, Vec<LostInput>)> {
+    if let Some(cc) = &args.compile_commands {
+        return load_compile_commands(cc, include_rules, exclude_rules);
+    }
+    if args.files.is_empty() {
+        anyhow::bail!("Either FILE or --compile-commands must be specified");
+    }
+    let mut files = Vec::new();
+    let mut lost = Vec::new();
+    for path in &args.files {
+        if let Some(unsupported) = unsupported_named_file(path) {
+            lost.push(unsupported);
+            continue;
+        }
+        files.extend(collect_files(
+            path,
+            args.recursive,
+            include_rules,
+            exclude_rules,
+            exclude_path_patterns,
+            language_filter,
+        )?);
+    }
+    Ok((files, lost))
+}
+
+/// A file named on the command line whose extension no language claims.
+fn unsupported_named_file(path: &Path) -> Option<LostInput> {
+    let supported = path.extension().is_some_and(is_parseable_extension);
+    (path.is_file() && !supported).then(|| {
+        LostInput::new(
+            path,
+            Stage::Unsupported,
+            "knots cannot analyse this file type (see --supported-languages)",
+        )
+    })
+}
+
+/// `--write-baseline`: snapshot every analysed function, unless the scan is
+/// incomplete. A baseline from a partial set would accept the missing files'
+/// functions as new the next time, so it is refused and the file is left as it
+/// was.
+fn run_write_baseline(
+    args: &Args,
+    all_metrics: &[FunctionMetrics],
+    completion: &Completion,
+) -> Result<()> {
+    let path = args
+        .baseline
+        .as_ref()
+        .expect("--write-baseline requires --baseline (enforced by clap)");
+    let report = args.completion_report.as_deref();
+    if !completion.is_complete() {
+        let refusal = anyhow::anyhow!(
+            "Refusing to write a baseline from an incomplete scan; {} is unchanged",
+            path.display()
+        );
+        return finish(completion, report, Err(refusal));
+    }
+    write_baseline(path, all_metrics)?;
+    eprintln!(
+        "Wrote baseline: {} function(s) -> {}",
+        all_metrics.len(),
+        path.display()
+    );
+    finish(completion, report, Ok(()))
 }
 
 fn run_structured_output_mode(
     format: OutputFormat,
     files: &[PathBuf],
     ctx: &RunContext,
+    mut completion: Completion,
 ) -> Result<()> {
-    let (mut all_metrics, _) = collect_all_metrics(
-        files,
-        &ctx.include_rules,
-        &ctx.exclude_rules,
-        &ctx.toml_exclude,
-        ctx.count_anonymous_closures,
-    );
-    compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
+    let mut all_metrics = ctx.collect_all_metrics(files, &mut completion);
+    compute_and_apply_file_coupling(files, ctx, &mut all_metrics, &mut completion);
     match format {
-        OutputFormat::Sarif => emit_sarif(&all_metrics),
+        OutputFormat::Sarif => emit_sarif(&all_metrics, &completion),
         OutputFormat::Json => emit_json(&all_metrics, ctx.score_components),
         OutputFormat::Ndjson => emit_ndjson(&all_metrics, ctx.score_components),
         OutputFormat::Csv => emit_csv(&all_metrics, ctx.score_components),
@@ -1238,103 +1340,94 @@ fn run_structured_output_mode(
     }?;
     // Gate after the document is complete: stdout stays one well-formed
     // document, and the violations go to stderr as in text mode.
-    check_thresholds(
+    let gate = check_thresholds(
         &all_metrics,
         &ctx.thresholds,
         ctx.baseline.as_ref(),
         ctx.changed.as_ref(),
-    )
+    );
+    ctx.finish(&completion, gate)
 }
 
-fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext) -> Result<()> {
-    let (mut all_metrics, skipped_files) = collect_all_metrics(
-        files,
-        &ctx.include_rules,
-        &ctx.exclude_rules,
-        &ctx.toml_exclude,
-        ctx.count_anonymous_closures,
-    );
-
+fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext, mut completion: Completion) -> Result<()> {
+    let mut all_metrics = ctx.collect_all_metrics(files, &mut completion);
     if all_metrics.is_empty() {
-        anyhow::bail!(
-            "No functions found in any files (skipped {} files)",
-            skipped_files
-        );
+        return ctx.finish(&completion, Err(no_functions_found()));
     }
-    compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
+    compute_and_apply_file_coupling(files, ctx, &mut all_metrics, &mut completion);
     if !ctx.quiet {
-        display_testability_matrix(&all_metrics, files.len(), skipped_files);
+        display_testability_matrix(&all_metrics, &completion);
     }
-    check_thresholds(
+    let gate = check_thresholds(
         &all_metrics,
         &ctx.thresholds,
         ctx.baseline.as_ref(),
         ctx.changed.as_ref(),
-    )
+    );
+    ctx.finish(&completion, gate)
 }
 
-fn run_single_file_mode(file: &Path, ctx: &RunContext) -> Result<()> {
-    let source_code = fs::read_to_string(file)
-        .with_context(|| format!("Failed to read file: {}", file.display()))?;
-    let (tree, source_code) = parse_file(file, &source_code)?;
+fn no_functions_found() -> anyhow::Error {
+    anyhow::anyhow!("No functions found in any files")
+}
 
-    let mut metrics = collect_function_metrics(
-        &tree,
-        &source_code,
-        file.to_str().unwrap_or(""),
+fn run_single_file_mode(file: &Path, ctx: &RunContext, mut completion: Completion) -> Result<()> {
+    let analysis = analyse_file(
+        file,
         &ctx.include_rules,
         &ctx.exclude_rules,
         ctx.count_anonymous_closures,
     );
+    let mut metrics = absorb(file, analysis, &mut completion);
     metrics.retain(|f| !config::exclude_matches(&ctx.toml_exclude, &f.file_path, &f.name));
 
     if !ctx.quiet {
-        analyze_code(&metrics, ctx.verbose)?;
+        // A lost file's empty summary would read as a measured zero.
+        if completion.is_complete() {
+            analyze_code(&metrics, ctx.verbose)?;
+        }
+        display_files_line(&completion);
     }
-    check_thresholds(
+    let gate = check_thresholds(
         &metrics,
         &ctx.thresholds,
         ctx.baseline.as_ref(),
         ctx.changed.as_ref(),
-    )
+    );
+    ctx.finish(&completion, gate)
 }
 
-fn run_multi_file_mode(files: &[PathBuf], report: Option<&Path>, ctx: &RunContext) -> Result<()> {
-    let (mut all_metrics, skipped_files) = collect_all_metrics(
-        files,
-        &ctx.include_rules,
-        &ctx.exclude_rules,
-        &ctx.toml_exclude,
-        ctx.count_anonymous_closures,
-    );
-
+fn run_multi_file_mode(
+    files: &[PathBuf],
+    report: Option<&Path>,
+    ctx: &RunContext,
+    mut completion: Completion,
+) -> Result<()> {
+    let mut all_metrics = ctx.collect_all_metrics(files, &mut completion);
     if all_metrics.is_empty() {
-        anyhow::bail!(
-            "No functions found in any files (skipped {} files)",
-            skipped_files
-        );
+        return ctx.finish(&completion, Err(no_functions_found()));
     }
 
-    let coupling = compute_and_apply_file_coupling(files, ctx, &mut all_metrics);
-    let duplicate_groups = recursive_duplicate_groups(files, ctx);
+    let coupling = compute_and_apply_file_coupling(files, ctx, &mut all_metrics, &mut completion);
+    let duplicate_groups = recursive_duplicate_groups(files, ctx, &mut completion);
     write_side_outputs(report, ctx, &all_metrics, &duplicate_groups)?;
 
     if !ctx.quiet {
         display_recursive_summary(
             &all_metrics,
-            files.len(),
-            skipped_files,
+            &completion,
             report,
             coupling.as_deref(),
             duplicate_groups.as_ref(),
         );
     }
-    check_thresholds(
+    let gate = check_thresholds(
         &all_metrics,
         &ctx.thresholds,
         ctx.baseline.as_ref(),
         ctx.changed.as_ref(),
-    )
+    );
+    ctx.finish(&completion, gate)
 }
 
 /// Load file paths from compile_commands.json
@@ -1342,7 +1435,7 @@ fn load_compile_commands(
     compile_commands_path: &Path,
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
-) -> Result<Vec<PathBuf>> {
+) -> Result<(Vec<PathBuf>, Vec<LostInput>)> {
     let content = fs::read_to_string(compile_commands_path).with_context(|| {
         format!(
             "Failed to read compile_commands.json: {}",
@@ -1358,42 +1451,50 @@ fn load_compile_commands(
     })?;
 
     let mut files = Vec::new();
-
-    for cmd in commands {
-        let file_path = PathBuf::from(&cmd.file);
-
-        // Only process supported source files
-        if let Some(ext) = file_path.extension() {
-            if is_source_extension(ext) {
-                let file_str = file_path.to_string_lossy();
-                if should_process_file(&file_str, include_rules, exclude_rules) {
-                    // Use absolute path if available, otherwise relative
-                    if file_path.is_absolute() {
-                        files.push(file_path);
-                    } else {
-                        // Try to make it absolute using the directory from compile command
-                        let abs_path = if !cmd.directory.is_empty() {
-                            PathBuf::from(&cmd.directory).join(&file_path)
-                        } else {
-                            file_path.clone()
-                        };
-
-                        if abs_path.exists() {
-                            files.push(abs_path);
-                        } else if file_path.exists() {
-                            files.push(file_path);
-                        }
-                    }
-                }
-            }
+    let mut missing = Vec::new();
+    for cmd in &commands {
+        match compile_entry_file(cmd, include_rules, exclude_rules) {
+            Some(Ok(file)) => files.push(file),
+            Some(Err(lost)) => missing.push(lost),
+            None => {}
         }
     }
 
-    if files.is_empty() {
+    if files.is_empty() && missing.is_empty() {
         anyhow::bail!("No supported source files found in compile_commands.json");
     }
 
-    Ok(files)
+    Ok((files, missing))
+}
+
+/// One compile_commands.json entry's file: `None` when it is out of scope (not
+/// a source extension, or filtered out), else its path on disk, or its loss
+/// when the file is not there. A relative path is tried under the entry's
+/// directory first, then as given.
+fn compile_entry_file(
+    cmd: &CompileCommand,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+) -> Option<std::result::Result<PathBuf, LostInput>> {
+    let file_path = PathBuf::from(&cmd.file);
+    let in_scope = file_path.extension().is_some_and(is_source_extension)
+        && should_process_file(&file_path.to_string_lossy(), include_rules, exclude_rules);
+    if !in_scope {
+        return None;
+    }
+    let candidates = if file_path.is_absolute() || cmd.directory.is_empty() {
+        vec![file_path]
+    } else {
+        vec![PathBuf::from(&cmd.directory).join(&file_path), file_path]
+    };
+    let found = candidates.iter().find(|p| p.exists()).cloned();
+    Some(found.ok_or_else(|| {
+        LostInput::new(
+            &candidates[0],
+            Stage::Missing,
+            "listed in compile_commands.json, but not on disk",
+        )
+    }))
 }
 
 /// Whether `--language` (`filter`, when given) keeps a file with `ext`. Folded,
@@ -1502,56 +1603,103 @@ fn should_process_file(
     true
 }
 
-/// Collect FunctionMetrics across multiple files, skipping unreadable/unparseable ones.
-/// Returns (metrics, skipped_file_count). Used by SARIF mode.
+/// Collect FunctionMetrics across multiple files. A file that cannot be read,
+/// parsed or analysed is recorded in `completion` as lost, and the rest of the
+/// scan goes on without it.
 fn collect_all_metrics(
     files: &[PathBuf],
     include_rules: &Option<FilterRules>,
     exclude_rules: &Option<FilterRules>,
     toml_exclude: &[config::FilterExclude],
     count_anonymous_closures: bool,
-) -> (Vec<FunctionMetrics>, usize) {
-    let skipped = AtomicUsize::new(0);
-    let mut all_metrics: Vec<FunctionMetrics> = files
+    completion: &mut Completion,
+) -> Vec<FunctionMetrics> {
+    let analyses: Vec<FileAnalysis> = files
         .par_iter()
-        .flat_map(|file| {
-            let source_code = match fs::read_to_string(file) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Warning: Skipping {}: {}", file.display(), e);
-                    skipped.fetch_add(1, Ordering::Relaxed);
-                    return Vec::new();
-                }
-            };
-            let (tree, source_code) = match parse_file(file, &source_code) {
-                Ok(t) => t,
-                Err(_) => {
-                    let hint = if file
-                        .extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("h"))
-                    {
-                        " (if this file contains C++, rename to .hpp)"
-                    } else {
-                        ""
-                    };
-                    eprintln!("Warning: Failed to parse {}{}", file.display(), hint);
-                    skipped.fetch_add(1, Ordering::Relaxed);
-                    return Vec::new();
-                }
-            };
-            collect_function_metrics(
-                &tree,
-                &source_code,
-                file.to_str().unwrap_or(""),
-                include_rules,
-                exclude_rules,
-                count_anonymous_closures,
-            )
-        })
+        .map(|file| analyse_file(file, include_rules, exclude_rules, count_anonymous_closures))
+        .collect();
+    let mut all_metrics: Vec<FunctionMetrics> = files
+        .iter()
+        .zip(analyses)
+        .flat_map(|(file, analysis)| absorb(file, analysis, completion))
         .collect();
     all_metrics.retain(|f| !config::exclude_matches(toml_exclude, &f.file_path, &f.name));
     all_metrics.sort_by(|a, b| a.file_path.cmp(&b.file_path).then(a.name.cmp(&b.name)));
-    (all_metrics, skipped.load(Ordering::Relaxed))
+    all_metrics
+}
+
+/// One file's function metrics, with whether it parsed only with syntax
+/// errors and yielded no function; or why the file was lost.
+type FileAnalysis = std::result::Result<(Vec<FunctionMetrics>, bool), LostInput>;
+
+/// Reads, parses and measures one file, with a panic contained to the file.
+fn analyse_file(
+    file: &Path,
+    include_rules: &Option<FilterRules>,
+    exclude_rules: &Option<FilterRules>,
+    count_anonymous_closures: bool,
+) -> FileAnalysis {
+    contain(file, || {
+        let source_code = fs::read_to_string(file)
+            .map_err(|e| LostInput::new(file, Stage::Read, e.to_string()))?;
+        let (tree, source_code) = parse_file(file, &source_code)
+            .map_err(|_| LostInput::new(file, Stage::Parse, parse_failure_reason(file)))?;
+        let metrics = collect_function_metrics(
+            &tree,
+            &source_code,
+            file.to_str().unwrap_or(""),
+            include_rules,
+            exclude_rules,
+            count_anonymous_closures,
+        );
+        let recovered = metrics.is_empty()
+            && tree.root_node().has_error()
+            && !has_function_node(&tree, &source_code);
+        Ok((metrics, recovered))
+    })
+    .and_then(|analysis| analysis)
+}
+
+/// Records one file's outcome in `completion` and returns its metrics.
+fn absorb(
+    file: &Path,
+    analysis: FileAnalysis,
+    completion: &mut Completion,
+) -> Vec<FunctionMetrics> {
+    match analysis {
+        Ok((metrics, recovered)) => {
+            if recovered {
+                completion.recover_no_functions(file);
+            }
+            metrics
+        }
+        Err(lost) => {
+            completion.lose(lost);
+            Vec::new()
+        }
+    }
+}
+
+fn parse_failure_reason(file: &Path) -> String {
+    let hint = if file
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("h"))
+    {
+        " (if this file contains C++, rename to .hpp)"
+    } else {
+        ""
+    };
+    format!("no grammar could parse it{hint}")
+}
+
+/// Whether the tree has any function node, named or not, so that a file
+/// whose functions are all filtered out is not taken for one with none.
+fn has_function_node(tree: &Tree, source_code: &str) -> bool {
+    let mut found = false;
+    visit_functions(&mut tree.root_node().walk(), source_code, &mut |_, _| {
+        found = true;
+    });
+    found
 }
 
 /// Gates the Ce/Ca/Instability pass behind `--recursive` (see
@@ -1559,9 +1707,10 @@ fn collect_all_metrics(
 fn recursive_file_coupling(
     files: &[PathBuf],
     ctx: &RunContext,
+    completion: &mut Completion,
 ) -> Option<Vec<knots::FileCoupling>> {
     ctx.recursive
-        .then(|| collect_import_graph(files).coupling())
+        .then(|| collect_import_graph(files, completion).coupling())
 }
 
 /// Computes file-level Ce/Ca/Instability (when `--recursive`) and folds Ce
@@ -1570,22 +1719,40 @@ fn recursive_file_coupling(
 fn compute_and_apply_file_coupling(
     files: &[PathBuf],
     ctx: &RunContext,
-    all_metrics: &mut [FunctionMetrics],
+    all_metrics: &mut Vec<FunctionMetrics>,
+    completion: &mut Completion,
 ) -> Option<Vec<knots::FileCoupling>> {
-    let coupling = recursive_file_coupling(files, ctx)?;
+    let mut coupling = recursive_file_coupling(files, ctx, completion)?;
+    // A lost file is still a target, so its importers' Ce is exact; its own
+    // imports are unknown, so it has no row, and a file first lost here drops
+    // the records it had, rather than keep a Ce that is not its own.
+    coupling.retain(|c| !completion.is_lost(&c.file_path));
+    all_metrics.retain(|f| !completion.is_lost(&f.file_path));
     knots::apply_file_ce_to_aird(all_metrics, &coupling);
     Some(coupling)
 }
 
 /// Phase 1 of the Ce/Ca/Instability pass: parse every file and extract its
-/// raw import list via the substrate, skipping unreadable/unparseable files
-/// (silently — `collect_all_metrics` already warns about the same files).
-/// Phase 2 (`ImportGraph::coupling`) resolves those into corpus-internal
-/// edges and derives the metrics.
-fn collect_import_graph(files: &[PathBuf]) -> knots::ImportGraph {
-    let per_file: Vec<FileImports> = files
+/// raw import list via the substrate. A lost file stays in the graph with no
+/// imports of its own, so that an import of it still resolves, and a file
+/// sharing its stem does not become an unambiguous target. Phase 2
+/// (`ImportGraph::coupling`) resolves those into corpus-internal edges and
+/// derives the metrics.
+fn collect_import_graph(files: &[PathBuf], completion: &mut Completion) -> knots::ImportGraph {
+    let known: &Completion = completion;
+    let outcomes: Vec<_> = files
         .par_iter()
-        .filter_map(|file| extract_file_imports(file))
+        .map(|file| contained_file_imports(file, known))
+        .collect();
+    let per_file: Vec<FileImports> = files
+        .iter()
+        .zip(outcomes)
+        .map(|(file, outcome)| {
+            outcome.unwrap_or_else(|lost| {
+                completion.lose(lost);
+                FileImports::path_only(file)
+            })
+        })
         .collect();
     knots::build_import_graph_with_rust_uses(import_refs(&per_file), &rust_use_map(&per_file))
 }
@@ -1614,6 +1781,15 @@ struct FileImports {
 }
 
 impl FileImports {
+    /// A file whose imports are unknown: a target, with no edges of its own.
+    fn path_only(file: &Path) -> Self {
+        FileImports {
+            path: file.to_str().unwrap_or("").to_string(),
+            imports: Vec::new(),
+            rust_uses: None,
+        }
+    }
+
     fn from_tree(file: &Path, tree: &Tree, source: &[u8], key: &str) -> Self {
         FileImports {
             path: file.to_str().unwrap_or("").to_string(),
@@ -1623,10 +1799,23 @@ impl FileImports {
     }
 }
 
+/// One file's imports for the graph, with a panic contained to the file; a
+/// file already lost, or one with nothing to extract, is a path-only target.
+fn contained_file_imports(
+    file: &Path,
+    completion: &Completion,
+) -> std::result::Result<FileImports, LostInput> {
+    if completion.is_lost(&file.to_string_lossy()) {
+        return Ok(FileImports::path_only(file));
+    }
+    contain(file, || {
+        extract_file_imports(file).unwrap_or_else(|| FileImports::path_only(file))
+    })
+}
+
 /// Parses one file and extracts its imports, or `None` if it can't be
-/// read, parsed, or matched to a compiled-in language — mirroring
-/// `collect_all_metrics`'s skip-on-failure behavior, but silently, since
-/// that function already warns about the same files.
+/// read, parsed, or matched to a compiled-in language. `collect_all_metrics`
+/// has already recorded any such file as lost.
 fn extract_file_imports(file: &Path) -> Option<FileImports> {
     let source_code = fs::read_to_string(file).ok()?;
     let (tree, source_code) = parse_file(file, &source_code).ok()?;
@@ -1646,9 +1835,10 @@ fn extract_file_imports(file: &Path) -> Option<FileImports> {
 fn recursive_duplicate_groups(
     files: &[PathBuf],
     ctx: &RunContext,
+    completion: &mut Completion,
 ) -> Option<duplicates::DuplicateGroupsResult> {
     (ctx.recursive && ctx.find_duplicates).then(|| {
-        let fingerprints = collect_corpus_fingerprints(files, ctx.duplicate_tier);
+        let fingerprints = collect_corpus_fingerprints(files, ctx.duplicate_tier, completion);
         let mut result = duplicates::find_duplicate_groups(&fingerprints, ctx.duplicate_filters);
         annotate_diffs(&mut result.groups);
         result
@@ -1784,6 +1974,7 @@ fn build_run_context(
         duplicate_tier: duplicate_tier_for(args.tier),
         duplicate_filters: duplicate_filters_from(args),
         dump_duplicates: args.dump_duplicates.clone(),
+        completion_report: args.completion_report.clone(),
     })
 }
 
@@ -1810,16 +2001,28 @@ fn resolve_changed(args: &Args) -> Result<Option<ChangedLines>> {
 /// conditional/switch-shaped subtrees inside them — see `--tier`), skipping
 /// unreadable/unparseable files silently — `collect_all_metrics` already
 /// warns about the same files.
+/// Fingerprints every file not already lost; a file whose fingerprinting
+/// panics is lost and contributes none.
 fn collect_corpus_fingerprints(
     files: &[PathBuf],
     tier: lang_parsing_substrate::FingerprintTier,
+    completion: &mut Completion,
 ) -> Vec<lang_parsing_substrate::CorpusFingerprint<String>> {
     let fingerprint_fn = fingerprint_walker(tier);
-    files
+    let known: &Completion = completion;
+    let outcomes: Vec<_> = files
         .par_iter()
-        .filter_map(|file| extract_file_fingerprints(file, fingerprint_fn))
-        .flatten()
-        .collect()
+        .filter(|file| !known.is_lost(&file.to_string_lossy()))
+        .map(|file| contain(file, || extract_file_fingerprints(file, fingerprint_fn)))
+        .collect();
+    let mut fingerprints = Vec::new();
+    for outcome in outcomes {
+        match outcome {
+            Ok(found) => fingerprints.extend(found.into_iter().flatten()),
+            Err(lost) => completion.lose(lost),
+        }
+    }
+    fingerprints
 }
 
 /// The substrate walk that fingerprints at `tier`'s granularity — see
@@ -3766,7 +3969,7 @@ class C {
         // Ce edge from the .c file to the .h file it #includes.
         let dir = write_c_header_fixture("header_coupling_test");
         let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
-        let coupling = collect_import_graph(&files).coupling();
+        let coupling = collect_import_graph(&files, &mut Completion::default()).coupling();
         std::fs::remove_dir_all(&dir).ok();
 
         assert_eq!(
@@ -3807,7 +4010,7 @@ class C {
     fn fixture_crate_ce() -> HashMap<String, u32> {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("sample-files/rust_crate");
         let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
-        let coupling = collect_import_graph(&files).coupling();
+        let coupling = collect_import_graph(&files, &mut Completion::default()).coupling();
         coupling
             .iter()
             .map(|c| (path_in(&dir, &c.file_path), c.ce))

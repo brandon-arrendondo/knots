@@ -8,16 +8,19 @@ You passed a directory without ``-r``::
 
     knots -r path/to/directory/
 
-"Warning: Skipping <file>: stream did not contain valid UTF-8"
---------------------------------------------------------------
+"Warning: Not analysed (read): <file>: stream did not contain valid UTF-8"
+--------------------------------------------------------------------------
 
-The file has encoding issues. Knots continues processing other files.
+The file has encoding issues. Knots goes on with the other files, but the
+scan is incomplete, so it exits 3.
 
 Convert the file to UTF-8::
 
     iconv -f ISO-8859-1 -t UTF-8 file.c > file_utf8.c
 
-Or pass this positive pattern in a JSON ``--exclude`` filter:
+Or leave the file out of the scan with ``--exclude-path``, or with this
+positive pattern in a JSON ``--exclude`` filter, so the scan is complete
+again:
 
 .. code-block:: json
 

@@ -5505,20 +5505,6 @@
     },
     {
       "file": "src/main.rs",
-      "function": "main",
-      "mccabe": 22,
-      "cognitive": 14,
-      "nesting": 3,
-      "sloc": 122,
-      "abc_magnitude": 55.154328932550705,
-      "return_count": 7,
-      "aird": 32,
-      "aicp": 84,
-      "external_calls": 23,
-      "unreachable_blocks": 0
-    },
-    {
-      "file": "src/main.rs",
       "function": "new",
       "mccabe": 1,
       "cognitive": 0,
@@ -5641,6 +5627,20 @@
       "aird": 8,
       "aicp": 36,
       "external_calls": 12,
+      "unreachable_blocks": 0
+    },
+    {
+      "file": "src/main.rs",
+      "function": "run",
+      "mccabe": 22,
+      "cognitive": 14,
+      "nesting": 3,
+      "sloc": 122,
+      "abc_magnitude": 55.154328932550705,
+      "return_count": 7,
+      "aird": 32,
+      "aicp": 84,
+      "external_calls": 23,
       "unreachable_blocks": 0
     },
     {

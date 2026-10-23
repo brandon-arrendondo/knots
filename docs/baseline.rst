@@ -97,6 +97,11 @@ The file is normally generated, not hand-edited. ``--write-baseline`` requires
 ``--baseline <FILE>`` (it names the file to write) and works with any
 ``--format``.
 
+``--write-baseline`` refuses an incomplete scan. If any selected file was not
+analysed, knots names it, leaves the baseline file as it was, and exits 3:
+the missing file's functions would read as new on the next run. Fix the file,
+or exclude it explicitly, then write the baseline again.
+
 Notes & limitations
 -------------------
 

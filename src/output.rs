@@ -11,6 +11,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+use crate::completion::Completion;
 use knots::complexity::{aird_file_ce_multiplier, calculate_aird_raw};
 use knots::{FileCoupling, FunctionMetrics};
 
@@ -324,8 +325,9 @@ pub(crate) fn path_to_sarif_uri(file_path: &str) -> String {
 
 /// Emit a SARIF 2.1.0 log to stdout describing functions whose max(McCabe, Cognitive)
 /// exceeds the healthy threshold (>10). One result per offending function.
-pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics]) -> Result<()> {
-    let rules = json!([
+/// The one SARIF rule knots reports against.
+fn sarif_rules() -> serde_json::Value {
+    json!([
         {
             "id": "knots/high-complexity",
             "name": "HighComplexity",
@@ -336,7 +338,11 @@ pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics]) -> Result<()> {
             "defaultConfiguration": { "level": "note" },
             "helpUri": "https://github.com/brandon-arrendondo/knots"
         }
-    ]);
+    ])
+}
+
+pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics], completion: &Completion) -> Result<()> {
+    let rules = sarif_rules();
 
     let mut results = Vec::new();
     for func in all_metrics {
@@ -399,6 +405,7 @@ pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics]) -> Result<()> {
                     "rules": rules
                 }
             },
+            "invocations": [sarif_invocation(completion)],
             "results": results
         }]
     });
@@ -408,6 +415,43 @@ pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics]) -> Result<()> {
     serde_json::to_writer_pretty(&mut handle, &log).context("Failed to write SARIF JSON")?;
     writeln!(handle)?;
     Ok(())
+}
+
+/// The run's SARIF `invocation`: `executionSuccessful` is false when a
+/// selected file was not analysed, and each such file, and each file that
+/// yielded no function from a parse with syntax errors, is a notification.
+fn sarif_invocation(completion: &Completion) -> serde_json::Value {
+    let lost = completion.lost().iter().map(|l| {
+        sarif_notification(
+            "error",
+            "knots/input-not-analysed",
+            &l.file,
+            &format!("Not analysed ({}): {}", l.stage.name(), l.reason),
+        )
+    });
+    let recovered = completion.recovered_no_functions().iter().map(|file| {
+        sarif_notification(
+            "warning",
+            "knots/no-functions-recovered",
+            file,
+            "Parsed with syntax errors, and no function was recovered",
+        )
+    });
+    json!({
+        "executionSuccessful": completion.is_complete(),
+        "toolExecutionNotifications": lost.chain(recovered).collect::<Vec<_>>()
+    })
+}
+
+fn sarif_notification(level: &str, id: &str, file: &str, text: &str) -> serde_json::Value {
+    json!({
+        "level": level,
+        "descriptor": { "id": id },
+        "message": { "text": text },
+        "locations": [{
+            "physicalLocation": { "artifactLocation": { "uri": path_to_sarif_uri(file) } }
+        }]
+    })
 }
 
 /// One function's JSON/NDJSON record. With `components` (`--score-components`)
@@ -683,8 +727,7 @@ pub(crate) fn write_detailed_report(
 
 pub(crate) fn display_recursive_summary(
     all_metrics: &[FunctionMetrics],
-    total_files: usize,
-    skipped_files: usize,
+    completion: &Completion,
     report_path: Option<&Path>,
     coupling: Option<&[FileCoupling]>,
     duplicate_groups: Option<&crate::duplicates::DuplicateGroupsResult>,
@@ -789,12 +832,42 @@ pub(crate) fn display_recursive_summary(
     if let Some(result) = duplicate_groups {
         display_duplicate_groups(result);
     }
-    println!("\n=== FILES PROCESSED ===\n");
-    println!("  Total files found: {}", total_files);
-    println!("  Successfully processed: {}", total_files - skipped_files);
-    if skipped_files > 0 {
-        println!("  Skipped (encoding/parse errors): {}", skipped_files);
+    display_cross_file_gap(completion, coupling.is_some() || duplicate_groups.is_some());
+    display_files_processed(completion);
+}
+
+/// Says, under the cross-file tables, that a lost file's own imports and
+/// duplicates are missing from them.
+fn display_cross_file_gap(completion: &Completion, cross_file: bool) {
+    if cross_file && !completion.is_complete() {
+        println!(
+            "\n  A file that was not analysed adds no imports or duplicates, so Ca,\n  Instability and the duplicate groups may be undercounted."
+        );
     }
+}
+
+/// The FILES PROCESSED block, printed in full on every multi-file run, so a
+/// zero is shown rather than left out.
+pub(crate) fn display_files_processed(completion: &Completion) {
+    println!("\n=== FILES PROCESSED ===\n");
+    println!("  Total files selected: {}", completion.selected());
+    println!("  Analysed: {}", completion.analysed());
+    println!("  Not analysed: {}", completion.lost().len());
+    println!(
+        "  Syntax errors, no functions recovered: {}",
+        completion.recovered_no_functions().len()
+    );
+}
+
+/// The one-line files summary of a single-file run.
+pub(crate) fn display_files_line(completion: &Completion) {
+    println!(
+        "  Files: {} selected, {} analysed, {} not analysed, {} with syntax errors and no functions recovered",
+        completion.selected(),
+        completion.analysed(),
+        completion.lost().len(),
+        completion.recovered_no_functions().len()
+    );
 }
 
 /// Prints the Ce/Ca/Instability file-coupling summary. Only files with at
@@ -978,11 +1051,7 @@ fn print_coupling_list(title: &str, items: &[&FileCoupling]) {
     }
 }
 
-pub(crate) fn display_testability_matrix(
-    all_metrics: &[FunctionMetrics],
-    total_files: usize,
-    skipped_files: usize,
-) {
+pub(crate) fn display_testability_matrix(all_metrics: &[FunctionMetrics], completion: &Completion) {
     let mut quick_wins = Vec::new();
     let mut invest_tests = Vec::new();
     let mut add_docs = Vec::new();
@@ -1093,13 +1162,5 @@ pub(crate) fn display_testability_matrix(
     println!("  Refactor:      {} functions", refactor.len());
     println!("  Total:         {} functions", all_metrics.len());
 
-    if total_files > 1 {
-        println!();
-        println!("=== FILES PROCESSED ===\n");
-        println!("  Total files found: {}", total_files);
-        println!("  Successfully processed: {}", total_files - skipped_files);
-        if skipped_files > 0 {
-            println!("  Skipped (encoding/parse errors): {}", skipped_files);
-        }
-    }
+    display_files_processed(completion);
 }

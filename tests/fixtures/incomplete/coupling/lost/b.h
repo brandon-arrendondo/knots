@@ -1,0 +1,1 @@
+ÿþint helper(void){ return 0; }

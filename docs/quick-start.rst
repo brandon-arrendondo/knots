@@ -82,9 +82,10 @@ Example output::
 
     === FILES PROCESSED ===
 
-      Total files found: 165
-      Successfully processed: 163
-      Skipped (encoding/parse errors): 2
+      Total files selected: 165
+      Analysed: 165
+      Not analysed: 0
+      Syntax errors, no functions recovered: 0
 
 For large codebases, add ``-j`` to analyse files in parallel::
 

@@ -135,3 +135,58 @@ force functions at or below 10 into SARIF. Use JSON/NDJSON for all records.
 to surface findings as PR annotations.
 
 **VS Code**: install the *SARIF Viewer* extension and open ``knots.sarif``.
+
+The run's ``invocations[0]`` says whether the scan was complete.
+``executionSuccessful`` is ``false`` when a selected file was not analysed
+(see :doc:`cli-reference`, Exit Status), and ``toolExecutionNotifications``
+holds one entry for each such file, at level ``error`` with descriptor
+``knots/input-not-analysed``. A file that parsed only with syntax errors and
+yielded no function gets a ``warning`` with descriptor
+``knots/no-functions-recovered``. A threshold violation does not make
+``executionSuccessful`` false.
+
+.. _completion-report:
+
+Completion report
+-----------------
+
+``--completion-report <FILE>`` writes what the scan analysed to ``FILE`` as
+JSON, whatever the ``--format``. The format's own output is unchanged, so
+JSON stays a bare array of records::
+
+    knots -r src --format json --completion-report completion.json
+
+.. code-block:: json
+
+    {
+      "complete": false,
+      "files": {
+        "selected": 3,
+        "analysed": 2,
+        "not_analysed": 1,
+        "recovered_no_functions": 1
+      },
+      "not_analysed": [
+        {
+          "file": "src/binary.c",
+          "stage": "read",
+          "reason": "stream did not contain valid UTF-8"
+        }
+      ],
+      "recovered_no_functions": ["src/bad.c"]
+    }
+
+``complete`` is ``false`` exactly when the run exits 3. ``stage`` is one of
+``read`` (unreadable, or not UTF-8), ``parse`` (no grammar could parse it),
+``crash`` (its analysis panicked), ``unsupported`` (named, in a language
+knots cannot analyse) and ``missing`` (listed in ``compile_commands.json``
+but not on disk). ``recovered_no_functions`` lists the files that parsed only
+with syntax errors and yielded no function; they count as analysed. Both
+lists are sorted by file. The report is written before knots exits, including
+when ``--write-baseline`` refuses an incomplete scan.
+
+In recursive mode a file that was not analysed still counts as an import
+target, so the Ce of each file that includes it is exact. Its own imports are
+unknown, so it has no coupling row, and the Ca and Instability of the files it
+would import, and the duplicate groups, may be undercounted; the text summary
+says so.

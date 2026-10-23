@@ -255,10 +255,9 @@ The archived runs covered three Fortran corpora. The lapack/SRC row
 superseded the single-row entry in the cross-language table above (same corpus,
 same run). All ``.f`` files were passed explicitly: they were explicit-only
 in the version measured, so recursive discovery did not include them. The
-current substrate does not support fixed-form Fortran, and the current knots
-reports nothing for a ``.f`` file passed explicitly: it prints no message and
-exits 0, even with a threshold set. These tables cannot be reproduced with the
-current release; ADR-0005 (proposed) treats such a file as lost input.
+current substrate does not support fixed-form Fortran, so knots now reports a
+``.f`` file passed explicitly as not analysed and exits 3. These tables cannot
+be reproduced with the current release.
 
 The corpora were LAPACK, fortran-stdlib and arpack-ng.
 

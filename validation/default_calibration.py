@@ -86,7 +86,9 @@ def run_knots(binary, files):
         proc = subprocess.run([binary, "--format", "ndjson", "--score-components",
                                *files[i:i + 400]],
                               capture_output=True, text=True)
-        if proc.returncode not in (0, 1):  # 1 = a threshold failed; none is passed
+        # 1 = a threshold failed (none is passed); 3 = a file was not analysed,
+        # and a calibration from a partial set is refused.
+        if proc.returncode not in (0, 1):
             sys.exit(f"knots failed: {proc.stderr[-800:]}")
         records += [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
     return records

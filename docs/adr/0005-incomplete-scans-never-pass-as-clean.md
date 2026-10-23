@@ -1,6 +1,8 @@
 # ADR-0005: An incomplete scan is reported and never passes as clean
 
-**Status:** Proposed, 2026-10-08. Target policy; implementation is separate.
+**Status:** Proposed, 2026-10-08. The contract below was set on 2026-10-22,
+and the change that states it implements it, except for work budgets
+(Decision 3).
 
 ## Context
 
@@ -20,10 +22,9 @@ limits. Losing one unit's result should not discard unrelated completed work,
 but a partial score is not a measured zero. Neither passing a gate nor writing
 a baseline should conceal that gap.
 
-This ADR defines the target. It does not claim that knots already provides
-panic containment, enforces budgets or exports incomplete-scan metadata. The
-current CLI and exit statuses remain documented in the CLI reference until
-code lands.
+This ADR defined the target first; the contract below was chosen for it
+before the CLI documentation changed. The CLI reference documents the exit
+statuses and the completion report.
 
 ## Decision
 
@@ -70,6 +71,49 @@ Documented approximations are not automatically runtime incompleteness. Keep
 known departures recorded under [ADR-0001](0001-the-definition-is-the-authority.md).
 Distinguish a deliberate defined calculation from an execution that did not
 finish that calculation; any unsound or truncated fallback must be visible.
+
+## Contract
+
+Chosen on 2026-10-22, before the CLI documentation changed (Decisions 4
+and 5).
+
+1. **Exit status 3 means incomplete.** At least one selected file was not
+   analysed. It applies whether or not a threshold is set and outranks status
+   1; violations among the analysed functions are still listed. Statuses 0, 1
+   and 2 keep their meanings: 1 for a threshold violation or an error that
+   stops the run, and 2 for invalid arguments, which clap reports. Status 3
+   is the same in every tool of the suite, as in aurora-lint ADR-0017. There
+   is no flag to accept an incomplete scan: excluding a file puts it out of
+   scope, and that is the way to pass a scan that cannot read it.
+2. **What is lost.** A selected file is lost when it cannot be read or is not
+   UTF-8, when no grammar can parse it, when its analysis panics, when it was
+   named on the command line with an extension no language claims, or when
+   `compile_commands.json` lists it but it is not on disk. A file that the
+   user's own `-l`, `--exclude-path`, include or exclude rules or
+   `knots.toml` excludes leave out is not selected, even when it is named.
+3. **Syntax errors alone are not a loss.** A file that parses only with
+   syntax errors and yields no function counts as analysed. It is named on
+   stderr, counted as "recovered, no functions", and listed in the completion
+   data, because headers with unexpanded macros routinely parse that way.
+4. **Completion data.** Every scan's stderr names each lost file and ends with
+   a line saying how many of the selected files were not analysed. The text
+   summary always prints the selected, analysed, not-analysed and
+   recovered-no-functions counts, zeros included. SARIF's `invocations[0]`
+   carries `executionSuccessful` and one `toolExecutionNotifications` entry
+   per lost or recovered file. The JSON, NDJSON and CSV documents are
+   unchanged; `--completion-report FILE` writes the same data as one JSON
+   object for any format.
+5. **Baselines.** `--write-baseline` refuses an incomplete scan, leaves the
+   baseline file unchanged and exits 3.
+6. **Cross-file facts.** A lost file stays in the import graph as a target
+   with no imports of its own, so its importers' Ce is what a complete scan
+   gives, and a stem it shares stays ambiguous. It has no coupling row of its
+   own, and the text summary says that Ca, Instability and the duplicate
+   groups may be undercounted. A file first lost in the import or duplicate
+   pass drops its function records.
+
+Budgets (Decision 3) are not implemented: knots has none, and none is set
+without evidence from knots inputs.
 
 ## Consequences
 

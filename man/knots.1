@@ -214,11 +214,15 @@ Exit 1 if any function exceeds this unreachable basic-block count (C/C++/Rust on
 .B \-\-report FILE
 Write detailed per-function output in multi-file text mode. Ignored in single-file, matrix and structured modes.
 .TP
+.B \-\-completion\-report FILE
+Write what the scan analysed, and each selected file it could not analyse and why, as JSON; works with any format.
+.TP
 .B \-\-baseline FILE
 Gate only new over-threshold functions or regressions relative to this snapshot.
 .TP
 .B \-\-write\-baseline
 Write current scores to --baseline and exit without gating; requires --baseline.
+Refused, exit 3, when any selected file was not analysed.
 .TP
 .B \-\-since REF
 Gate functions overlapping lines changed between REF and the working tree. Output selection is unchanged.
@@ -296,17 +300,21 @@ Cognitive complexity:
 .SH EXIT STATUS
 .TP
 .B 0
-Successful analysis, no threshold violations.
+Every selected file was analysed, and no threshold was violated.
 .TP
 .B 1
-Error occurred (file not found, parse error, configuration error), or one or more
-threshold violations were detected (when any \fB\-\-*\-threshold\fR flag is set).
+One or more threshold violations (when any \fB\-\-*\-threshold\fR flag is set,
+in any format), or an error that stops the run (path not found, configuration
+error, no functions found in a multi-file scan).
 .TP
 .B 2
 Command-line usage error.
-.PP
-Multi-file scans currently warn and skip unreadable or unparseable files.
-Exit 0 does not guarantee every discovered input was analyzed.
+.TP
+.B 3
+Incomplete scan: at least one selected file could not be read, parsed or
+analysed, or was named with an unsupported extension, or is listed in
+compile_commands.json but missing. Applies with or without a threshold and
+outranks status 1. Files left out by \fB\-l\fR or excludes are not selected.
 .SH EXAMPLES
 Analyze a single file:
 .RS
