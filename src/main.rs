@@ -23,7 +23,7 @@ mod duplicate_diff;
 mod duplicates;
 mod output;
 use completion::{
-    contain, finish, Completion, IncompleteScan, InvocationError, LostInput, Stage,
+    conclude, contain, finish, Completion, IncompleteScan, InvocationError, LostInput, Stage,
     INCOMPLETE_EXIT, INVOCATION_EXIT,
 };
 use config::KnotsToml;
@@ -547,6 +547,15 @@ impl RunContext {
 
     fn finish(&self, completion: &Completion, gate: Result<()>) -> Result<()> {
         finish(completion, self.completion_report.as_deref(), gate)
+    }
+
+    /// Ends a multi-file text run that measured nothing, still showing what
+    /// was selected and lost.
+    fn finish_with_no_functions(&self, completion: &Completion) -> Result<()> {
+        if !self.quiet {
+            display_files_processed(completion);
+        }
+        self.finish(completion, Err(no_functions_found(completion)))
     }
 }
 
@@ -1295,9 +1304,11 @@ fn select_files(args: &Args, scope: &Scope) -> Result<(Vec<PathBuf>, Vec<LostInp
     };
     let (mut files, mut missing) =
         load_compile_commands(cc, scope.include_rules, scope.exclude_rules)?;
-    // knots.toml's whole-file excludes are scope here too, applied before any read.
-    files.retain(|f| !config::excludes_file(scope.toml_exclude, &f.to_string_lossy()));
-    missing.retain(|l| !config::excludes_file(scope.toml_exclude, &l.file));
+    // The whole scope applies to the compile database's entries too (-l,
+    // --exclude-path, knots.toml), before any is read.
+    let in_scope = |path: &Path| scope.keeps_language(path) && scope.keeps_path(path);
+    files.retain(|f| in_scope(f));
+    missing.retain(|l| in_scope(Path::new(&l.file)));
     Ok((files, missing))
 }
 
@@ -1392,20 +1403,29 @@ fn run_structured_output_mode(
         ctx.baseline.as_ref(),
         ctx.changed.as_ref(),
     );
+    // The report is written first, so that a failure to write it, which exits
+    // 1, is the status SARIF records too.
+    let written = completion.write_report(ctx.completion_report.as_deref());
+    let exit_code = if written.is_err() {
+        1
+    } else {
+        completion.exit_code(&gate)
+    };
     match format {
-        OutputFormat::Sarif => emit_sarif(&all_metrics, &completion, completion.exit_code(&gate)),
+        OutputFormat::Sarif => emit_sarif(&all_metrics, &completion, exit_code),
         OutputFormat::Json => emit_json(&all_metrics, ctx.score_components),
         OutputFormat::Ndjson => emit_ndjson(&all_metrics, ctx.score_components),
         OutputFormat::Csv => emit_csv(&all_metrics, ctx.score_components),
         OutputFormat::Text => Ok(()),
     }?;
-    ctx.finish(&completion, gate)
+    written?;
+    conclude(&completion, gate)
 }
 
 fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext, mut completion: Completion) -> Result<()> {
     let mut all_metrics = ctx.collect_all_metrics(files, &mut completion);
     if all_metrics.is_empty() {
-        return ctx.finish(&completion, Err(no_functions_found()));
+        return ctx.finish_with_no_functions(&completion);
     }
     compute_and_apply_file_coupling(files, ctx, &mut all_metrics, &mut completion);
     if !ctx.quiet {
@@ -1433,8 +1453,14 @@ fn drop_lost(
     }
 }
 
-fn no_functions_found() -> anyhow::Error {
-    anyhow::anyhow!("No functions found in any files")
+/// Why a multi-file run measured nothing: no selected file could be analysed,
+/// or the ones that were hold no function.
+fn no_functions_found(completion: &Completion) -> anyhow::Error {
+    if completion.analysed() == 0 {
+        anyhow::anyhow!("No selected file could be analysed")
+    } else {
+        anyhow::anyhow!("No functions found in any files")
+    }
 }
 
 fn run_single_file_mode(file: &Path, ctx: &RunContext, mut completion: Completion) -> Result<()> {
@@ -1471,7 +1497,7 @@ fn run_multi_file_mode(
 ) -> Result<()> {
     let mut all_metrics = ctx.collect_all_metrics(files, &mut completion);
     if all_metrics.is_empty() {
-        return ctx.finish(&completion, Err(no_functions_found()));
+        return ctx.finish_with_no_functions(&completion);
     }
 
     let mut coupling =

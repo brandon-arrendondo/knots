@@ -185,7 +185,11 @@ impl Completion {
         })
     }
 
-    fn write_report(&self, path: &Path) -> Result<()> {
+    /// Writes the `--completion-report` document to `path`, when one is given.
+    pub(crate) fn write_report(&self, path: Option<&Path>) -> Result<()> {
+        let Some(path) = path else {
+            return Ok(());
+        };
         let text = serde_json::to_string_pretty(&self.report())?;
         fs::write(path, text + "\n")
             .with_context(|| format!("Failed to write completion report: {}", path.display()))
@@ -220,9 +224,13 @@ pub(crate) fn finish(
     report: Option<&Path>,
     gate: Result<()>,
 ) -> Result<()> {
-    if let Some(path) = report {
-        completion.write_report(path)?;
-    }
+    completion.write_report(report)?;
+    conclude(completion, gate)
+}
+
+/// [`finish`] once the report is written: the gate's result, or
+/// [`IncompleteScan`] after printing the gate's error.
+pub(crate) fn conclude(completion: &Completion, gate: Result<()>) -> Result<()> {
     if completion.is_complete() {
         return gate;
     }

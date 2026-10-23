@@ -26,6 +26,10 @@ existing scores and gate results can move. See
   `sarif` as it does with text output: a violation exits 1 and is listed on
   stderr, after the full document is written. Previously a structured format
   ignored every threshold and exited 0.
+- With `--compile-commands`, `-l` and `--exclude-path` now apply to the
+  compile database's entries, as they do to named files and recursive
+  scans. Before, an entry in another language was analysed anyway, and an
+  excluded path was not left out.
 
 ### Changed
 

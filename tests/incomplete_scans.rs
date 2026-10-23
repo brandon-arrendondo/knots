@@ -351,6 +351,67 @@ fn a_missing_compile_commands_entry_is_lost() {
 }
 
 #[test]
+fn compile_commands_entries_obey_the_language_and_path_scope() {
+    let dir = fixture().join("compile");
+    let excluded = knots_in(
+        &dir,
+        &[
+            "--compile-commands",
+            "compile_commands.json",
+            "--exclude-path",
+            "gone",
+        ],
+    );
+    assert_eq!(excluded.status.code(), Some(0), "{}", stderr(&excluded));
+    let other_language = knots_in(
+        &dir,
+        &[
+            "--compile-commands",
+            "compile_commands.json",
+            "-l",
+            "python",
+        ],
+    );
+    assert_eq!(
+        other_language.status.code(),
+        Some(0),
+        "{}",
+        stderr(&other_language)
+    );
+    assert!(
+        !stdout(&other_language).contains("ok"),
+        "good.c is out of scope"
+    );
+}
+
+#[test]
+fn a_run_with_no_analysable_file_says_so_and_shows_its_counts() {
+    let output = knots(&["named/A.Z"]);
+    assert_eq!(output.status.code(), Some(3));
+    assert!(
+        stdout(&output).contains("Analysed: 0"),
+        "{}",
+        stdout(&output)
+    );
+    assert!(stderr(&output).contains("No selected file could be analysed"));
+}
+
+#[test]
+fn sarif_records_exit_1_when_the_completion_report_cannot_be_written() {
+    let unwritable = std::env::temp_dir().join("knots-no-such-dir/report.json");
+    let output = knots(&[
+        "src/good.c",
+        "--format",
+        "sarif",
+        "--completion-report",
+        unwritable.to_str().unwrap(),
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    let sarif: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(sarif["runs"][0]["invocations"][0]["exitCode"], 1);
+}
+
+#[test]
 fn write_baseline_refuses_an_incomplete_scan_and_leaves_the_file_alone() {
     let path = scratch("baseline");
     fs::write(&path, "previous").unwrap();
