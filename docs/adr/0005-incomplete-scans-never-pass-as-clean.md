@@ -1,8 +1,8 @@
 # ADR-0005: An incomplete scan is reported and never passes as clean
 
-**Status:** Proposed, 2026-10-08. The contract below was set on 2026-10-22,
-and the change that states it implements it, except for work budgets
-(Decision 3).
+**Status:** Accepted, 2026-10-23 (Brandon Arrendondo), implemented in knots
+2.0.0 except for work budgets (Decision 3). Proposed 2026-10-08; the contract
+below was set on 2026-10-22.
 
 ## Context
 

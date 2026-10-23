@@ -6,7 +6,7 @@ counting rule is listed under Changed, even when it corrects a bug, because
 existing scores and gate results can move. See
 [ADR-0004](docs/adr/0004-changelog-is-for-users.md).
 
-## Unreleased
+## 2.0.0 - 2026-10-23
 
 ### Added
 
