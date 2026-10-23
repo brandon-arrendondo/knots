@@ -37,7 +37,8 @@ Options
 
 ``-q``, ``--quiet``
     Suppress normal output, retaining threshold-violation lines. Exit status
-    still reflects violations.
+    still reflects violations (1) and an incomplete scan (3), and the lines
+    naming each file not analysed are still printed.
 
 ``--count-anonymous-closures``
     Emit anonymous functions as independent entries with synthesized labels
@@ -315,7 +316,10 @@ Exit Status
     ``--since`` / ``--changed`` only touched functions are checked.
 
 ``2``
-    Invalid arguments (e.g. ``--write-baseline`` without ``--baseline``).
+    The run cannot start as invoked: invalid arguments (e.g.
+    ``--write-baseline`` without ``--baseline``), or a path named on the
+    command line that does not exist. Nothing is analysed and no
+    ``--completion-report`` is written.
 
 ``3``
     The scan is incomplete: at least one selected file was not analysed.
@@ -333,13 +337,17 @@ A file is *selected* when discovery finds it under a directory passed with
 - its analysis panics (the rest of the scan goes on without it);
 - it was named on the command line with an extension no language claims
   (see ``--supported-languages``);
-- it was named on the command line, or ``compile_commands.json`` lists it,
-  but it is not on disk.
+- ``compile_commands.json`` lists it, but it is not on disk;
+- a recursive walk cannot reach it: a directory knots cannot read counts as
+  one file not analysed, and so does a dangling symlink with a source-file
+  extension. A symlink loop loses nothing, since its target is walked
+  anyway.
 
 A file that your own scope leaves out (``-l``, ``--exclude-path``,
-``--include``/``--exclude`` rules, or ``knots.toml`` excludes) is not
-selected, so it never makes a scan incomplete, even when it is named. To
-pass a scan that loses a file, exclude that file explicitly. An empty
+``--include``/``--exclude`` rules, or a ``knots.toml`` ``[[filter.exclude]]``
+entry with no ``function_patterns``) is not selected, so it never makes a
+scan incomplete, even when it is named, and it is left out before it is
+read. To pass a scan that loses a file, exclude that file explicitly. An empty
 file, or a valid file with no functions, is analysed. A file that parses
 only with syntax errors and yields no function is analysed too, and is
 reported on stderr and counted separately ("Syntax errors, no functions

@@ -125,13 +125,189 @@ fn a_named_file_knots_cannot_analyse_is_lost() {
 }
 
 #[test]
-fn a_named_path_that_does_not_exist_is_lost() {
-    for args in [vec!["gone.c"], vec!["gone.c", "src/good.c"]] {
-        let (output, report) = completion_report("gone", &args);
-        assert_eq!(output.status.code(), Some(3), "{args:?}");
-        assert_eq!(report["not_analysed"][0]["file"], "gone.c");
-        assert_eq!(report["not_analysed"][0]["stage"], "missing");
+fn a_named_path_that_does_not_exist_is_an_invocation_error() {
+    for args in [vec!["gone.c"], vec!["src/good.c", "gone.c"]] {
+        let path = scratch("gone");
+        let mut all = args.clone();
+        all.extend(["--completion-report", path.to_str().unwrap()]);
+        let output = knots(&all);
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(stderr(&output).contains("Path 'gone.c' does not exist"));
+        assert!(
+            !path.exists(),
+            "{args:?}: a run that cannot start writes no report"
+        );
     }
+}
+
+#[test]
+fn an_excluded_named_file_is_not_lost() {
+    for args in [
+        vec!["--exclude-path", "A\\.Z", "named/A.Z"],
+        vec![
+            "--exclude",
+            "named/exclude-z.json",
+            "named/A.Z",
+            "src/good.c",
+        ],
+    ] {
+        let output = knots(&args);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{args:?}: {}",
+            stderr(&output)
+        );
+    }
+}
+
+#[test]
+fn a_file_knots_toml_excludes_is_not_read() {
+    // toml/knots.toml excludes toml/src/binary.c, which cannot be read.
+    let output = Command::new(env!("CARGO_BIN_EXE_knots"))
+        .current_dir(fixture().join("toml"))
+        .args(["-r", "src"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(!stderr(&output).contains("binary.c"));
+}
+
+#[test]
+fn every_selected_file_lost_still_writes_sarif_and_refuses_the_baseline() {
+    let output = knots(&["named/A.Z", "--format", "sarif"]);
+    assert_eq!(output.status.code(), Some(3));
+    let sarif: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let invocation = &sarif["runs"][0]["invocations"][0];
+    assert_eq!(invocation["exitCode"], 3);
+    assert_eq!(
+        invocation["toolExecutionNotifications"][0]["descriptor"]["id"],
+        "knots/input-not-analysed"
+    );
+    let path = scratch("never-written");
+    let output = knots(&[
+        "named/A.Z",
+        "--baseline",
+        path.to_str().unwrap(),
+        "--write-baseline",
+    ]);
+    assert_eq!(output.status.code(), Some(3));
+    assert!(
+        stderr(&output).contains("was not written"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(!path.exists());
+}
+
+#[test]
+fn sarif_carries_the_exit_status() {
+    let exit_code = |args: &[&str]| {
+        let output = knots(args);
+        let sarif: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let code = sarif["runs"][0]["invocations"][0]["exitCode"].clone();
+        (output.status.code(), code)
+    };
+    let sarif = ["--format", "sarif"];
+    assert_eq!(
+        exit_code(&[&["src/good.c"][..], &sarif].concat()),
+        (Some(0), 0.into())
+    );
+    assert_eq!(
+        exit_code(&[&["src/good.c", "--mccabe-threshold=1"][..], &sarif].concat()),
+        (Some(1), 1.into())
+    );
+    assert_eq!(
+        exit_code(&[&["-r", "src"][..], &sarif].concat()),
+        (Some(3), 3.into())
+    );
+}
+
+/// A tree with one readable file, a dangling `.c` symlink, a dangling `.txt`
+/// symlink and a directory knots cannot read, built at run time because a
+/// checkout cannot carry either.
+#[cfg(unix)]
+fn unreachable_tree(name: &str) -> PathBuf {
+    use std::os::unix::fs::symlink;
+    let root = std::env::temp_dir().join(format!("knots-{}-{name}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("locked")).unwrap();
+    fs::write(root.join("ok.c"), "int ok(void){ return 0; }\n").unwrap();
+    fs::write(root.join("locked/h.c"), "int h(void){ return 0; }\n").unwrap();
+    symlink("nowhere.c", root.join("dangling.c")).unwrap();
+    symlink("nowhere.txt", root.join("dangling.txt")).unwrap();
+    set_mode(&root.join("locked"), 0o000);
+    root
+}
+
+#[cfg(unix)]
+fn set_mode(path: &Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+/// Runs knots in `dir`.
+fn knots_in(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_knots"))
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+/// (file, stage) for each entry of a completion report's `not_analysed`.
+fn lost_entries(report: &serde_json::Value) -> Vec<(String, String)> {
+    report["not_analysed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| {
+            (
+                l["file"].as_str().unwrap().into(),
+                l["stage"].as_str().unwrap().into(),
+            )
+        })
+        .collect()
+}
+
+/// Scans `root` with a completion report, then with the unreachable paths
+/// excluded, and removes the tree.
+#[cfg(unix)]
+fn scan_unreachable_tree(root: &Path) -> (Output, serde_json::Value, Output) {
+    let report_path = root.with_extension("json");
+    let report_arg = report_path.to_str().unwrap();
+    let output = knots_in(root, &["-r", ".", "--completion-report", report_arg]);
+    let excluded = [
+        "-r",
+        ".",
+        "--exclude-path",
+        "locked",
+        "--exclude-path",
+        "dangling",
+    ];
+    let excluded = knots_in(root, &excluded);
+    set_mode(&root.join("locked"), 0o755);
+    let report = serde_json::from_str(&fs::read_to_string(&report_path).unwrap()).unwrap();
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_file(&report_path).unwrap();
+    (output, report, excluded)
+}
+
+#[cfg(unix)]
+#[test]
+fn what_the_walk_cannot_reach_is_lost() {
+    let root = unreachable_tree("walk");
+    // Root can still read the locked directory, so then it is not lost.
+    let readable = fs::read_dir(root.join("locked")).is_ok();
+    let (output, report, excluded) = scan_unreachable_tree(&root);
+
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let mut expected = vec![("./dangling.c".to_string(), "walk".to_string())];
+    if !readable {
+        expected.push(("./locked".into(), "walk".into()));
+    }
+    assert_eq!(lost_entries(&report), expected);
+    assert_eq!(excluded.status.code(), Some(0), "{}", stderr(&excluded));
 }
 
 #[test]

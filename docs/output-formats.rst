@@ -138,12 +138,16 @@ to surface findings as PR annotations.
 
 The run's ``invocations[0]`` says whether the scan was complete.
 ``executionSuccessful`` is ``false`` when a selected file was not analysed
-(see :doc:`cli-reference`, Exit Status), and ``toolExecutionNotifications``
-holds one entry for each such file, at level ``error`` with descriptor
-``knots/input-not-analysed``. A file that parsed only with syntax errors and
-yielded no function gets a ``warning`` with descriptor
-``knots/no-functions-recovered``. A threshold violation does not make
-``executionSuccessful`` false.
+(see :doc:`cli-reference`, Exit Status), and ``exitCode`` is the status
+knots exits with: 0, 1 for a threshold violation, or 3 for an incomplete
+scan. ``toolExecutionNotifications`` holds one entry for each file not
+analysed, at level ``error`` with descriptor ``knots/input-not-analysed``.
+A file that parsed only with syntax errors and yielded no function gets a
+``warning`` with descriptor ``knots/no-functions-recovered``. Both
+descriptors are declared in ``tool.driver.notifications``, and each
+notification refers to its descriptor by ``id`` and ``index``. A threshold
+violation does not make ``executionSuccessful`` false. The log is written
+even when every selected file was lost; it then has no results.
 
 .. _completion-report:
 
@@ -179,8 +183,10 @@ JSON stays a bare array of records::
 ``complete`` is ``false`` exactly when the run exits 3. ``stage`` is one of
 ``read`` (unreadable, or not UTF-8), ``parse`` (no grammar could parse it),
 ``crash`` (its analysis panicked), ``unsupported`` (named, in a language
-knots cannot analyse) and ``missing`` (named on the command line, or listed
-in ``compile_commands.json``, but not on disk). ``recovered_no_functions`` lists the files that parsed only
+knots cannot analyse), ``missing`` (listed in ``compile_commands.json`` but
+not on disk) and ``walk`` (a directory the recursive walk could not read, or a
+dangling symlink). A ``crash`` reason carries at most 200 characters of the
+panic message. ``recovered_no_functions`` lists the files that parsed only
 with syntax errors and yielded no function; they count as analysed. Both
 lists are sorted by file. The report is written before knots exits, including
 when ``--write-baseline`` refuses an incomplete scan.

@@ -91,4 +91,5 @@ than where you're running knots, paths may not resolve. Regenerate the
 compile database from the project root, or ensure ``directory`` fields
 contain absolute paths. Each entry whose file is not found is reported as
 ``Not analysed (missing)``, and the scan exits 3. A file the build generates
-must exist before knots runs.
+must exist before knots runs. A path named on the command line that does not
+exist is different: it stops the run with exit 2.

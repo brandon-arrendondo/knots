@@ -1,0 +1,3 @@
+# The unreadable file is out of scope, so the scan is complete.
+[[filter.exclude]]
+file_patterns = ["src/binary.c"]

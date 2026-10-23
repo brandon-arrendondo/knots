@@ -108,6 +108,17 @@ fn glob_match(pattern: &str, path: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether an entry excludes the whole of `file_path`: one with no function
+/// patterns whose file patterns match it (or are empty). Such a file is out
+/// of scope, so it is left out before it is read.
+pub fn excludes_file(rules: &[FilterExclude], file_path: &str) -> bool {
+    rules.iter().any(|r| {
+        r.function_patterns.is_empty()
+            && (r.file_patterns.is_empty()
+                || r.file_patterns.iter().any(|p| glob_match(p, file_path)))
+    })
+}
+
 /// Whether any `[[filter.exclude]]` entry matches `file_path` + `function_name`.
 pub fn exclude_matches(rules: &[FilterExclude], file_path: &str, function_name: &str) -> bool {
     rules.iter().any(|r| {

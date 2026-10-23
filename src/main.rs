@@ -22,7 +22,10 @@ mod config;
 mod duplicate_diff;
 mod duplicates;
 mod output;
-use completion::{contain, finish, Completion, IncompleteScan, LostInput, Stage, INCOMPLETE_EXIT};
+use completion::{
+    contain, finish, Completion, IncompleteScan, InvocationError, LostInput, Stage,
+    INCOMPLETE_EXIT, INVOCATION_EXIT,
+};
 use config::KnotsToml;
 use knots::{
     collect_function_metrics, is_parseable_extension, is_source_extension,
@@ -165,7 +168,8 @@ struct Args {
     baseline: Option<PathBuf>,
 
     /// Snapshot current per-function scores to the --baseline file and exit
-    /// without gating. Use to adopt the gate on a legacy codebase.
+    /// without gating. Use to adopt the gate on a legacy codebase. Refused,
+    /// with exit 3, when any selected file was not analysed.
     #[arg(long, requires = "baseline")]
     write_baseline: bool,
 
@@ -186,7 +190,8 @@ struct Args {
     explain: Option<ExplainMetric>,
 
     /// Suppress all output except threshold violation lines. Exit code is still
-    /// 1 when violations are found. Useful for edit→check loops and CI logs.
+    /// 1 when violations are found, and 3 when a selected file was not
+    /// analysed. Useful for edit→check loops and CI logs.
     #[arg(long, short = 'q')]
     quiet: bool,
 
@@ -1135,6 +1140,8 @@ fn main() -> std::process::ExitCode {
             eprintln!("Error: {err:?}");
             let code = if err.is::<IncompleteScan>() {
                 INCOMPLETE_EXIT
+            } else if err.is::<InvocationError>() {
+                INVOCATION_EXIT
             } else {
                 1
             };
@@ -1170,21 +1177,26 @@ fn run() -> Result<()> {
         })
         .collect();
     let language_filter = resolve_language_filter(&args.languages)?;
+    // Optional knots.toml — walked up from cwd. All fields optional; CLI
+    // flags below always win over anything loaded here.
+    let knots_toml = KnotsToml::discover(&std::env::current_dir()?)?;
+    let toml_exclude: Vec<config::FilterExclude> = knots_toml
+        .as_ref()
+        .map(|c| c.filter.exclude.clone())
+        .unwrap_or_default();
 
-    let (files, lost) = select_files(
-        &args,
-        &include_rules,
-        &exclude_rules,
-        &exclude_path_patterns,
-        &language_filter,
-    )?;
+    let scope = Scope {
+        include_rules: &include_rules,
+        exclude_rules: &exclude_rules,
+        exclude_path_patterns: &exclude_path_patterns,
+        language_filter: &language_filter,
+        toml_exclude: &toml_exclude,
+    };
+    let (files, lost) = select_files(&args, &scope)?;
     if files.is_empty() && lost.is_empty() {
         return Ok(());
     }
     let mut completion = Completion::new(files.len(), lost);
-    if files.is_empty() {
-        return finish(&completion, args.completion_report.as_deref(), Ok(()));
-    }
 
     let cli_thresholds = Thresholds {
         mccabe: args.mccabe_threshold,
@@ -1198,13 +1210,6 @@ fn run() -> Result<()> {
         external_calls: args.external_calls_threshold,
         unreachable_blocks: args.unreachable_blocks_threshold,
     };
-    // Optional knots.toml — walked up from cwd. All fields optional; CLI
-    // flags above always win over anything loaded here.
-    let knots_toml = KnotsToml::discover(&std::env::current_dir()?)?;
-    let toml_exclude: Vec<config::FilterExclude> = knots_toml
-        .as_ref()
-        .map(|c| c.filter.exclude.clone())
-        .unwrap_or_default();
     let thresholds = EffectiveThresholds::new(cli_thresholds, &knots_toml);
 
     // Write-baseline mode: snapshot every analyzed function and exit without
@@ -1245,51 +1250,87 @@ fn run() -> Result<()> {
     run_multi_file_mode(&files, args.report.as_deref(), &ctx, completion)
 }
 
-/// The files a run selected, and the selected inputs lost before any is read:
-/// a path named on the command line that does not exist, a file named in a
-/// language knots cannot analyse, or a compile_commands.json entry that is not
-/// on disk. A file that the user's own
-/// scope (`--language`, excludes) leaves out is neither.
-fn select_files(
-    args: &Args,
-    include_rules: &Option<FilterRules>,
-    exclude_rules: &Option<FilterRules>,
-    exclude_path_patterns: &[regex::Regex],
-    language_filter: &Option<HashSet<&'static str>>,
-) -> Result<(Vec<PathBuf>, Vec<LostInput>)> {
-    if let Some(cc) = &args.compile_commands {
-        return load_compile_commands(cc, include_rules, exclude_rules);
+/// What the user's own scope admits: `-l`, `--exclude-path`, the include and
+/// exclude rule files, and knots.toml's whole-file excludes. A file outside it
+/// is not selected, so it never makes a scan incomplete, even when named; and
+/// it is left out before it is read.
+struct Scope<'a> {
+    include_rules: &'a Option<FilterRules>,
+    exclude_rules: &'a Option<FilterRules>,
+    exclude_path_patterns: &'a [regex::Regex],
+    language_filter: &'a Option<HashSet<&'static str>>,
+    toml_exclude: &'a [config::FilterExclude],
+}
+
+impl Scope<'_> {
+    /// Whether the path rules keep `path`: everything but the language.
+    fn keeps_path(&self, path: &Path) -> bool {
+        let path = path.to_string_lossy();
+        !path_is_excluded(&path, self.exclude_path_patterns)
+            && should_process_file(&path, self.include_rules, self.exclude_rules)
+            && !config::excludes_file(self.toml_exclude, &path)
     }
+
+    /// Whether `-l` keeps `path`; with no `-l`, every path.
+    fn keeps_language(&self, path: &Path) -> bool {
+        self.language_filter.is_none()
+            || path
+                .extension()
+                .is_some_and(|ext| language_allows(self.language_filter, ext))
+    }
+
+    /// Whether discovery takes `path` as a source file.
+    fn selects(&self, path: &Path) -> bool {
+        path.extension().is_some_and(is_parseable_extension)
+            && self.keeps_language(path)
+            && self.keeps_path(path)
+    }
+}
+
+/// The files a run selected, and the selected inputs lost before any is read.
+fn select_files(args: &Args, scope: &Scope) -> Result<(Vec<PathBuf>, Vec<LostInput>)> {
+    let Some(cc) = &args.compile_commands else {
+        return select_named_paths(args, scope);
+    };
+    let (mut files, mut missing) =
+        load_compile_commands(cc, scope.include_rules, scope.exclude_rules)?;
+    // knots.toml's whole-file excludes are scope here too, applied before any read.
+    files.retain(|f| !config::excludes_file(scope.toml_exclude, &f.to_string_lossy()));
+    missing.retain(|l| !config::excludes_file(scope.toml_exclude, &l.file));
+    Ok((files, missing))
+}
+
+/// The files the named paths select, and the inputs lost on the way: a named
+/// file knots cannot analyse, and what a recursive walk could not reach. A
+/// named path that does not exist is an invocation error, which exits 2.
+fn select_named_paths(args: &Args, scope: &Scope) -> Result<(Vec<PathBuf>, Vec<LostInput>)> {
     if args.files.is_empty() {
         anyhow::bail!("Either FILE or --compile-commands must be specified");
     }
     let mut files = Vec::new();
     let mut lost = Vec::new();
     for path in &args.files {
-        if let Some(named) = lost_named_path(path) {
-            lost.push(named);
+        if !path.exists() {
+            let message = format!("Path '{}' does not exist", path.display());
+            return Err(InvocationError(message).into());
+        }
+        if let Some(unsupported) = unsupported_named_file(path, scope) {
+            lost.push(unsupported);
             continue;
         }
-        files.extend(collect_files(
-            path,
-            args.recursive,
-            include_rules,
-            exclude_rules,
-            exclude_path_patterns,
-            language_filter,
-        )?);
+        let (found, walk_lost) = collect_files(path, args.recursive, scope)?;
+        files.extend(found);
+        lost.extend(walk_lost);
     }
     Ok((files, lost))
 }
 
-/// A path named on the command line that is lost before discovery: one that
-/// does not exist, or a file whose extension no language claims.
-fn lost_named_path(path: &Path) -> Option<LostInput> {
-    if !path.exists() {
-        return Some(LostInput::new(path, Stage::Missing, "does not exist"));
-    }
+/// A file named on the command line, inside the user's scope, whose extension
+/// no language claims.
+fn unsupported_named_file(path: &Path, scope: &Scope) -> Option<LostInput> {
     let supported = path.extension().is_some_and(is_parseable_extension);
-    (path.is_file() && !supported).then(|| {
+    let in_scope = scope.keeps_language(path) && scope.keeps_path(path);
+    (path.is_file() && in_scope && !supported).then(|| {
         LostInput::new(
             path,
             Stage::Unsupported,
@@ -1313,8 +1354,13 @@ fn run_write_baseline(
         .expect("--write-baseline requires --baseline (enforced by clap)");
     let report = args.completion_report.as_deref();
     if !completion.is_complete() {
+        let left = if path.exists() {
+            "is unchanged"
+        } else {
+            "was not written"
+        };
         let refusal = anyhow::anyhow!(
-            "Refusing to write a baseline from an incomplete scan; {} is unchanged",
+            "Refusing to write a baseline from an incomplete scan; {} {left}",
             path.display()
         );
         return finish(completion, report, Err(refusal));
@@ -1336,21 +1382,21 @@ fn run_structured_output_mode(
 ) -> Result<()> {
     let mut all_metrics = ctx.collect_all_metrics(files, &mut completion);
     compute_and_apply_file_coupling(files, ctx, &mut all_metrics, &mut completion);
-    match format {
-        OutputFormat::Sarif => emit_sarif(&all_metrics, &completion),
-        OutputFormat::Json => emit_json(&all_metrics, ctx.score_components),
-        OutputFormat::Ndjson => emit_ndjson(&all_metrics, ctx.score_components),
-        OutputFormat::Csv => emit_csv(&all_metrics, ctx.score_components),
-        OutputFormat::Text => Ok(()),
-    }?;
-    // Gate after the document is complete: stdout stays one well-formed
-    // document, and the violations go to stderr as in text mode.
+    // The gate runs first so SARIF can carry the exit status; its violations
+    // go to stderr, so stdout is still one well-formed document.
     let gate = check_thresholds(
         &all_metrics,
         &ctx.thresholds,
         ctx.baseline.as_ref(),
         ctx.changed.as_ref(),
     );
+    match format {
+        OutputFormat::Sarif => emit_sarif(&all_metrics, &completion, completion.exit_code(&gate)),
+        OutputFormat::Json => emit_json(&all_metrics, ctx.score_components),
+        OutputFormat::Ndjson => emit_ndjson(&all_metrics, ctx.score_components),
+        OutputFormat::Csv => emit_csv(&all_metrics, ctx.score_components),
+        OutputFormat::Text => Ok(()),
+    }?;
     ctx.finish(&completion, gate)
 }
 
@@ -1370,6 +1416,19 @@ fn run_matrix_mode(files: &[PathBuf], ctx: &RunContext, mut completion: Completi
         ctx.changed.as_ref(),
     );
     ctx.finish(&completion, gate)
+}
+
+/// Drops the records and coupling rows of files lost after they were
+/// measured, as a file first lost in the duplicate pass is.
+fn drop_lost(
+    completion: &Completion,
+    all_metrics: &mut Vec<FunctionMetrics>,
+    coupling: &mut Option<Vec<knots::FileCoupling>>,
+) {
+    all_metrics.retain(|f| !completion.is_lost(&f.file_path));
+    if let Some(rows) = coupling.as_mut() {
+        rows.retain(|c| !completion.is_lost(&c.file_path));
+    }
 }
 
 fn no_functions_found() -> anyhow::Error {
@@ -1413,8 +1472,10 @@ fn run_multi_file_mode(
         return ctx.finish(&completion, Err(no_functions_found()));
     }
 
-    let coupling = compute_and_apply_file_coupling(files, ctx, &mut all_metrics, &mut completion);
+    let mut coupling =
+        compute_and_apply_file_coupling(files, ctx, &mut all_metrics, &mut completion);
     let duplicate_groups = recursive_duplicate_groups(files, ctx, &mut completion);
+    drop_lost(&completion, &mut all_metrics, &mut coupling);
     write_side_outputs(report, ctx, &all_metrics, &duplicate_groups)?;
 
     if !ctx.quiet {
@@ -1514,71 +1575,85 @@ fn language_allows(filter: &Option<HashSet<&'static str>>, ext: &std::ffi::OsStr
 
 /// Collect files to process based on the path and recursive flag
 fn collect_files(
-    path: &PathBuf,
+    path: &Path,
     recursive: bool,
-    include_rules: &Option<FilterRules>,
-    exclude_rules: &Option<FilterRules>,
-    exclude_path_patterns: &[regex::Regex],
-    language_filter: &Option<HashSet<&'static str>>,
-) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-
-    let ext_allowed = |ext: &std::ffi::OsStr| language_allows(language_filter, ext);
-
+    scope: &Scope,
+) -> Result<(Vec<PathBuf>, Vec<LostInput>)> {
     if path.is_file() {
-        // Single file mode — accepts explicit-only extensions (e.g. .f, .h) in addition to
-        // recursive-discovery extensions. is_parseable_extension covers both sets.
-        let ext = path.extension();
-        let supported = ext.map(is_parseable_extension).unwrap_or(false);
-        if !supported || !ext.map(ext_allowed).unwrap_or(false) {
-            return Ok(files);
-        }
-        let file_str = path.to_string_lossy();
-        if !path_is_excluded(&file_str, exclude_path_patterns)
-            && should_process_file(&file_str, include_rules, exclude_rules)
-        {
-            files.push(path.clone());
-        }
-    } else if path.is_dir() {
-        if !recursive {
-            anyhow::bail!(
-                "Path '{}' is a directory. Use -r/--recursive to process directories recursively.",
-                path.display()
-            );
-        }
-
-        // Recursive directory mode - scan source files, respecting .gitignore
-        for entry in WalkBuilder::new(path)
-            .follow_links(true)
-            .build()
-            .filter_map(|e| e.ok())
-        {
-            let file_path = entry.path();
-            if file_path.is_file() {
-                if let Some(ext) = file_path.extension() {
-                    if is_parseable_extension(ext) && ext_allowed(ext) {
-                        let file_str = file_path.to_string_lossy();
-                        if !path_is_excluded(&file_str, exclude_path_patterns)
-                            && should_process_file(&file_str, include_rules, exclude_rules)
-                        {
-                            files.push(file_path.to_path_buf());
-                        }
-                    }
-                }
-            }
-        }
-
-        if files.is_empty() {
-            anyhow::bail!(
-                "No supported source files found in directory: {}",
-                path.display()
-            );
-        }
-    } else {
-        anyhow::bail!("Path '{}' does not exist", path.display());
+        // A named file accepts explicit-only extensions (e.g. .f, .h) as well as
+        // recursive-discovery ones; is_parseable_extension covers both sets.
+        let files = if scope.selects(path) {
+            vec![path.to_path_buf()]
+        } else {
+            Vec::new()
+        };
+        return Ok((files, Vec::new()));
     }
+    if !path.is_dir() {
+        anyhow::bail!(
+            "Path '{}' is neither a file nor a directory",
+            path.display()
+        );
+    }
+    if !recursive {
+        anyhow::bail!(
+            "Path '{}' is a directory. Use -r/--recursive to process directories recursively.",
+            path.display()
+        );
+    }
+    let (files, lost) = walk_dir(path, scope);
+    if files.is_empty() && lost.is_empty() {
+        anyhow::bail!(
+            "No supported source files found in directory: {}",
+            path.display()
+        );
+    }
+    Ok((files, lost))
+}
 
-    Ok(files)
+/// Recursive discovery under `root`, respecting .gitignore. What the walk
+/// cannot reach, a directory it cannot read or a dangling symlink, is lost at
+/// the walk when discovery would have taken it.
+fn walk_dir(root: &Path, scope: &Scope) -> (Vec<PathBuf>, Vec<LostInput>) {
+    let mut files = Vec::new();
+    let mut lost = Vec::new();
+    for entry in WalkBuilder::new(root).follow_links(true).build() {
+        match entry {
+            Ok(entry) if entry.path().is_file() && scope.selects(entry.path()) => {
+                files.push(entry.path().to_path_buf());
+            }
+            Ok(_) => {}
+            Err(err) => lost.extend(walk_loss(root, &err, scope)),
+        }
+    }
+    (files, lost)
+}
+
+/// The input one walk error loses. A path with an extension is lost only if
+/// discovery would have selected it; one without (a directory) only if the path
+/// rules keep it. A symlink loop or a malformed ignore file loses nothing.
+fn walk_loss(root: &Path, err: &ignore::Error, scope: &Scope) -> Option<LostInput> {
+    let (path, reason) = walk_error_cause(err)?;
+    let path = path.unwrap_or(root);
+    let selected = if path.extension().is_some() {
+        scope.selects(path)
+    } else {
+        scope.keeps_path(path)
+    };
+    selected.then(|| LostInput::new(path, Stage::Walk, reason))
+}
+
+/// The path and I/O cause of a walk error, or `None` for an error that loses
+/// no input.
+fn walk_error_cause(err: &ignore::Error) -> Option<(Option<&Path>, String)> {
+    match err {
+        ignore::Error::WithDepth { err, .. } => walk_error_cause(err),
+        ignore::Error::WithPath { path, err } => {
+            walk_error_cause(err).map(|(inner, reason)| (inner.or(Some(path.as_path())), reason))
+        }
+        ignore::Error::Io(e) => Some((None, e.to_string())),
+        _ => None,
+    }
 }
 
 fn path_is_excluded(path: &str, patterns: &[regex::Regex]) -> bool {
@@ -2003,11 +2078,9 @@ fn resolve_changed(args: &Args) -> Result<Option<ChangedLines>> {
 
 /// Phase 1 of the duplicate-detection pass: parse every file and fingerprint
 /// each subtree at the requested `tier` (whole functions, or the loop/
-/// conditional/switch-shaped subtrees inside them — see `--tier`), skipping
-/// unreadable/unparseable files silently — `collect_all_metrics` already
-/// warns about the same files.
-/// Fingerprints every file not already lost; a file whose fingerprinting
-/// panics is lost and contributes none.
+/// conditional/switch-shaped subtrees inside them — see `--tier`). A file
+/// already lost is skipped, and a file whose fingerprinting panics is lost and
+/// contributes none.
 fn collect_corpus_fingerprints(
     files: &[PathBuf],
     tier: lang_parsing_substrate::FingerprintTier,
@@ -3939,6 +4012,18 @@ class C {
         dir
     }
 
+    /// `collect_files -r` on `dir` with no scope rules at all.
+    fn collect_unscoped(dir: &Path) -> Vec<PathBuf> {
+        let scope = Scope {
+            include_rules: &None,
+            exclude_rules: &None,
+            exclude_path_patterns: &[],
+            language_filter: &None,
+            toml_exclude: &[],
+        };
+        collect_files(dir, true, &scope).unwrap().0
+    }
+
     #[test]
     fn test_collect_files_recursive_includes_headers() {
         // is_source_extension (extensions only) previously gated the
@@ -3946,7 +4031,7 @@ class C {
         // now accept explicit-only extensions here too, matching the
         // single-file-mode behavior it already had.
         let dir = write_c_header_fixture("header_inclusion_test");
-        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
+        let files = collect_unscoped(&dir);
         std::fs::remove_dir_all(&dir).ok();
 
         let has_header = files
@@ -3973,7 +4058,7 @@ class C {
         // collect_files in recursive mode, parsed, and resolved into a real
         // Ce edge from the .c file to the .h file it #includes.
         let dir = write_c_header_fixture("header_coupling_test");
-        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
+        let files = collect_unscoped(&dir);
         let coupling = collect_import_graph(&files, &mut Completion::default()).coupling();
         std::fs::remove_dir_all(&dir).ok();
 
@@ -4014,7 +4099,7 @@ class C {
     /// Ce of each file in the Rust fixture crate, keyed by its path in the crate.
     fn fixture_crate_ce() -> HashMap<String, u32> {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("sample-files/rust_crate");
-        let files = collect_files(&dir, true, &None, &None, &[], &None).unwrap();
+        let files = collect_unscoped(&dir);
         let coupling = collect_import_graph(&files, &mut Completion::default()).coupling();
         coupling
             .iter()

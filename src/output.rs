@@ -341,7 +341,11 @@ fn sarif_rules() -> serde_json::Value {
     ])
 }
 
-pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics], completion: &Completion) -> Result<()> {
+pub(crate) fn emit_sarif(
+    all_metrics: &[FunctionMetrics],
+    completion: &Completion,
+    exit_code: u8,
+) -> Result<()> {
     let rules = sarif_rules();
 
     let mut results = Vec::new();
@@ -402,10 +406,11 @@ pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics], completion: &Completio
                     "name": "knots",
                     "version": env!("CARGO_PKG_VERSION"),
                     "informationUri": "https://github.com/brandon-arrendondo/knots",
-                    "rules": rules
+                    "rules": rules,
+                    "notifications": sarif_notification_descriptors()
                 }
             },
-            "invocations": [sarif_invocation(completion)],
+            "invocations": [sarif_invocation(completion, exit_code)],
             "results": results
         }]
     });
@@ -417,14 +422,32 @@ pub(crate) fn emit_sarif(all_metrics: &[FunctionMetrics], completion: &Completio
     Ok(())
 }
 
+/// The notification descriptors [`sarif_invocation`] refers to, by index.
+const NOT_ANALYSED: (&str, usize) = ("knots/input-not-analysed", 0);
+const NO_FUNCTIONS_RECOVERED: (&str, usize) = ("knots/no-functions-recovered", 1);
+
+fn sarif_notification_descriptors() -> serde_json::Value {
+    json!([
+        {
+            "id": NOT_ANALYSED.0,
+            "shortDescription": { "text": "A selected file was not analysed, so the scan is incomplete" }
+        },
+        {
+            "id": NO_FUNCTIONS_RECOVERED.0,
+            "shortDescription": { "text": "A file parsed only with syntax errors and yielded no function" }
+        }
+    ])
+}
+
 /// The run's SARIF `invocation`: `executionSuccessful` is false when a
-/// selected file was not analysed, and each such file, and each file that
-/// yielded no function from a parse with syntax errors, is a notification.
-fn sarif_invocation(completion: &Completion) -> serde_json::Value {
+/// selected file was not analysed, `exitCode` is the run's exit status, and
+/// each such file, and each file that yielded no function from a parse with
+/// syntax errors, is a notification.
+fn sarif_invocation(completion: &Completion, exit_code: u8) -> serde_json::Value {
     let lost = completion.lost().iter().map(|l| {
         sarif_notification(
             "error",
-            "knots/input-not-analysed",
+            NOT_ANALYSED,
             &l.file,
             &format!("Not analysed ({}): {}", l.stage.name(), l.reason),
         )
@@ -432,21 +455,27 @@ fn sarif_invocation(completion: &Completion) -> serde_json::Value {
     let recovered = completion.recovered_no_functions().iter().map(|file| {
         sarif_notification(
             "warning",
-            "knots/no-functions-recovered",
+            NO_FUNCTIONS_RECOVERED,
             file,
             "Parsed with syntax errors, and no function was recovered",
         )
     });
     json!({
         "executionSuccessful": completion.is_complete(),
+        "exitCode": exit_code,
         "toolExecutionNotifications": lost.chain(recovered).collect::<Vec<_>>()
     })
 }
 
-fn sarif_notification(level: &str, id: &str, file: &str, text: &str) -> serde_json::Value {
+fn sarif_notification(
+    level: &str,
+    (id, index): (&str, usize),
+    file: &str,
+    text: &str,
+) -> serde_json::Value {
     json!({
         "level": level,
-        "descriptor": { "id": id },
+        "descriptor": { "id": id, "index": index },
         "message": { "text": text },
         "locations": [{
             "physicalLocation": { "artifactLocation": { "uri": path_to_sarif_uri(file) } }

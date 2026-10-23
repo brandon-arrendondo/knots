@@ -200,7 +200,7 @@ Print version information.
 List compiled languages and extensions, then exit; no files required.
 .TP
 .BR \-q ", " \-\-quiet
-Suppress normal output; retain threshold-violation lines.
+Suppress normal output; retain threshold-violation lines and the lines naming files not analysed.
 .TP
 .B \-\-count\-anonymous\-closures
 Emit anonymous functions as separate entries with synthesized labels. Default: off.
@@ -308,13 +308,16 @@ in any format), or an error that stops the run (configuration error, no
 functions found in a multi-file scan).
 .TP
 .B 2
-Command-line usage error.
+The run cannot start: a command-line usage error, or a named path that does
+not exist.
 .TP
 .B 3
 Incomplete scan: at least one selected file could not be read, parsed or
-analysed, or was named with an unsupported extension, or was named or is
-listed in compile_commands.json but is missing. Applies with or without a threshold and
-outranks status 1. Files left out by \fB\-l\fR or excludes are not selected.
+analysed, was named with an unsupported extension, is listed in
+compile_commands.json but missing, or could not be reached by the recursive
+walk (an unreadable directory or a dangling symlink). Applies with or without a threshold and
+outranks status 1. Files left out by \fB\-l\fR or excludes are not selected
+and are never read.
 .SH EXAMPLES
 Analyze a single file:
 .RS

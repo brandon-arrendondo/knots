@@ -33,22 +33,33 @@ existing scores and gate results can move. See
   a threshold is set, instead of 0 or 1. A file is not analysed when it
   cannot be read or is not UTF-8, no grammar can parse it, its analysis
   crashes, it is named with an extension knots does not support (such as
-  `a.txt`, or a fixed-form Fortran `.f`), or it is named or listed in
-  `compile_commands.json` but is not on disk. A named path that does not
-  exist used to exit 1. Each such file is named on stderr. Files that
-  `-l` or an exclude leaves out do not count; exclude a file to pass a scan
-  that cannot read it. A file that parses only with syntax errors and
-  yields no function is reported, but is not counted as not analysed.
-- The text summary always prints the selected, analysed and not-analysed
-  file counts, and the count of files with syntax errors and no functions,
-  including zeros. Its "Skipped (encoding/parse errors)" line is gone.
+  `a.txt`, or a fixed-form Fortran `.f`), `compile_commands.json` lists it
+  but it is not on disk, or a recursive scan cannot reach it (a directory
+  knots cannot read, or a dangling symlink). Each such file is named on
+  stderr. Files that `-l`, `--exclude-path`, an include or exclude file, or
+  a whole-file `knots.toml` exclude leaves out do not count and are never
+  read; exclude a file to pass a scan that cannot read it. A file that
+  parses only with syntax errors and yields no function is reported, but is
+  not counted as not analysed.
+- A path named on the command line that does not exist now exits 2, as an
+  invocation error, instead of 1.
+- The text summary's FILES PROCESSED block is renamed and always complete:
+  "Total files found" is now "Total files selected", "Successfully
+  processed" is now "Analysed", and the "Skipped (encoding/parse errors)"
+  line, printed only when nonzero, is replaced by "Not analysed" and
+  "Syntax errors, no functions recovered", printed even when zero.
+  Single-file runs print a one-line form of the same counts.
 - SARIF output carries `invocations`: `executionSuccessful` is false when a
-  selected file was not analysed, with one notification per such file.
+  selected file was not analysed, `exitCode` is the run's exit status, and
+  there is one notification per such file.
 - `--write-baseline` refuses a scan that could not analyse a selected file:
-  it leaves the baseline file unchanged and exits 3.
+  it leaves the baseline file as it was, or does not create it, and exits 3.
 - In recursive mode, a file that could not be analysed still counts as the
-  target of an `#include` or import, so the files that include it keep
-  their Ce and AIRD coupling factor.
+  target of an `#include` or import, and still makes a stem it shares with
+  another file ambiguous. In a scan that loses a file, the Ce and AIRD
+  coupling factor of the files around it can therefore rise or fall
+  compared with the previous release, which left the lost file out of the
+  import graph. They now match what a complete scan gives.
 
 ## 1.19.0 - 2026-10-19
 

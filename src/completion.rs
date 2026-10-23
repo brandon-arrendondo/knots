@@ -15,8 +15,27 @@ use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
 
 /// Exit status of a scan that left any selected file unanalysed. It outranks
-/// a threshold violation (1), and clap keeps 2 for invalid arguments.
+/// a threshold violation (1).
 pub(crate) const INCOMPLETE_EXIT: u8 = 3;
+
+/// Exit status of an invocation that cannot run: clap's invalid arguments,
+/// and a named path that does not exist.
+pub(crate) const INVOCATION_EXIT: u8 = 2;
+
+/// A run that cannot start as invoked; `main` maps it to [`INVOCATION_EXIT`].
+#[derive(Debug)]
+pub(crate) struct InvocationError(pub(crate) String);
+
+impl fmt::Display for InvocationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for InvocationError {}
+
+/// The most panic text a loss carries, in characters.
+const PANIC_TEXT_LIMIT: usize = 200;
 
 /// The step at which a selected file was lost.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -30,9 +49,11 @@ pub(crate) enum Stage {
     Crash,
     /// Named on the command line, in a language knots cannot analyse.
     Unsupported,
-    /// Named on the command line, or listed in compile_commands.json, but not
-    /// on disk.
+    /// Listed in compile_commands.json, but not on disk.
     Missing,
+    /// A recursive walk could not reach it: an unreadable directory, or a
+    /// dangling symlink.
+    Walk,
 }
 
 impl Stage {
@@ -43,6 +64,7 @@ impl Stage {
             Stage::Crash => "crash",
             Stage::Unsupported => "unsupported",
             Stage::Missing => "missing",
+            Stage::Walk => "walk",
         }
     }
 }
@@ -134,6 +156,16 @@ impl Completion {
         &self.recovered_no_functions
     }
 
+    /// The status a run ends with, given its gate's result: 3 when
+    /// incomplete, else 1 for a failed gate, else 0.
+    pub(crate) fn exit_code(&self, gate: &Result<()>) -> u8 {
+        match (self.is_complete(), gate.is_ok()) {
+            (false, _) => INCOMPLETE_EXIT,
+            (true, false) => 1,
+            (true, true) => 0,
+        }
+    }
+
     /// The `--completion-report` document.
     pub(crate) fn report(&self) -> serde_json::Value {
         let mut recovered = self.recovered_no_functions.clone();
@@ -217,7 +249,16 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
         .map(|s| s.to_string())
         .or_else(|| payload.downcast_ref::<String>().cloned())
         .unwrap_or_else(|| "unknown cause".to_string());
-    format!("analysis panicked: {text}")
+    format!("analysis panicked: {}", truncated(&text, PANIC_TEXT_LIMIT))
+}
+
+/// `text` cut to at most `limit` characters, never inside one, with an
+/// ellipsis when cut.
+fn truncated(text: &str, limit: usize) -> String {
+    match text.char_indices().nth(limit) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -231,6 +272,25 @@ mod tests {
         assert_eq!(lost.file, "a.c");
         assert_eq!(lost.reason, "analysis panicked: boom");
         assert_eq!(contain(Path::new("b.c"), || 7).unwrap(), 7);
+    }
+
+    #[test]
+    fn a_long_panic_text_is_cut_on_a_character_boundary() {
+        let long = "é".repeat(PANIC_TEXT_LIMIT + 5);
+        let lost = contain(Path::new("a.c"), || -> u32 { panic!("{long}") }).unwrap_err();
+        let text = lost.reason.trim_start_matches("analysis panicked: ");
+        assert_eq!(text.chars().count(), PANIC_TEXT_LIMIT + 1);
+        assert!(text.ends_with('…'));
+        assert_eq!(truncated("short", PANIC_TEXT_LIMIT), "short");
+    }
+
+    #[test]
+    fn the_exit_code_puts_incomplete_over_the_gate() {
+        let mut c = Completion::new(1, Vec::new());
+        assert_eq!(c.exit_code(&Ok(())), 0);
+        assert_eq!(c.exit_code(&Err(anyhow::anyhow!("v"))), 1);
+        c.lose(LostInput::new(Path::new("a.c"), Stage::Read, "x"));
+        assert_eq!(c.exit_code(&Err(anyhow::anyhow!("v"))), 3);
     }
 
     #[test]

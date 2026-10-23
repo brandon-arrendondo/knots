@@ -79,21 +79,28 @@ and 5).
 
 1. **Exit status 3 means incomplete.** At least one selected file was not
    analysed. It applies whether or not a threshold is set and outranks status
-   1; violations among the analysed functions are still listed. Statuses 0, 1
-   and 2 keep their meanings: 1 for a threshold violation or an error that
-   stops the run, and 2 for invalid arguments, which clap reports. Status 3
-   is the same in every tool of the suite, as in aurora-lint ADR-0017. There
-   is no flag to accept an incomplete scan: excluding a file puts it out of
-   scope, and that is the way to pass a scan that cannot read it.
-2. **What is lost.** A selected file is lost when it cannot be read or is not
-   UTF-8, when no grammar can parse it, when its analysis panics, when it was
-   named on the command line with an extension no language claims, or when
-   it was named on the command line, or `compile_commands.json` lists it,
-   but it is not on disk. A missing named path is lost rather than an error
-   that stops the run, so the status is the same as in the suite's other
-   tools. A file that the
-   user's own `-l`, `--exclude-path`, include or exclude rules or
-   `knots.toml` excludes leave out is not selected, even when it is named.
+   1; violations among the analysed functions are still listed. Status 1 is
+   a threshold violation or an error that stops the run. Status 2 is a run
+   that cannot start as invoked: invalid arguments, which clap reports, or a
+   path named on the command line that does not exist. Status 2 and status 3
+   mean the same in every tool of the suite, as in aurora-lint ADR-0017.
+   There is no flag to accept an incomplete scan: excluding a file puts it
+   out of scope, and that is the way to pass a scan that cannot read it.
+2. **What is lost.** A selected file is lost when:
+   - it cannot be read, or is not UTF-8;
+   - no grammar can parse it;
+   - its analysis panics;
+   - it was named on the command line with an extension no language claims;
+   - `compile_commands.json` lists it, but it is not on disk;
+   - the recursive walk cannot reach it: a directory it cannot read, or a
+     dangling symlink that discovery would have taken. A symlink loop loses
+     nothing.
+
+   A file that the user's own scope leaves out is not selected, even when it
+   is named: `-l`, `--exclude-path`, the include or exclude rules, or a
+   `knots.toml` exclude entry with no function patterns. The scope is applied
+   before any file is read, so an excluded file that cannot be read never
+   makes a scan incomplete.
 3. **Syntax errors alone are not a loss.** A file that parses only with
    syntax errors and yields no function counts as analysed. It is named on
    stderr, counted as "recovered, no functions", and listed in the completion
@@ -102,12 +109,14 @@ and 5).
    a line saying how many of the selected files were not analysed. The text
    summary always prints the selected, analysed, not-analysed and
    recovered-no-functions counts, zeros included. SARIF's `invocations[0]`
-   carries `executionSuccessful` and one `toolExecutionNotifications` entry
-   per lost or recovered file. The JSON, NDJSON and CSV documents are
+   carries `executionSuccessful`, the run's `exitCode`, and one
+   `toolExecutionNotifications` entry per lost or recovered file. The two
+   notification descriptors are declared on the driver. The SARIF log is
+   written even when every selected file was lost. The JSON, NDJSON and CSV documents are
    unchanged; `--completion-report FILE` writes the same data as one JSON
    object for any format.
 5. **Baselines.** `--write-baseline` refuses an incomplete scan, leaves the
-   baseline file unchanged and exits 3.
+   baseline file as it was (or does not create it) and exits 3.
 6. **Cross-file facts.** A lost file stays in the import graph as a target
    with no imports of its own, so its importers' Ce is what a complete scan
    gives, and a stem it shares stays ambiguous. It has no coupling row of its
