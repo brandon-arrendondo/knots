@@ -307,8 +307,8 @@ Exit Status
 
 ``1``
     One or more threshold violations when any ``--*-threshold`` flag is set,
-    in any ``--format``; or an error that stops the run (a path that does
-    not exist, an unreadable baseline or configuration, an unknown git ref
+    in any ``--format``; or an error that stops the run (an unreadable
+    baseline or configuration, an unknown git ref
     or not a git repository under ``--since`` / ``--changed``, or no
     functions found in any file of a multi-file scan). In ``--baseline``
     mode, only new or worsened functions count as violations; under
@@ -333,7 +333,8 @@ A file is *selected* when discovery finds it under a directory passed with
 - its analysis panics (the rest of the scan goes on without it);
 - it was named on the command line with an extension no language claims
   (see ``--supported-languages``);
-- ``compile_commands.json`` lists it, but it is not on disk.
+- it was named on the command line, or ``compile_commands.json`` lists it,
+  but it is not on disk.
 
 A file that your own scope leaves out (``-l``, ``--exclude-path``,
 ``--include``/``--exclude`` rules, or ``knots.toml`` excludes) is not

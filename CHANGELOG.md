@@ -33,8 +33,9 @@ existing scores and gate results can move. See
   a threshold is set, instead of 0 or 1. A file is not analysed when it
   cannot be read or is not UTF-8, no grammar can parse it, its analysis
   crashes, it is named with an extension knots does not support (such as
-  `a.txt`, or a fixed-form Fortran `.f`), or `compile_commands.json` lists
-  it but it is not on disk. Each such file is named on stderr. Files that
+  `a.txt`, or a fixed-form Fortran `.f`), or it is named or listed in
+  `compile_commands.json` but is not on disk. A named path that does not
+  exist used to exit 1. Each such file is named on stderr. Files that
   `-l` or an exclude leaves out do not count; exclude a file to pass a scan
   that cannot read it. A file that parses only with syntax errors and
   yields no function is reported, but is not counted as not analysed.

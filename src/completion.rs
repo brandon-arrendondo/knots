@@ -30,7 +30,8 @@ pub(crate) enum Stage {
     Crash,
     /// Named on the command line, in a language knots cannot analyse.
     Unsupported,
-    /// Listed in compile_commands.json, but not on disk.
+    /// Named on the command line, or listed in compile_commands.json, but not
+    /// on disk.
     Missing,
 }
 

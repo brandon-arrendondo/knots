@@ -179,8 +179,8 @@ JSON stays a bare array of records::
 ``complete`` is ``false`` exactly when the run exits 3. ``stage`` is one of
 ``read`` (unreadable, or not UTF-8), ``parse`` (no grammar could parse it),
 ``crash`` (its analysis panicked), ``unsupported`` (named, in a language
-knots cannot analyse) and ``missing`` (listed in ``compile_commands.json``
-but not on disk). ``recovered_no_functions`` lists the files that parsed only
+knots cannot analyse) and ``missing`` (named on the command line, or listed
+in ``compile_commands.json``, but not on disk). ``recovered_no_functions`` lists the files that parsed only
 with syntax errors and yielded no function; they count as analysed. Both
 lists are sorted by file. The report is written before knots exits, including
 when ``--write-baseline`` refuses an incomplete scan.

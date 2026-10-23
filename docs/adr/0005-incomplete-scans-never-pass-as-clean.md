@@ -88,7 +88,10 @@ and 5).
 2. **What is lost.** A selected file is lost when it cannot be read or is not
    UTF-8, when no grammar can parse it, when its analysis panics, when it was
    named on the command line with an extension no language claims, or when
-   `compile_commands.json` lists it but it is not on disk. A file that the
+   it was named on the command line, or `compile_commands.json` lists it,
+   but it is not on disk. A missing named path is lost rather than an error
+   that stops the run, so the status is the same as in the suite's other
+   tools. A file that the
    user's own `-l`, `--exclude-path`, include or exclude rules or
    `knots.toml` excludes leave out is not selected, even when it is named.
 3. **Syntax errors alone are not a loss.** A file that parses only with

@@ -1246,8 +1246,9 @@ fn run() -> Result<()> {
 }
 
 /// The files a run selected, and the selected inputs lost before any is read:
-/// a file named on the command line in a language knots cannot analyse, or a
-/// compile_commands.json entry that is not on disk. A file that the user's own
+/// a path named on the command line that does not exist, a file named in a
+/// language knots cannot analyse, or a compile_commands.json entry that is not
+/// on disk. A file that the user's own
 /// scope (`--language`, excludes) leaves out is neither.
 fn select_files(
     args: &Args,
@@ -1265,8 +1266,8 @@ fn select_files(
     let mut files = Vec::new();
     let mut lost = Vec::new();
     for path in &args.files {
-        if let Some(unsupported) = unsupported_named_file(path) {
-            lost.push(unsupported);
+        if let Some(named) = lost_named_path(path) {
+            lost.push(named);
             continue;
         }
         files.extend(collect_files(
@@ -1281,8 +1282,12 @@ fn select_files(
     Ok((files, lost))
 }
 
-/// A file named on the command line whose extension no language claims.
-fn unsupported_named_file(path: &Path) -> Option<LostInput> {
+/// A path named on the command line that is lost before discovery: one that
+/// does not exist, or a file whose extension no language claims.
+fn lost_named_path(path: &Path) -> Option<LostInput> {
+    if !path.exists() {
+        return Some(LostInput::new(path, Stage::Missing, "does not exist"));
+    }
     let supported = path.extension().is_some_and(is_parseable_extension);
     (path.is_file() && !supported).then(|| {
         LostInput::new(

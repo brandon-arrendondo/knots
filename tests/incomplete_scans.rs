@@ -125,6 +125,16 @@ fn a_named_file_knots_cannot_analyse_is_lost() {
 }
 
 #[test]
+fn a_named_path_that_does_not_exist_is_lost() {
+    for args in [vec!["gone.c"], vec!["gone.c", "src/good.c"]] {
+        let (output, report) = completion_report("gone", &args);
+        assert_eq!(output.status.code(), Some(3), "{args:?}");
+        assert_eq!(report["not_analysed"][0]["file"], "gone.c");
+        assert_eq!(report["not_analysed"][0]["stage"], "missing");
+    }
+}
+
+#[test]
 fn a_named_file_outside_the_language_scope_is_not_lost() {
     let output = knots(&["-l", "c", "scope/a.py", "src/good.c"]);
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));

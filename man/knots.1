@@ -304,16 +304,16 @@ Every selected file was analysed, and no threshold was violated.
 .TP
 .B 1
 One or more threshold violations (when any \fB\-\-*\-threshold\fR flag is set,
-in any format), or an error that stops the run (path not found, configuration
-error, no functions found in a multi-file scan).
+in any format), or an error that stops the run (configuration error, no
+functions found in a multi-file scan).
 .TP
 .B 2
 Command-line usage error.
 .TP
 .B 3
 Incomplete scan: at least one selected file could not be read, parsed or
-analysed, or was named with an unsupported extension, or is listed in
-compile_commands.json but missing. Applies with or without a threshold and
+analysed, or was named with an unsupported extension, or was named or is
+listed in compile_commands.json but is missing. Applies with or without a threshold and
 outranks status 1. Files left out by \fB\-l\fR or excludes are not selected.
 .SH EXAMPLES
 Analyze a single file:
