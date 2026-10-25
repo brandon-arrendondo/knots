@@ -60,10 +60,14 @@
 # Test quality checker - validates tests have sufficient complexity and boundary coverage
 # Default discovery: naming convention (test_foo.c / foo_test.c -> foo.c)
 # Ceedling users: add --framework=ceedling to use TEST_SOURCE_FILE macro instead
+# A failing test stops the commit (--level=error). Setting `args:` replaces
+# that, so keep --level=error in your own args, or use --level=warn to report
+# without blocking.
 - id: test-complexity
   name: Test Quality Check (Complexity & Boundaries)
   description: Validate unit tests have sufficient cyclomatic complexity and boundary coverage. Discovers source files via naming convention by default; use --framework=ceedling for Ceedling projects.
   entry: hooks/test-complexity-wrapper.sh
+  args: [--level=error]
   language: script
   files: (^|/)(test_[^/]+|[^/]+_test)\.(c|cpp|cc|cxx)$
   pass_filenames: true

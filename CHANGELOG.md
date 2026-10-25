@@ -33,6 +33,15 @@ existing scores and gate results can move. See
 - `pre-commit` and `pre-commit-warning-only` name a function once, as
   `file.c:7:name`, instead of repeating the file (`file.c:file.c:7:name`).
 
+### Changed
+
+- The published `test-complexity` pre-commit hook now blocks a commit whose
+  test fails a threshold: it runs at `--level=error`. Previously it ran at
+  `warn`, reporting the failure and passing. Setting `args:` replaces the
+  hook's own, so a configuration with `args:` and no `--level` reports
+  without blocking, as before; add `--level=error` to block, or
+  `--level=warn` to say so explicitly.
+
 ## 2.0.0 - 2026-10-23
 
 ### Added

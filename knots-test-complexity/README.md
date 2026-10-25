@@ -137,9 +137,12 @@ repos:
 **Configuration Options:**
 
 - `--threshold=0.70`: Minimum test-to-source complexity ratio (default: 0.70 = 70%)
-- `--level=warn`: Enforcement level (`warn` or `error`, default: `warn`). At
-  `warn` a failing test is reported but the hook passes, so the commit goes
-  ahead; use `error` for a failing test to stop the commit.
+- `--level`: Enforcement level, `warn` or `error`. At `error` a failing test
+  stops the commit; at `warn` it is reported and the commit goes ahead. The
+  published hook passes `--level=error`. Setting `args:` replaces that, so
+  include `--level=error` in your own args to keep blocking, or
+  `--level=warn` to opt out. Run directly, `knots-test-complexity` defaults
+  to `warn`.
 - `--no-check-boundaries`: Disable boundary value detection (enabled by default)
 - `--verbose`: Show detailed per-file analysis
 
