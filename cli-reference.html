@@ -397,6 +397,10 @@ file not analysed is named on stderr, and the last line of stderr says
 how many of the selected files were not analysed.</p>
 </dd>
 </dl>
+<p>A reader that closes stdout or stderr before knots is done writing, as
+<code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">-r</span> <span class="pre">src</span> <span class="pre">|</span> <span class="pre">head</span></code> or <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">-r</span> <span class="pre">src</span> <span class="pre">2&gt;&amp;1</span> <span class="pre">|</span> <span class="pre">head</span></code> does, leaves the
+status as above: that stream stops, and the other is written in full, so
+threshold violations are still listed on stderr when only stdout closed.</p>
 <p>A file is <em>selected</em> when discovery finds it under a directory passed with
 <code class="docutils literal notranslate"><span class="pre">-r</span></code>, when it is named on the command line, or when
 <code class="docutils literal notranslate"><span class="pre">compile_commands.json</span></code> lists it. A selected file is <em>not analysed</em> when:</p>

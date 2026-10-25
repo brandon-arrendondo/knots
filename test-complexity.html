@@ -144,6 +144,10 @@ not as evidence that every edge case is tested.</p>
 <span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--test-dir=Test</span>
 </pre></div>
 </div>
+<p>The hook runs at <code class="docutils literal notranslate"><span class="pre">--level=error</span></code>: a test below a threshold stops the
+commit. pre-commit replaces a hook’s <code class="docutils literal notranslate"><span class="pre">args</span></code> rather than adding to them, so
+when you set <code class="docutils literal notranslate"><span class="pre">args</span></code>, keep <code class="docutils literal notranslate"><span class="pre">--level=error</span></code> in them, as above, or use
+<code class="docutils literal notranslate"><span class="pre">--level=warn</span></code> to report a failing test without blocking the commit.</p>
 <p>The wrapper parses <code class="docutils literal notranslate"><span class="pre">TEST_SOURCE_FILE(&quot;path/to/source.c&quot;)</span></code> from Ceedling test
 files to locate the corresponding source automatically. Adjust <code class="docutils literal notranslate"><span class="pre">--test-dir</span></code>
 if your tests live in a non-default location (<code class="docutils literal notranslate"><span class="pre">test/</span></code>, <code class="docutils literal notranslate"><span class="pre">Tests/</span></code>, <code class="docutils literal notranslate"><span class="pre">tests/</span></code>).</p>
