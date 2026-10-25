@@ -99,7 +99,7 @@ git config --global hooks.knots.mccabe-threshold 10
 
 ```bash
 $ git commit -m "Add simple helper function"
-Running knots on C files...
+Running knots on staged files...
 
 ✓ All complexity checks passed
 [main abc1234] Add simple helper function
@@ -110,15 +110,12 @@ Running knots on C files...
 
 ```bash
 $ git commit -m "Add complex function"
-Running knots on C files...
+Running knots on staged files...
 
-✗ src/processor.c:process_data
+✗ src/processor.c:12:process_data
   McCabe Complexity: 18 (threshold: 15)
-✗ src/processor.c:process_data
+✗ src/processor.c:12:process_data
   Cognitive Complexity: 22 (threshold: 15)
-  Nesting Depth: 4
-  SLOC: 45
-  Return Count: 2
 
 Commit rejected: Complexity thresholds exceeded
 

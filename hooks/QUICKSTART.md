@@ -32,9 +32,9 @@ git add file.c
 git commit -m "Add feature"
 
 # If complexity is too high:
-# ✗ file.c:my_function
+# ✗ file.c:12:my_function
 #   McCabe Complexity: 18 (threshold: 15)
-# Commit rejected!
+# Commit rejected: Complexity thresholds exceeded
 
 # Emergency bypass (use sparingly!)
 git commit --no-verify -m "Emergency fix"

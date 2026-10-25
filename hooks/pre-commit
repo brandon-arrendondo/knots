@@ -25,13 +25,28 @@ GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
 # knots --format ndjson prints one JSON record per function, ordered by name.
-# This awk program prints "LINE<TAB>SEQ<TAB>LABEL<TAB>MESSAGE" for each metric
-# over its threshold, in the order the text report lists the metrics, and
-# breaches() sorts by LINE to put functions in source order, as the text report
-# does. LABEL is file:line:function, as the text report names a function, and
-# ABC is compared as the report shows it, to two decimal places. Reading the records, not the text report, keeps a change of
-# report layout from silently switching a threshold off.
-BREACHES_AWK='
+# Reading the records rather than the text report keeps a change of report
+# layout from silently switching a threshold off.
+#
+# NUM_AWK reads a numeric field of the record on the current line.
+NUM_AWK='
+function num(key,    p, s) {
+    p = index($0, "\"" key "\":")
+    if (p == 0) return ""
+    s = substr($0, p + length(key) + 3)
+    if (!match(s, /^-?[0-9][0-9.eE+-]*/)) return ""
+    return substr(s, 1, RLENGTH)
+}
+'
+
+# BREACHES_AWK prints "LINE<TAB>SEQ<TAB>LABEL<TAB>MESSAGE" for each metric
+# over its threshold, in the order the text report lists the metrics.
+# breaches() sorts by LINE, to put functions in source order as the report
+# does. LABEL is file:line:function, as the report names a function; a tab or
+# newline in it stays escaped (\t, \n), so it cannot split the line. ABC is
+# compared unrounded, as knots compares it, and shown to two decimal places,
+# as the report shows it.
+BREACHES_AWK="$NUM_AWK"'
 function str(key,    p, s, c, out) {
     p = index($0, "\"" key "\":\"")
     if (p == 0) return ""
@@ -43,9 +58,7 @@ function str(key,    p, s, c, out) {
         if (c == "\\") {
             c = substr(s, 2, 1)
             s = substr(s, 3)
-            if (c == "n") c = "\n"
-            else if (c == "t") c = "\t"
-            else if (c == "r") c = "\r"
+            if (c == "n" || c == "t" || c == "r") c = "\\" c
             else if (c == "u") { c = "?"; s = substr(s, 5) }
         } else {
             s = substr(s, 2)
@@ -54,16 +67,11 @@ function str(key,    p, s, c, out) {
     }
     return out
 }
-function num(key,    p, s) {
-    p = index($0, "\"" key "\":")
-    if (p == 0) return ""
-    s = substr($0, p + length(key) + 3)
-    if (!match(s, /^-?[0-9][0-9.eE+-]*/)) return ""
-    return substr(s, 1, RLENGTH)
-}
-function check(label, name, value, limit) {
-    if (value != "" && limit != "" && value + 0 > limit + 0)
-        printf "%s\t%d\t%s\t%s: %s (threshold: %s)\n", line + 0, ++seq, label, name, value, limit
+function check(label, name, value, limit, shown) {
+    if (value == "" || limit == "" || value + 0 <= limit + 0) return
+    if (shown == "") shown = value
+    printf "%s\t%d\t%s\t%s: %s (threshold: %s)\n", \
+        line + 0, ++seq, label, name, shown, limit
 }
 /^\{/ {
     line = num("start_line")
@@ -73,8 +81,8 @@ function check(label, name, value, limit) {
     check(label, "Nesting Depth", num("nesting"), nesting)
     check(label, "SLOC", num("sloc"), sloc)
     abc = num("abc_magnitude")
-    if (abc != "") abc = sprintf("%.2f", abc)
-    check(label, "ABC Magnitude", abc, abc_limit)
+    shown = abc == "" ? "" : sprintf("%.2f", abc)
+    check(label, "ABC Magnitude", abc, abc_limit, shown)
     check(label, "Return Count", num("return_count"), returns)
 }
 '
@@ -87,6 +95,29 @@ breaches() {
         -v sloc="$SLOC_THRESHOLD" -v abc_limit="$ABC_THRESHOLD" \
         -v returns="$RETURN_THRESHOLD" "$BREACHES_AWK" |
         sort -t "$TAB" -k1,1n -k2,2n | cut -f3-
+}
+
+# SUMMARY_AWK prints the first lines of the text report's Summary, from the
+# same records, so --verbose needs no second knots run.
+SUMMARY_AWK="$NUM_AWK"'
+/^\{/ {
+    n++
+    mc += num("mccabe"); cg += num("cognitive")
+    ne += num("nesting"); sl += num("sloc")
+}
+END {
+    print "Summary:"
+    printf "  Total Functions: %d\n", n
+    printf "  Total McCabe Complexity: %d\n", mc
+    printf "  Total Cognitive Complexity: %d\n", cg
+    printf "  Total Nesting Depth: %d\n", ne
+    printf "  Total SLOC: %d\n", sl
+}
+'
+
+# Print the Summary for $1, knots --format ndjson output.
+summary() {
+    printf '%s\n' "$1" | awk "$SUMMARY_AWK"
 }
 
 TAB=$(printf '\t')
@@ -131,7 +162,7 @@ EOF
 
     # Show summary if verbose
     if [ "$VERBOSE" = "true" ]; then
-        "$VALIDATOR_PATH" -v "$file" 2>&1 | grep -A 5 "Summary:"
+        summary "$OUTPUT"
         printf '%s\n' ""
     fi
 done

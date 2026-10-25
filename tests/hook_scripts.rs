@@ -113,6 +113,32 @@ fn wrapper_lists_breaches_in_source_order() {
     assert!(lines.windows(2).all(|w| w[0] < w[1]), "{out}");
 }
 
+/// deeply_nested's ABC magnitude is 6.403..., shown as 6.40. The wrapper
+/// compares the unrounded value, as knots does, so a threshold between the
+/// two gates in both.
+#[test]
+fn wrapper_compares_abc_as_knots_does() {
+    for (threshold, code) in [("6.403", 1), ("6.41", 0)] {
+        let args = ["--abc-threshold", threshold, "--return-threshold=9"];
+        let knots = Command::new(KNOTS)
+            .args(args)
+            .arg("sample-files/nested.c")
+            .current_dir(repo_root())
+            .output()
+            .unwrap();
+        assert_eq!(knots.status.code(), Some(code), "knots at {threshold}");
+        let output = wrapper(&[&args[..], &["sample-files/nested.c"]].concat());
+        let out = stdout(&output);
+        assert_eq!(output.status.code(), Some(code), "{threshold}: {out}");
+        if code == 1 {
+            assert!(
+                out.contains(&format!("ABC Magnitude: 6.40 (threshold: {threshold})")),
+                "{out}"
+            );
+        }
+    }
+}
+
 #[test]
 fn wrapper_passes_below_the_abc_threshold() {
     let output = wrapper(&[
