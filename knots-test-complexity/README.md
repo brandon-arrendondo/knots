@@ -129,7 +129,7 @@ repos:
         args:
           - --threshold=0.70
           - --boundary-threshold=0.80
-          - --level=warn
+          - --level=error
           - --framework=ceedling
           - --test-dir=Test
 ```
@@ -363,7 +363,7 @@ This encourages well-structured tests with reusable helpers.
       entry: hooks/test-complexity-wrapper.sh
       language: script
       files: ^Test/test_.*\.c$
-      args: [--threshold=70, --level=warn]
+      args: [--threshold=70, --level=error]
 ```
 
 ### Future: Unified Tool
