@@ -87,12 +87,12 @@ elif [ "$MCCABE_THRESHOLD" != "$DEFAULT_MCCABE_THRESHOLD" ] || \
 fi
 
 # Debug: Uncomment to verify thresholds
-# echo "DEBUG: McCabe=$MCCABE_THRESHOLD, Cognitive=$COGNITIVE_THRESHOLD, Nesting=$NESTING_THRESHOLD" >&2
+# printf '%s\n' "DEBUG: McCabe=$MCCABE_THRESHOLD, Cognitive=$COGNITIVE_THRESHOLD, Nesting=$NESTING_THRESHOLD" >&2
 
 # Check if knots is available
 if ! command -v "$VALIDATOR_PATH" >/dev/null 2>&1; then
     printf '%b\n' "${YELLOW}Warning: knots not found at $VALIDATOR_PATH${NC}"
-    echo "Install it or set VALIDATOR_PATH environment variable"
+    printf '%s\n' "Install it or set VALIDATOR_PATH environment variable"
     exit 0  # Don't fail if tool not installed
 fi
 
@@ -120,12 +120,12 @@ for file in "$@"; do
     # Check if command succeeded
     if [ $EXIT_CODE -ne 0 ]; then
         # Skip UTF-8 errors silently (common in third-party/generated code)
-        if echo "$OUTPUT" | grep -q "did not contain valid UTF-8"; then
+        if printf '%s\n' "$OUTPUT" | grep -q "did not contain valid UTF-8"; then
             continue
         fi
         # Show other errors
         printf '%b\n' "${RED}Error running knots on $file${NC}"
-        echo "$OUTPUT" | head -3
+        printf '%s\n' "$OUTPUT" | head -3
         FAILED=1
         continue
     fi
@@ -138,86 +138,86 @@ for file in "$@"; do
         # Parse verbose format (multi-line with separate metrics)
         while IFS= read -r line; do
             # Stop parsing at Summary section
-            if echo "$line" | grep -q "^Summary:"; then
+            if printf '%s\n' "$line" | grep -q "^Summary:"; then
                 break
             fi
 
-            if echo "$line" | grep -q "Function:"; then
+            if printf '%s\n' "$line" | grep -q "Function:"; then
                 # Extract function name and remove emoji (emojis are at the end)
-                CURRENT_FUNCTION=$(echo "$line" | sed 's/Function: //' | sed 's/ [😊😐😠😢]$//')
-            elif echo "$line" | grep -q "  McCabe Complexity:"; then
-                MCCABE=$(echo "$line" | awk '{print $3}')
+                CURRENT_FUNCTION=$(printf '%s\n' "$line" | sed 's/Function: //' | sed 's/ [😊😐😠😢]$//')
+            elif printf '%s\n' "$line" | grep -q "  McCabe Complexity:"; then
+                MCCABE=$(printf '%s\n' "$line" | awk '{print $3}')
                 if is_uint "$MCCABE" && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  McCabe Complexity: $MCCABE (threshold: $MCCABE_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  McCabe Complexity: $MCCABE (threshold: $MCCABE_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
-            elif echo "$line" | grep -q "  Cognitive Complexity:"; then
-                COGNITIVE=$(echo "$line" | awk '{print $3}')
+            elif printf '%s\n' "$line" | grep -q "  Cognitive Complexity:"; then
+                COGNITIVE=$(printf '%s\n' "$line" | awk '{print $3}')
                 if is_uint "$COGNITIVE" && [ "$COGNITIVE" -gt "$COGNITIVE_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  Cognitive Complexity: $COGNITIVE (threshold: $COGNITIVE_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  Cognitive Complexity: $COGNITIVE (threshold: $COGNITIVE_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
-            elif echo "$line" | grep -q "  Nesting Depth:"; then
-                NESTING=$(echo "$line" | awk '{print $3}')
+            elif printf '%s\n' "$line" | grep -q "  Nesting Depth:"; then
+                NESTING=$(printf '%s\n' "$line" | awk '{print $3}')
                 if is_uint "$NESTING" && [ "$NESTING" -gt "$NESTING_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  Nesting Depth: $NESTING (threshold: $NESTING_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  Nesting Depth: $NESTING (threshold: $NESTING_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
-            elif echo "$line" | grep -q "  SLOC:"; then
-                SLOC=$(echo "$line" | awk '{print $2}')
+            elif printf '%s\n' "$line" | grep -q "  SLOC:"; then
+                SLOC=$(printf '%s\n' "$line" | awk '{print $2}')
                 if is_uint "$SLOC" && [ "$SLOC" -gt "$SLOC_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  SLOC: $SLOC (threshold: $SLOC_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  SLOC: $SLOC (threshold: $SLOC_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
-            elif echo "$line" | grep -q "  ABC:"; then
+            elif printf '%s\n' "$line" | grep -q "  ABC:"; then
                 # Extract ABC magnitude from line like "ABC: <2,4,5> (magnitude: 6.71)"
-                ABC_MAG=$(echo "$line" | sed -n 's/.*magnitude: \([0-9.]*\).*/\1/p')
+                ABC_MAG=$(printf '%s\n' "$line" | sed -n 's/.*magnitude: \([0-9.]*\).*/\1/p')
                 if is_decimal "$ABC_MAG"; then
                     # Use bc for floating point comparison
-                    if [ $(echo "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
+                    if [ $(printf '%s\n' "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
                         if [ "$FILE_HAS_VIOLATIONS" = false ]; then
                             printf '%b\n' "${RED}✗ $file${NC}"
                             FILE_HAS_VIOLATIONS=true
                         fi
-                        echo "  Function: $CURRENT_FUNCTION"
-                        echo "  ABC Magnitude: $ABC_MAG (threshold: $ABC_THRESHOLD)"
+                        printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                        printf '%s\n' "  ABC Magnitude: $ABC_MAG (threshold: $ABC_THRESHOLD)"
                         TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                         FAILED=1
                     fi
                 fi
-            elif echo "$line" | grep -q "  Return Count:"; then
-                RETURN_COUNT=$(echo "$line" | awk '{print $3}')
+            elif printf '%s\n' "$line" | grep -q "  Return Count:"; then
+                RETURN_COUNT=$(printf '%s\n' "$line" | awk '{print $3}')
                 if is_uint "$RETURN_COUNT" && [ "$RETURN_COUNT" -gt "$RETURN_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  Return Count: $RETURN_COUNT (threshold: $RETURN_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  Return Count: $RETURN_COUNT (threshold: $RETURN_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
@@ -229,7 +229,7 @@ EOF
         # Parse standard format (single line per function)
         while IFS= read -r line; do
             # Stop parsing at Summary section
-            if echo "$line" | grep -q "^Summary:"; then
+            if printf '%s\n' "$line" | grep -q "^Summary:"; then
                 break
             fi
 
@@ -239,17 +239,17 @@ EOF
             fi
 
             # Parse line format: "😊 FunctionName (McCabe: 1, Cognitive: 0, ...)"
-            if echo "$line" | grep -qE "^[😊😐😠😢]"; then
+            if printf '%s\n' "$line" | grep -qE "^[😊😐😠😢]"; then
                 # Extract function name (between emoji and opening parenthesis)
-                CURRENT_FUNCTION=$(echo "$line" | sed -E 's/^[😊😐😠😢] ([^ ]+) .*/\1/')
+                CURRENT_FUNCTION=$(printf '%s\n' "$line" | sed -E 's/^[😊😐😠😢] ([^ ]+) .*/\1/')
 
                 # Extract metrics
-                MCCABE=$(echo "$line" | sed -n 's/.*McCabe: \([0-9]*\).*/\1/p')
-                COGNITIVE=$(echo "$line" | sed -n 's/.*Cognitive: \([0-9]*\).*/\1/p')
-                NESTING=$(echo "$line" | sed -n 's/.*Nesting: \([0-9]*\).*/\1/p')
-                SLOC=$(echo "$line" | sed -n 's/.*SLOC: \([0-9]*\).*/\1/p')
-                ABC_MAG=$(echo "$line" | sed -n 's/.*ABC: \([0-9.]*\).*/\1/p')
-                RETURN_COUNT=$(echo "$line" | sed -n 's/.*Returns: \([0-9]*\).*/\1/p')
+                MCCABE=$(printf '%s\n' "$line" | sed -n 's/.*McCabe: \([0-9]*\).*/\1/p')
+                COGNITIVE=$(printf '%s\n' "$line" | sed -n 's/.*Cognitive: \([0-9]*\).*/\1/p')
+                NESTING=$(printf '%s\n' "$line" | sed -n 's/.*Nesting: \([0-9]*\).*/\1/p')
+                SLOC=$(printf '%s\n' "$line" | sed -n 's/.*SLOC: \([0-9]*\).*/\1/p')
+                ABC_MAG=$(printf '%s\n' "$line" | sed -n 's/.*ABC: \([0-9.]*\).*/\1/p')
+                RETURN_COUNT=$(printf '%s\n' "$line" | sed -n 's/.*Returns: \([0-9]*\).*/\1/p')
 
                 # Check McCabe threshold
                 if is_uint "$MCCABE" && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
@@ -257,8 +257,8 @@ EOF
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  McCabe Complexity: $MCCABE (threshold: $MCCABE_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  McCabe Complexity: $MCCABE (threshold: $MCCABE_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
@@ -269,8 +269,8 @@ EOF
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  Cognitive Complexity: $COGNITIVE (threshold: $COGNITIVE_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  Cognitive Complexity: $COGNITIVE (threshold: $COGNITIVE_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
@@ -281,8 +281,8 @@ EOF
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  Nesting Depth: $NESTING (threshold: $NESTING_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  Nesting Depth: $NESTING (threshold: $NESTING_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
@@ -293,20 +293,20 @@ EOF
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  SLOC: $SLOC (threshold: $SLOC_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  SLOC: $SLOC (threshold: $SLOC_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
 
                 # Check ABC threshold
-                if is_decimal "$ABC_MAG" && [ $(echo "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
+                if is_decimal "$ABC_MAG" && [ $(printf '%s\n' "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  ABC Magnitude: $ABC_MAG (threshold: $ABC_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  ABC Magnitude: $ABC_MAG (threshold: $ABC_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
@@ -317,8 +317,8 @@ EOF
                         printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
-                    echo "  Function: $CURRENT_FUNCTION"
-                    echo "  Return Count: $RETURN_COUNT (threshold: $RETURN_THRESHOLD)"
+                    printf '%s\n' "  Function: $CURRENT_FUNCTION"
+                    printf '%s\n' "  Return Count: $RETURN_COUNT (threshold: $RETURN_THRESHOLD)"
                     TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
                     FAILED=1
                 fi
@@ -331,18 +331,18 @@ EOF
     # Show verbose output if requested and no violations
     if [ "$VERBOSE" = true ] && [ "$FILE_HAS_VIOLATIONS" = false ]; then
         printf '%b\n' "${GREEN}✓ $file${NC}"
-        echo "$OUTPUT" | grep -A 5 "Summary:" || true
+        printf '%s\n' "$OUTPUT" | grep -A 5 "Summary:" || true
     fi
 done
 
 # Final summary
 if [ $FAILED -eq 1 ]; then
-    echo ""
+    printf '%s\n' ""
     printf '%b\n' "${RED}Found $TOTAL_VIOLATIONS complexity violation(s)${NC}"
     exit 1
 else
     if [ "$VERBOSE" = true ]; then
-        echo ""
+        printf '%s\n' ""
         printf '%b\n' "${GREEN}✓ All complexity checks passed${NC}"
     fi
     exit 0

@@ -61,14 +61,14 @@ done
 # Validate framework
 if [ "$FRAMEWORK" != "convention" ] && [ "$FRAMEWORK" != "ceedling" ]; then
     printf '%b\n' "${RED}Error: Unsupported framework '$FRAMEWORK'${NC}"
-    echo "Supported frameworks: convention (default), ceedling"
+    printf '%s\n' "Supported frameworks: convention (default), ceedling"
     exit 1
 fi
 
 # Check if knots-test-complexity is available
 if ! command -v "$TOOL_PATH" >/dev/null 2>&1; then
     printf '%b\n' "${YELLOW}Warning: knots-test-complexity not found at $TOOL_PATH${NC}"
-    echo "Install it or set TOOL_PATH environment variable"
+    printf '%s\n' "Install it or set TOOL_PATH environment variable"
     exit 0  # Don't fail if tool not installed
 fi
 
@@ -104,7 +104,7 @@ find_source_file_convention() {
         | head -1)
 
     if [ -n "$found" ]; then
-        echo "$found"
+        printf '%s\n' "$found"
         return 0
     fi
 
@@ -126,7 +126,7 @@ find_source_file_ceedling() {
 
     # If the path from TEST_SOURCE_FILE exists directly, use it
     if [ -f "$source_path" ]; then
-        echo "$source_path"
+        printf '%s\n' "$source_path"
         return 0
     fi
 
@@ -135,7 +135,7 @@ find_source_file_ceedling() {
     found_file=$(find . -name "$base_name" -type f 2>/dev/null | grep -v "$TEST_DIR" | head -1)
 
     if [ -n "$found_file" ]; then
-        echo "$found_file"
+        printf '%s\n' "$found_file"
         return 0
     fi
 
@@ -157,8 +157,8 @@ for test_file in "$@"; do
             source_file=$(find_source_file_convention "$test_file")
             if [ -z "$source_file" ]; then
                 printf '%b\n' "${YELLOW}⚠ $test_file: Cannot find source file via naming convention${NC}"
-                echo "  Expected: test_foo.c or foo_test.c -> foo.c"
-                echo "  Or use --framework=ceedling and add TEST_SOURCE_FILE(\"path/to/source.c\")"
+                printf '%s\n' "  Expected: test_foo.c or foo_test.c -> foo.c"
+                printf '%s\n' "  Or use --framework=ceedling and add TEST_SOURCE_FILE(\"path/to/source.c\")"
                 continue
             fi
             ;;
@@ -166,8 +166,8 @@ for test_file in "$@"; do
             source_file=$(find_source_file_ceedling "$test_file")
             if [ -z "$source_file" ]; then
                 printf '%b\n' "${YELLOW}⚠ $test_file: Cannot find TEST_SOURCE_FILE macro or source file${NC}"
-                echo "  Add TEST_SOURCE_FILE(\"path/to/source.c\") to your test file"
-                echo "  Or use --framework=convention for naming-convention based discovery"
+                printf '%s\n' "  Add TEST_SOURCE_FILE(\"path/to/source.c\") to your test file"
+                printf '%s\n' "  Or use --framework=convention for naming-convention based discovery"
                 continue
             fi
             ;;
@@ -194,26 +194,26 @@ for test_file in "$@"; do
 
     if [ $EXIT_CODE -ne 0 ]; then
         printf '%b\n' "${RED}✗ $test_file${NC}"
-        echo "  Source: $source_file"
-        echo "$OUTPUT"
+        printf '%s\n' "  Source: $source_file"
+        printf '%s\n' "$OUTPUT"
         FAILED=1
         TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
     else
         PASSED_COUNT=$((PASSED_COUNT + 1))
         if [ "$VERBOSE" = true ]; then
             printf '%b\n' "${GREEN}✓ $test_file${NC}"
-            echo "  Source: $source_file"
-            echo "$OUTPUT"
+            printf '%s\n' "  Source: $source_file"
+            printf '%s\n' "$OUTPUT"
         fi
     fi
 done
 
 # Final summary
 if [ $FAILED -eq 1 ]; then
-    echo ""
+    printf '%s\n' ""
     printf '%b\n' "${RED}Found $TOTAL_VIOLATIONS test quality violation(s)${NC}"
     if [ "$LEVEL" = "error" ]; then
-        echo "Pre-commit check failed - fix the issues or use --no-verify to bypass"
+        printf '%s\n' "Pre-commit check failed - fix the issues or use --no-verify to bypass"
         exit 1
     else
         printf '%b\n' "${YELLOW}Running in warning mode - pre-commit will pass${NC}"
@@ -221,7 +221,7 @@ if [ $FAILED -eq 1 ]; then
     fi
 else
     if [ "$VERBOSE" = true ] || [ $PASSED_COUNT -gt 0 ]; then
-        echo ""
+        printf '%s\n' ""
         printf '%b\n' "${GREEN}✓ All test quality checks passed ($PASSED_COUNT files)${NC}"
     fi
     exit 0

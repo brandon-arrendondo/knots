@@ -14,11 +14,11 @@ existing scores and gate results can move. See
   FreeBSD base system: the published `test-complexity` pre-commit hook,
   `pre-commit`, `pre-commit-warning-only`, `pre-commit-wrapper.sh` and
   `install-hook.sh` now need only `/bin/sh`. Their output and exit statuses
-  are unchanged. `install-hook.sh`'s yes/no questions now take the answer
+  are unchanged. `install-hook.sh`'s yes/no questions now take `y` or `yes`
   followed by Enter.
-- A wrapper option given its value as the next argument, such as
-  `--threshold 0.8`, with no value after it, now exits 2 with an error.
-  Previously the wrapper never finished.
+- When an option that takes a value, such as `--threshold`, is the last
+  argument to `pre-commit-wrapper.sh` or `test-complexity-wrapper.sh`, the
+  wrapper now exits 2 with an error. Previously it never finished.
 - The `hooks/PRE_COMMIT_FRAMEWORK.md` example that runs
   `pre-commit-wrapper.sh` through a shell now passes every staged file.
   Previously it dropped the first.

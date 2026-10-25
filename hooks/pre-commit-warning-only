@@ -9,12 +9,12 @@
 #
 
 # Configuration
-MCCABE_THRESHOLD=${MCCABE_THRESHOLD:-$(git config hooks.knots.mccabe-threshold || echo "15")}
-COGNITIVE_THRESHOLD=${COGNITIVE_THRESHOLD:-$(git config hooks.knots.cognitive-threshold || echo "15")}
-NESTING_THRESHOLD=${NESTING_THRESHOLD:-$(git config hooks.knots.nesting-threshold || echo "5")}
-SLOC_THRESHOLD=${SLOC_THRESHOLD:-$(git config hooks.knots.sloc-threshold || echo "50")}
-ABC_THRESHOLD=${ABC_THRESHOLD:-$(git config hooks.knots.abc-threshold || echo "10.0")}
-RETURN_THRESHOLD=${RETURN_THRESHOLD:-$(git config hooks.knots.return-threshold || echo "3")}
+MCCABE_THRESHOLD=${MCCABE_THRESHOLD:-$(git config hooks.knots.mccabe-threshold || printf '%s\n' "15")}
+COGNITIVE_THRESHOLD=${COGNITIVE_THRESHOLD:-$(git config hooks.knots.cognitive-threshold || printf '%s\n' "15")}
+NESTING_THRESHOLD=${NESTING_THRESHOLD:-$(git config hooks.knots.nesting-threshold || printf '%s\n' "5")}
+SLOC_THRESHOLD=${SLOC_THRESHOLD:-$(git config hooks.knots.sloc-threshold || printf '%s\n' "50")}
+ABC_THRESHOLD=${ABC_THRESHOLD:-$(git config hooks.knots.abc-threshold || printf '%s\n' "10.0")}
+RETURN_THRESHOLD=${RETURN_THRESHOLD:-$(git config hooks.knots.return-threshold || printf '%s\n' "3")}
 VALIDATOR_PATH=${VALIDATOR_PATH:-$(git config hooks.knots.path || which knots)}
 
 # Colors
@@ -48,8 +48,8 @@ if [ -z "$C_FILES" ]; then
     exit 0
 fi
 
-echo "Checking complexity of staged files..."
-echo ""
+printf '%s\n' "Checking complexity of staged files..."
+printf '%s\n' ""
 
 WARNINGS=0
 
@@ -63,56 +63,56 @@ for file in $C_FILES; do
 
     while IFS= read -r line; do
         # Stop parsing at Summary section
-        if echo "$line" | grep -q "^Summary:"; then
+        if printf '%s\n' "$line" | grep -q "^Summary:"; then
             break
         fi
 
-        if echo "$line" | grep -q "Function:"; then
+        if printf '%s\n' "$line" | grep -q "Function:"; then
             # Extract function name and remove emoji (emojis are at the end)
-            CURRENT_FUNCTION=$(echo "$line" | sed 's/Function: //' | sed 's/ [😊😐😠😢]$//')
-        elif echo "$line" | grep -q "  McCabe Complexity:"; then
-            MCCABE=$(echo "$line" | awk '{print $3}')
+            CURRENT_FUNCTION=$(printf '%s\n' "$line" | sed 's/Function: //' | sed 's/ [😊😐😠😢]$//')
+        elif printf '%s\n' "$line" | grep -q "  McCabe Complexity:"; then
+            MCCABE=$(printf '%s\n' "$line" | awk '{print $3}')
             if is_uint "$MCCABE" && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
                 printf '%b\n' "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
-                echo "  McCabe Complexity: $MCCABE (threshold: $MCCABE_THRESHOLD)"
+                printf '%s\n' "  McCabe Complexity: $MCCABE (threshold: $MCCABE_THRESHOLD)"
                 WARNINGS=$((WARNINGS + 1))
             fi
-        elif echo "$line" | grep -q "  Cognitive Complexity:"; then
-            COGNITIVE=$(echo "$line" | awk '{print $3}')
+        elif printf '%s\n' "$line" | grep -q "  Cognitive Complexity:"; then
+            COGNITIVE=$(printf '%s\n' "$line" | awk '{print $3}')
             if is_uint "$COGNITIVE" && [ "$COGNITIVE" -gt "$COGNITIVE_THRESHOLD" ]; then
                 printf '%b\n' "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
-                echo "  Cognitive Complexity: $COGNITIVE (threshold: $COGNITIVE_THRESHOLD)"
+                printf '%s\n' "  Cognitive Complexity: $COGNITIVE (threshold: $COGNITIVE_THRESHOLD)"
                 WARNINGS=$((WARNINGS + 1))
             fi
-        elif echo "$line" | grep -q "  Nesting Depth:"; then
-            NESTING=$(echo "$line" | awk '{print $3}')
+        elif printf '%s\n' "$line" | grep -q "  Nesting Depth:"; then
+            NESTING=$(printf '%s\n' "$line" | awk '{print $3}')
             if is_uint "$NESTING" && [ "$NESTING" -gt "$NESTING_THRESHOLD" ]; then
                 printf '%b\n' "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
-                echo "  Nesting Depth: $NESTING (threshold: $NESTING_THRESHOLD)"
+                printf '%s\n' "  Nesting Depth: $NESTING (threshold: $NESTING_THRESHOLD)"
                 WARNINGS=$((WARNINGS + 1))
             fi
-        elif echo "$line" | grep -q "  SLOC:"; then
-            SLOC=$(echo "$line" | awk '{print $2}')
+        elif printf '%s\n' "$line" | grep -q "  SLOC:"; then
+            SLOC=$(printf '%s\n' "$line" | awk '{print $2}')
             if is_uint "$SLOC" && [ "$SLOC" -gt "$SLOC_THRESHOLD" ]; then
                 printf '%b\n' "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
-                echo "  SLOC: $SLOC (threshold: $SLOC_THRESHOLD)"
+                printf '%s\n' "  SLOC: $SLOC (threshold: $SLOC_THRESHOLD)"
                 WARNINGS=$((WARNINGS + 1))
             fi
-        elif echo "$line" | grep -q "  ABC:"; then
+        elif printf '%s\n' "$line" | grep -q "  ABC:"; then
             # Extract ABC magnitude from line like "ABC: <2,4,5> (magnitude: 6.71)"
-            ABC_MAG=$(echo "$line" | sed -n 's/.*magnitude: \([0-9.]*\).*/\1/p')
+            ABC_MAG=$(printf '%s\n' "$line" | sed -n 's/.*magnitude: \([0-9.]*\).*/\1/p')
             if is_decimal "$ABC_MAG"; then
-                if [ $(echo "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
+                if [ $(printf '%s\n' "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
                     printf '%b\n' "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
-                    echo "  ABC Magnitude: $ABC_MAG (threshold: $ABC_THRESHOLD)"
+                    printf '%s\n' "  ABC Magnitude: $ABC_MAG (threshold: $ABC_THRESHOLD)"
                     WARNINGS=$((WARNINGS + 1))
                 fi
             fi
-        elif echo "$line" | grep -q "  Return Count:"; then
-            RETURN_COUNT=$(echo "$line" | awk '{print $3}')
+        elif printf '%s\n' "$line" | grep -q "  Return Count:"; then
+            RETURN_COUNT=$(printf '%s\n' "$line" | awk '{print $3}')
             if is_uint "$RETURN_COUNT" && [ "$RETURN_COUNT" -gt "$RETURN_THRESHOLD" ]; then
                 printf '%b\n' "${YELLOW}⚠ $file:$CURRENT_FUNCTION${NC}"
-                echo "  Return Count: $RETURN_COUNT (threshold: $RETURN_THRESHOLD)"
+                printf '%s\n' "  Return Count: $RETURN_COUNT (threshold: $RETURN_THRESHOLD)"
                 WARNINGS=$((WARNINGS + 1))
             fi
         fi
@@ -122,7 +122,7 @@ EOF
 done
 
 if [ $WARNINGS -gt 0 ]; then
-    echo ""
+    printf '%s\n' ""
     printf '%b\n' "${YELLOW}Found $WARNINGS complexity warning(s) - consider refactoring${NC}"
 else
     printf '%b\n' "${GREEN}✓ All complexity checks passed${NC}"
