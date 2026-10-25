@@ -232,7 +232,7 @@ cd tools/hooks && ./install-hook.sh
 ```bash
 # Create setup.sh in project root
 cat > setup.sh << 'SETUP'
-#!/bin/bash
+#!/bin/sh
 echo "Setting up development environment..."
 ./tools/hooks/install-hook.sh
 git config hooks.knots.mccabe-threshold 15
@@ -320,13 +320,13 @@ rm .git/hooks/pre-commit
 If you already have a pre-commit hook, integrate knots:
 
 ```bash
-#!/bin/bash
+#!/bin/sh
 # Your existing pre-commit hook
 
 # ... your existing checks ...
 
 # Add knots check (all supported languages)
-if command -v knots &> /dev/null; then
+if command -v knots >/dev/null 2>&1; then
     SRC_FILES=$(git diff --cached --name-only --diff-filter=ACM \
         | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$')
     if [ -n "$SRC_FILES" ]; then
@@ -345,7 +345,7 @@ fi
 A: Not directly. Consider using warning-only mode and manual review for complex files.
 
 **Q: Does this work with pre-commit framework (Python)?**
-A: Yes — see [PRE_COMMIT_FRAMEWORK.md](PRE_COMMIT_FRAMEWORK.md). The published hook is the recommended approach; the bash wrapper is also documented there.
+A: Yes — see [PRE_COMMIT_FRAMEWORK.md](PRE_COMMIT_FRAMEWORK.md). The published hook is the recommended approach; the shell wrapper is also documented there.
 
 **Q: What happens with syntax errors?**
 A: The tool will fail gracefully and report the error. Commit is blocked.

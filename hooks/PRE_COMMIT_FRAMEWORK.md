@@ -2,7 +2,7 @@
 
 This guide is for using knots with the [pre-commit](https://pre-commit.com/) framework (Python-based).
 
-**Note:** This is different from the standalone bash hooks in this directory. If you're not using the pre-commit framework, see [README.md](README.md) instead.
+**Note:** This is different from the standalone shell hooks in this directory. If you're not using the pre-commit framework, see [README.md](README.md) instead.
 
 ## What is pre-commit?
 
@@ -336,7 +336,7 @@ git commit --no-verify -m "Emergency fix"
 | **Installation** | Requires Python + pre-commit | Just copy script |
 | **Configuration** | YAML file | git config |
 | **Multiple Hooks** | Easy to manage many hooks | One hook file |
-| **Language Support** | Many languages | Just bash |
+| **Language Support** | Many languages | Just a POSIX shell (`sh`) |
 | **Auto-update** | `pre-commit autoupdate` | Manual |
 | **Team Distribution** | Commit config file | Commit hook scripts |
 | **CI Integration** | `pre-commit run --all-files` | Run hook directly |
@@ -382,7 +382,7 @@ export VALIDATOR_PATH=/path/to/knots
 - repo: local
   hooks:
     - id: knots
-      entry: bash -c 'VALIDATOR_PATH=/path/to/knots /path/to/hooks/pre-commit-wrapper.sh "$@"'
+      entry: sh -c 'VALIDATOR_PATH=/path/to/knots /path/to/hooks/pre-commit-wrapper.sh "$@"' --
       language: script
 ```
 

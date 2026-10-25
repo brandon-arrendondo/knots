@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Wrapper script for pre-commit framework
 # Called by pre-commit with list of files to check
@@ -26,75 +26,49 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Parse arguments
-FILES=()
-while [[ $# -gt 0 ]]; do
+# True when $1 is a whole number (sh has no =~).
+is_uint() {
     case $1 in
-        --mccabe-threshold=*)
-            MCCABE_THRESHOLD="${1#*=}"
+        ''|*[!0-9]*) return 1 ;;
+    esac
+}
+
+# True when $1 is digits with at most one decimal point, not leading.
+is_decimal() {
+    case $1 in
+        ''|.*|*.*.*|*[!0-9.]*) return 1 ;;
+    esac
+}
+
+# Parse arguments. sh has no arrays, so each filename is moved to the end of
+# the positional parameters and "$@" holds only the files afterwards. A
+# `--name VALUE` option is read as `--name=VALUE`.
+n=$#
+while [ "$n" -gt 0 ]; do
+    arg=$1
+    shift
+    n=$((n - 1))
+    case $arg in
+        --mccabe-threshold|--cognitive-threshold|--nesting-threshold|--sloc-threshold|--abc-threshold|--return-threshold|--validator-path)
+            if [ "$n" -eq 0 ]; then
+                printf '%s\n' "Error: $arg needs a value" >&2
+                exit 2
+            fi
+            arg="$arg=$1"
             shift
+            n=$((n - 1))
             ;;
-        --mccabe-threshold)
-            MCCABE_THRESHOLD="$2"
-            shift 2
-            ;;
-        --cognitive-threshold=*)
-            COGNITIVE_THRESHOLD="${1#*=}"
-            shift
-            ;;
-        --cognitive-threshold)
-            COGNITIVE_THRESHOLD="$2"
-            shift 2
-            ;;
-        --nesting-threshold=*)
-            NESTING_THRESHOLD="${1#*=}"
-            shift
-            ;;
-        --nesting-threshold)
-            NESTING_THRESHOLD="$2"
-            shift 2
-            ;;
-        --sloc-threshold=*)
-            SLOC_THRESHOLD="${1#*=}"
-            shift
-            ;;
-        --sloc-threshold)
-            SLOC_THRESHOLD="$2"
-            shift 2
-            ;;
-        --abc-threshold=*)
-            ABC_THRESHOLD="${1#*=}"
-            shift
-            ;;
-        --abc-threshold)
-            ABC_THRESHOLD="$2"
-            shift 2
-            ;;
-        --return-threshold=*)
-            RETURN_THRESHOLD="${1#*=}"
-            shift
-            ;;
-        --return-threshold)
-            RETURN_THRESHOLD="$2"
-            shift 2
-            ;;
-        --verbose)
-            VERBOSE=true
-            shift
-            ;;
-        --validator-path=*)
-            VALIDATOR_PATH="${1#*=}"
-            shift
-            ;;
-        --validator-path)
-            VALIDATOR_PATH="$2"
-            shift 2
-            ;;
-        *)
-            # This is a filename
-            FILES+=("$1")
-            shift
-            ;;
+    esac
+    case $arg in
+        --mccabe-threshold=*) MCCABE_THRESHOLD="${arg#*=}" ;;
+        --cognitive-threshold=*) COGNITIVE_THRESHOLD="${arg#*=}" ;;
+        --nesting-threshold=*) NESTING_THRESHOLD="${arg#*=}" ;;
+        --sloc-threshold=*) SLOC_THRESHOLD="${arg#*=}" ;;
+        --abc-threshold=*) ABC_THRESHOLD="${arg#*=}" ;;
+        --return-threshold=*) RETURN_THRESHOLD="${arg#*=}" ;;
+        --validator-path=*) VALIDATOR_PATH="${arg#*=}" ;;
+        --verbose) VERBOSE=true ;;
+        *) set -- "$@" "$arg" ;;
     esac
 done
 
@@ -116,21 +90,21 @@ fi
 # echo "DEBUG: McCabe=$MCCABE_THRESHOLD, Cognitive=$COGNITIVE_THRESHOLD, Nesting=$NESTING_THRESHOLD" >&2
 
 # Check if knots is available
-if ! command -v "$VALIDATOR_PATH" &> /dev/null; then
-    echo -e "${YELLOW}Warning: knots not found at $VALIDATOR_PATH${NC}"
+if ! command -v "$VALIDATOR_PATH" >/dev/null 2>&1; then
+    printf '%b\n' "${YELLOW}Warning: knots not found at $VALIDATOR_PATH${NC}"
     echo "Install it or set VALIDATOR_PATH environment variable"
     exit 0  # Don't fail if tool not installed
 fi
 
 # If no files provided, exit successfully
-if [ ${#FILES[@]} -eq 0 ]; then
+if [ $# -eq 0 ]; then
     exit 0
 fi
 
 FAILED=0
 TOTAL_VIOLATIONS=0
 
-for file in "${FILES[@]}"; do
+for file in "$@"; do
     if [ ! -f "$file" ]; then
         continue
     fi
@@ -150,7 +124,7 @@ for file in "${FILES[@]}"; do
             continue
         fi
         # Show other errors
-        echo -e "${RED}Error running knots on $file${NC}"
+        printf '%b\n' "${RED}Error running knots on $file${NC}"
         echo "$OUTPUT" | head -3
         FAILED=1
         continue
@@ -173,9 +147,9 @@ for file in "${FILES[@]}"; do
                 CURRENT_FUNCTION=$(echo "$line" | sed 's/Function: //' | sed 's/ [😊😐😠😢]$//')
             elif echo "$line" | grep -q "  McCabe Complexity:"; then
                 MCCABE=$(echo "$line" | awk '{print $3}')
-                if [[ "$MCCABE" =~ ^[0-9]+$ ]] && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
+                if is_uint "$MCCABE" && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -185,9 +159,9 @@ for file in "${FILES[@]}"; do
                 fi
             elif echo "$line" | grep -q "  Cognitive Complexity:"; then
                 COGNITIVE=$(echo "$line" | awk '{print $3}')
-                if [[ "$COGNITIVE" =~ ^[0-9]+$ ]] && [ "$COGNITIVE" -gt "$COGNITIVE_THRESHOLD" ]; then
+                if is_uint "$COGNITIVE" && [ "$COGNITIVE" -gt "$COGNITIVE_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -197,9 +171,9 @@ for file in "${FILES[@]}"; do
                 fi
             elif echo "$line" | grep -q "  Nesting Depth:"; then
                 NESTING=$(echo "$line" | awk '{print $3}')
-                if [[ "$NESTING" =~ ^[0-9]+$ ]] && [ "$NESTING" -gt "$NESTING_THRESHOLD" ]; then
+                if is_uint "$NESTING" && [ "$NESTING" -gt "$NESTING_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -209,9 +183,9 @@ for file in "${FILES[@]}"; do
                 fi
             elif echo "$line" | grep -q "  SLOC:"; then
                 SLOC=$(echo "$line" | awk '{print $2}')
-                if [[ "$SLOC" =~ ^[0-9]+$ ]] && [ "$SLOC" -gt "$SLOC_THRESHOLD" ]; then
+                if is_uint "$SLOC" && [ "$SLOC" -gt "$SLOC_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -222,11 +196,11 @@ for file in "${FILES[@]}"; do
             elif echo "$line" | grep -q "  ABC:"; then
                 # Extract ABC magnitude from line like "ABC: <2,4,5> (magnitude: 6.71)"
                 ABC_MAG=$(echo "$line" | sed -n 's/.*magnitude: \([0-9.]*\).*/\1/p')
-                if [[ "$ABC_MAG" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+                if is_decimal "$ABC_MAG"; then
                     # Use bc for floating point comparison
                     if [ $(echo "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
                         if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                            echo -e "${RED}✗ $file${NC}"
+                            printf '%b\n' "${RED}✗ $file${NC}"
                             FILE_HAS_VIOLATIONS=true
                         fi
                         echo "  Function: $CURRENT_FUNCTION"
@@ -237,9 +211,9 @@ for file in "${FILES[@]}"; do
                 fi
             elif echo "$line" | grep -q "  Return Count:"; then
                 RETURN_COUNT=$(echo "$line" | awk '{print $3}')
-                if [[ "$RETURN_COUNT" =~ ^[0-9]+$ ]] && [ "$RETURN_COUNT" -gt "$RETURN_THRESHOLD" ]; then
+                if is_uint "$RETURN_COUNT" && [ "$RETURN_COUNT" -gt "$RETURN_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -248,7 +222,9 @@ for file in "${FILES[@]}"; do
                     FAILED=1
                 fi
             fi
-        done <<< "$OUTPUT"
+        done <<EOF
+$OUTPUT
+EOF
     else
         # Parse standard format (single line per function)
         while IFS= read -r line; do
@@ -276,9 +252,9 @@ for file in "${FILES[@]}"; do
                 RETURN_COUNT=$(echo "$line" | sed -n 's/.*Returns: \([0-9]*\).*/\1/p')
 
                 # Check McCabe threshold
-                if [[ "$MCCABE" =~ ^[0-9]+$ ]] && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
+                if is_uint "$MCCABE" && [ "$MCCABE" -gt "$MCCABE_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -288,9 +264,9 @@ for file in "${FILES[@]}"; do
                 fi
 
                 # Check Cognitive threshold
-                if [[ "$COGNITIVE" =~ ^[0-9]+$ ]] && [ "$COGNITIVE" -gt "$COGNITIVE_THRESHOLD" ]; then
+                if is_uint "$COGNITIVE" && [ "$COGNITIVE" -gt "$COGNITIVE_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -300,9 +276,9 @@ for file in "${FILES[@]}"; do
                 fi
 
                 # Check Nesting threshold
-                if [[ "$NESTING" =~ ^[0-9]+$ ]] && [ "$NESTING" -gt "$NESTING_THRESHOLD" ]; then
+                if is_uint "$NESTING" && [ "$NESTING" -gt "$NESTING_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -312,9 +288,9 @@ for file in "${FILES[@]}"; do
                 fi
 
                 # Check SLOC threshold
-                if [[ "$SLOC" =~ ^[0-9]+$ ]] && [ "$SLOC" -gt "$SLOC_THRESHOLD" ]; then
+                if is_uint "$SLOC" && [ "$SLOC" -gt "$SLOC_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -324,9 +300,9 @@ for file in "${FILES[@]}"; do
                 fi
 
                 # Check ABC threshold
-                if [[ "$ABC_MAG" =~ ^[0-9]+\.?[0-9]*$ ]] && [ $(echo "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
+                if is_decimal "$ABC_MAG" && [ $(echo "$ABC_MAG > $ABC_THRESHOLD" | bc -l) -eq 1 ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -336,9 +312,9 @@ for file in "${FILES[@]}"; do
                 fi
 
                 # Check Return Count threshold
-                if [[ "$RETURN_COUNT" =~ ^[0-9]+$ ]] && [ "$RETURN_COUNT" -gt "$RETURN_THRESHOLD" ]; then
+                if is_uint "$RETURN_COUNT" && [ "$RETURN_COUNT" -gt "$RETURN_THRESHOLD" ]; then
                     if [ "$FILE_HAS_VIOLATIONS" = false ]; then
-                        echo -e "${RED}✗ $file${NC}"
+                        printf '%b\n' "${RED}✗ $file${NC}"
                         FILE_HAS_VIOLATIONS=true
                     fi
                     echo "  Function: $CURRENT_FUNCTION"
@@ -347,12 +323,14 @@ for file in "${FILES[@]}"; do
                     FAILED=1
                 fi
             fi
-        done <<< "$OUTPUT"
+        done <<EOF
+$OUTPUT
+EOF
     fi
 
     # Show verbose output if requested and no violations
     if [ "$VERBOSE" = true ] && [ "$FILE_HAS_VIOLATIONS" = false ]; then
-        echo -e "${GREEN}✓ $file${NC}"
+        printf '%b\n' "${GREEN}✓ $file${NC}"
         echo "$OUTPUT" | grep -A 5 "Summary:" || true
     fi
 done
@@ -360,12 +338,12 @@ done
 # Final summary
 if [ $FAILED -eq 1 ]; then
     echo ""
-    echo -e "${RED}Found $TOTAL_VIOLATIONS complexity violation(s)${NC}"
+    printf '%b\n' "${RED}Found $TOTAL_VIOLATIONS complexity violation(s)${NC}"
     exit 1
 else
     if [ "$VERBOSE" = true ]; then
         echo ""
-        echo -e "${GREEN}✓ All complexity checks passed${NC}"
+        printf '%b\n' "${GREEN}✓ All complexity checks passed${NC}"
     fi
     exit 0
 fi

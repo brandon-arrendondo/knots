@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Pre-commit wrapper for knots-test-complexity
 # Analyzes test files and their corresponding source files for quality
@@ -26,117 +26,77 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Parse arguments
-FILES=()
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --threshold=*)
-            THRESHOLD="${1#*=}"
+# Parse arguments. sh has no arrays, so each filename is moved to the end of
+# the positional parameters and "$@" holds only the files afterwards. A
+# `--name VALUE` option is read as `--name=VALUE`.
+n=$#
+while [ "$n" -gt 0 ]; do
+    arg=$1
+    shift
+    n=$((n - 1))
+    case $arg in
+        --threshold|--boundary-threshold|--level|--tool-path|--framework|--test-dir)
+            if [ "$n" -eq 0 ]; then
+                printf '%s\n' "Error: $arg needs a value" >&2
+                exit 2
+            fi
+            arg="$arg=$1"
             shift
+            n=$((n - 1))
             ;;
-        --threshold)
-            THRESHOLD="$2"
-            shift 2
-            ;;
-        --boundary-threshold=*)
-            BOUNDARY_THRESHOLD="${1#*=}"
-            shift
-            ;;
-        --boundary-threshold)
-            BOUNDARY_THRESHOLD="$2"
-            shift 2
-            ;;
-        --level=*)
-            LEVEL="${1#*=}"
-            shift
-            ;;
-        --level)
-            LEVEL="$2"
-            shift 2
-            ;;
-        --no-check-boundaries)
-            CHECK_BOUNDARIES=false
-            shift
-            ;;
-        --verbose)
-            VERBOSE=true
-            shift
-            ;;
-        --tool-path=*)
-            TOOL_PATH="${1#*=}"
-            shift
-            ;;
-        --tool-path)
-            TOOL_PATH="$2"
-            shift 2
-            ;;
-        --framework=*)
-            FRAMEWORK="${1#*=}"
-            shift
-            ;;
-        --framework)
-            FRAMEWORK="$2"
-            shift 2
-            ;;
-        --test-dir=*)
-            TEST_DIR="${1#*=}"
-            shift
-            ;;
-        --test-dir)
-            TEST_DIR="$2"
-            shift 2
-            ;;
-        *)
-            # This is a filename
-            FILES+=("$1")
-            shift
-            ;;
+    esac
+    case $arg in
+        --threshold=*) THRESHOLD="${arg#*=}" ;;
+        --boundary-threshold=*) BOUNDARY_THRESHOLD="${arg#*=}" ;;
+        --level=*) LEVEL="${arg#*=}" ;;
+        --tool-path=*) TOOL_PATH="${arg#*=}" ;;
+        --framework=*) FRAMEWORK="${arg#*=}" ;;
+        --test-dir=*) TEST_DIR="${arg#*=}" ;;
+        --no-check-boundaries) CHECK_BOUNDARIES=false ;;
+        --verbose) VERBOSE=true ;;
+        *) set -- "$@" "$arg" ;;
     esac
 done
 
 # Validate framework
 if [ "$FRAMEWORK" != "convention" ] && [ "$FRAMEWORK" != "ceedling" ]; then
-    echo -e "${RED}Error: Unsupported framework '$FRAMEWORK'${NC}"
+    printf '%b\n' "${RED}Error: Unsupported framework '$FRAMEWORK'${NC}"
     echo "Supported frameworks: convention (default), ceedling"
     exit 1
 fi
 
 # Check if knots-test-complexity is available
-if ! command -v "$TOOL_PATH" &> /dev/null; then
-    echo -e "${YELLOW}Warning: knots-test-complexity not found at $TOOL_PATH${NC}"
+if ! command -v "$TOOL_PATH" >/dev/null 2>&1; then
+    printf '%b\n' "${YELLOW}Warning: knots-test-complexity not found at $TOOL_PATH${NC}"
     echo "Install it or set TOOL_PATH environment variable"
     exit 0  # Don't fail if tool not installed
 fi
 
 # If no files provided, exit successfully
-if [ ${#FILES[@]} -eq 0 ]; then
+if [ $# -eq 0 ]; then
     exit 0
 fi
 
 # Function to find source file via naming conventions:
 #   test_foo.c -> foo.c
 #   foo_test.c -> foo.c
+# Both are called in $(...), a subshell, so their variables need no `local`.
 find_source_file_convention() {
-    local test_file="$1"
-    local base
+    test_file="$1"
     base=$(basename "$test_file")
-    local ext="${base##*.}"
-    local stem="${base%.*}"
+    ext="${base##*.}"
+    stem="${base%.*}"
 
     # Derive candidate source stem by stripping test_ prefix or _test suffix
-    local source_stem=""
-    if [[ "$stem" == test_* ]]; then
-        source_stem="${stem#test_}"
-    elif [[ "$stem" == *_test ]]; then
-        source_stem="${stem%_test}"
-    else
-        return 1
-    fi
+    case $stem in
+        test_*) source_stem="${stem#test_}" ;;
+        *_test) source_stem="${stem%_test}" ;;
+        *) return 1 ;;
+    esac
 
-    local source_name="${source_stem}.${ext}"
+    source_name="${source_stem}.${ext}"
 
     # Search project for matching source file, excluding test directories
-    local found
     found=$(find . -name "$source_name" -type f 2>/dev/null \
         | grep -v "/$TEST_DIR/" \
         | grep -v "/test/" \
@@ -154,11 +114,11 @@ find_source_file_convention() {
 # Function to find source file for Ceedling framework
 # Parses TEST_SOURCE_FILE("path/to/source.c") from test file
 find_source_file_ceedling() {
-    local test_file="$1"
+    test_file="$1"
 
     # Look for TEST_SOURCE_FILE macro in the test file
     # Format: TEST_SOURCE_FILE("path/to/source.c") or TEST_SOURCE_FILE("source.c")
-    local source_path=$(grep -m 1 'TEST_SOURCE_FILE(' "$test_file" | sed -n 's/.*TEST_SOURCE_FILE("\([^"]*\)").*/\1/p')
+    source_path=$(grep -m 1 'TEST_SOURCE_FILE(' "$test_file" | sed -n 's/.*TEST_SOURCE_FILE("\([^"]*\)").*/\1/p')
 
     if [ -z "$source_path" ]; then
         return 1
@@ -171,8 +131,8 @@ find_source_file_ceedling() {
     fi
 
     # Otherwise, try to find the file in the project
-    local base_name=$(basename "$source_path")
-    local found_file=$(find . -name "$base_name" -type f 2>/dev/null | grep -v "$TEST_DIR" | head -1)
+    base_name=$(basename "$source_path")
+    found_file=$(find . -name "$base_name" -type f 2>/dev/null | grep -v "$TEST_DIR" | head -1)
 
     if [ -n "$found_file" ]; then
         echo "$found_file"
@@ -186,7 +146,7 @@ FAILED=0
 TOTAL_VIOLATIONS=0
 PASSED_COUNT=0
 
-for test_file in "${FILES[@]}"; do
+for test_file in "$@"; do
     if [ ! -f "$test_file" ]; then
         continue
     fi
@@ -196,7 +156,7 @@ for test_file in "${FILES[@]}"; do
         convention)
             source_file=$(find_source_file_convention "$test_file")
             if [ -z "$source_file" ]; then
-                echo -e "${YELLOW}⚠ $test_file: Cannot find source file via naming convention${NC}"
+                printf '%b\n' "${YELLOW}⚠ $test_file: Cannot find source file via naming convention${NC}"
                 echo "  Expected: test_foo.c or foo_test.c -> foo.c"
                 echo "  Or use --framework=ceedling and add TEST_SOURCE_FILE(\"path/to/source.c\")"
                 continue
@@ -205,14 +165,14 @@ for test_file in "${FILES[@]}"; do
         ceedling)
             source_file=$(find_source_file_ceedling "$test_file")
             if [ -z "$source_file" ]; then
-                echo -e "${YELLOW}⚠ $test_file: Cannot find TEST_SOURCE_FILE macro or source file${NC}"
+                printf '%b\n' "${YELLOW}⚠ $test_file: Cannot find TEST_SOURCE_FILE macro or source file${NC}"
                 echo "  Add TEST_SOURCE_FILE(\"path/to/source.c\") to your test file"
                 echo "  Or use --framework=convention for naming-convention based discovery"
                 continue
             fi
             ;;
         *)
-            echo -e "${RED}Error: Framework '$FRAMEWORK' not implemented${NC}"
+            printf '%b\n' "${RED}Error: Framework '$FRAMEWORK' not implemented${NC}"
             exit 1
             ;;
     esac
@@ -233,7 +193,7 @@ for test_file in "${FILES[@]}"; do
     EXIT_CODE=$?
 
     if [ $EXIT_CODE -ne 0 ]; then
-        echo -e "${RED}✗ $test_file${NC}"
+        printf '%b\n' "${RED}✗ $test_file${NC}"
         echo "  Source: $source_file"
         echo "$OUTPUT"
         FAILED=1
@@ -241,7 +201,7 @@ for test_file in "${FILES[@]}"; do
     else
         PASSED_COUNT=$((PASSED_COUNT + 1))
         if [ "$VERBOSE" = true ]; then
-            echo -e "${GREEN}✓ $test_file${NC}"
+            printf '%b\n' "${GREEN}✓ $test_file${NC}"
             echo "  Source: $source_file"
             echo "$OUTPUT"
         fi
@@ -251,18 +211,18 @@ done
 # Final summary
 if [ $FAILED -eq 1 ]; then
     echo ""
-    echo -e "${RED}Found $TOTAL_VIOLATIONS test quality violation(s)${NC}"
+    printf '%b\n' "${RED}Found $TOTAL_VIOLATIONS test quality violation(s)${NC}"
     if [ "$LEVEL" = "error" ]; then
         echo "Pre-commit check failed - fix the issues or use --no-verify to bypass"
         exit 1
     else
-        echo -e "${YELLOW}Running in warning mode - pre-commit will pass${NC}"
+        printf '%b\n' "${YELLOW}Running in warning mode - pre-commit will pass${NC}"
         exit 0
     fi
 else
     if [ "$VERBOSE" = true ] || [ $PASSED_COUNT -gt 0 ]; then
         echo ""
-        echo -e "${GREEN}✓ All test quality checks passed ($PASSED_COUNT files)${NC}"
+        printf '%b\n' "${GREEN}✓ All test quality checks passed ($PASSED_COUNT files)${NC}"
     fi
     exit 0
 fi

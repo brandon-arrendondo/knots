@@ -6,6 +6,23 @@ counting rule is listed under Changed, even when it corrects a bug, because
 existing scores and gate results can move. See
 [ADR-0004](docs/adr/0004-changelog-is-for-users.md).
 
+## Unreleased
+
+### Fixed
+
+- The hook scripts in `hooks/` run where bash is not installed, such as a
+  FreeBSD base system: the published `test-complexity` pre-commit hook,
+  `pre-commit`, `pre-commit-warning-only`, `pre-commit-wrapper.sh` and
+  `install-hook.sh` now need only `/bin/sh`. Their output and exit statuses
+  are unchanged. `install-hook.sh`'s yes/no questions now take the answer
+  followed by Enter.
+- A wrapper option given its value as the next argument, such as
+  `--threshold 0.8`, with no value after it, now exits 2 with an error.
+  Previously the wrapper never finished.
+- The `hooks/PRE_COMMIT_FRAMEWORK.md` example that runs
+  `pre-commit-wrapper.sh` through a shell now passes every staged file.
+  Previously it dropped the first.
+
 ## 2.0.0 - 2026-10-23
 
 ### Added
