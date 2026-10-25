@@ -17,21 +17,38 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tree_sitter::Tree;
 
-// Every report line goes through `stdout::print_fmt`, so a reader that closes
-// the pipe early ends the output instead of panicking. Defined before the
-// modules so that they use these too.
+// Every line knots prints goes through `streams::print_fmt`, so a reader that
+// closes stdout or stderr early ends that stream instead of panicking.
+// Defined before the modules so that they use these too.
 macro_rules! println {
     () => {
-        $crate::stdout::print_fmt(format_args!(""), true)
+        $crate::streams::print_fmt($crate::streams::Stream::Stdout, format_args!(""), true)
     };
     ($($arg:tt)*) => {
-        $crate::stdout::print_fmt(format_args!($($arg)*), true)
+        $crate::streams::print_fmt($crate::streams::Stream::Stdout, format_args!($($arg)*), true)
     };
 }
 
 macro_rules! print {
     ($($arg:tt)*) => {
-        $crate::stdout::print_fmt(format_args!($($arg)*), false)
+        $crate::streams::print_fmt($crate::streams::Stream::Stdout, format_args!($($arg)*), false)
+    };
+}
+
+macro_rules! eprintln {
+    () => {
+        $crate::streams::print_fmt($crate::streams::Stream::Stderr, format_args!(""), true)
+    };
+    ($($arg:tt)*) => {
+        $crate::streams::print_fmt($crate::streams::Stream::Stderr, format_args!($($arg)*), true)
+    };
+}
+
+// No eprint! call exists yet; this keeps the first one from bypassing streams.
+#[allow(unused_macros)]
+macro_rules! eprint {
+    ($($arg:tt)*) => {
+        $crate::streams::print_fmt($crate::streams::Stream::Stderr, format_args!($($arg)*), false)
     };
 }
 
@@ -40,7 +57,7 @@ mod config;
 mod duplicate_diff;
 mod duplicates;
 mod output;
-mod stdout;
+mod streams;
 use completion::{
     conclude, contain, finish, Completion, IncompleteScan, InvocationError, LostInput, Stage,
     INCOMPLETE_EXIT, INVOCATION_EXIT,
@@ -1439,7 +1456,7 @@ fn run_structured_output_mode(
     };
     // A reader that closed stdout early leaves the verdict as it was.
     match emitted {
-        Err(err) if stdout::is_closed_pipe(&err) => {}
+        Err(err) if streams::is_closed_pipe(&err) => {}
         other => other?,
     }
     written?;

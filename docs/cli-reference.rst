@@ -328,9 +328,10 @@ Exit Status
     file not analysed is named on stderr, and the last line of stderr says
     how many of the selected files were not analysed.
 
-A reader that closes stdout before the report ends, as ``knots -r src |
-head`` does, leaves the status as above: the output stops, and threshold
-violations are still listed on stderr.
+A reader that closes stdout or stderr before knots is done writing, as
+``knots -r src | head`` or ``knots -r src 2>&1 | head`` does, leaves the
+status as above: that stream stops, and the other is written in full, so
+threshold violations are still listed on stderr when only stdout closed.
 
 A file is *selected* when discovery finds it under a directory passed with
 ``-r``, when it is named on the command line, or when
