@@ -17,11 +17,30 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tree_sitter::Tree;
 
+// Every report line goes through `stdout::print_fmt`, so a reader that closes
+// the pipe early ends the output instead of panicking. Defined before the
+// modules so that they use these too.
+macro_rules! println {
+    () => {
+        $crate::stdout::print_fmt(format_args!(""), true)
+    };
+    ($($arg:tt)*) => {
+        $crate::stdout::print_fmt(format_args!($($arg)*), true)
+    };
+}
+
+macro_rules! print {
+    ($($arg:tt)*) => {
+        $crate::stdout::print_fmt(format_args!($($arg)*), false)
+    };
+}
+
 mod completion;
 mod config;
 mod duplicate_diff;
 mod duplicates;
 mod output;
+mod stdout;
 use completion::{
     conclude, contain, finish, Completion, IncompleteScan, InvocationError, LostInput, Stage,
     INCOMPLETE_EXIT, INVOCATION_EXIT,
@@ -1411,13 +1430,18 @@ fn run_structured_output_mode(
     } else {
         completion.exit_code(&gate)
     };
-    match format {
+    let emitted = match format {
         OutputFormat::Sarif => emit_sarif(&all_metrics, &completion, exit_code),
         OutputFormat::Json => emit_json(&all_metrics, ctx.score_components),
         OutputFormat::Ndjson => emit_ndjson(&all_metrics, ctx.score_components),
         OutputFormat::Csv => emit_csv(&all_metrics, ctx.score_components),
         OutputFormat::Text => Ok(()),
-    }?;
+    };
+    // A reader that closed stdout early leaves the verdict as it was.
+    match emitted {
+        Err(err) if stdout::is_closed_pipe(&err) => {}
+        other => other?,
+    }
     written?;
     conclude(&completion, gate)
 }

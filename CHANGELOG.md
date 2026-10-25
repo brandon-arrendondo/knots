@@ -10,6 +10,11 @@ existing scores and gate results can move. See
 
 ### Fixed
 
+- A reader that closes knots' output early, as `knots -r src | head` does,
+  no longer makes knots panic (the text and `-v` reports) or exit 1 with a
+  "Broken pipe" error (`--format json`, `ndjson`, `csv` and `sarif`). The
+  output stops, and the exit status is the one the scan earns: 0, 1 for a
+  threshold violation, still listed on stderr, or 3 for an incomplete scan.
 - The hook scripts in `hooks/` run where bash is not installed, such as a
   FreeBSD base system: the published `test-complexity` pre-commit hook,
   `pre-commit`, `pre-commit-warning-only`, `pre-commit-wrapper.sh` and

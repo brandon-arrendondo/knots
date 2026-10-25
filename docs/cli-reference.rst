@@ -328,6 +328,10 @@ Exit Status
     file not analysed is named on stderr, and the last line of stderr says
     how many of the selected files were not analysed.
 
+A reader that closes stdout before the report ends, as ``knots -r src |
+head`` does, leaves the status as above: the output stops, and threshold
+violations are still listed on stderr.
+
 A file is *selected* when discovery finds it under a directory passed with
 ``-r``, when it is named on the command line, or when
 ``compile_commands.json`` lists it. A selected file is *not analysed* when:
