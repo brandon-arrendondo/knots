@@ -11,7 +11,7 @@ repos:
       - id: cargo-fmt
         name: cargo fmt (auto-fix)
         description: Format Rust code with rustfmt
-        entry: bash -c 'cargo fmt --all 2>&1 && echo "Formatting complete"'
+        entry: cargo fmt --all
         language: system
         pass_filenames: false
         types: [rust]
@@ -20,7 +20,7 @@ repos:
       - id: cargo-clippy
         name: cargo clippy
         description: Lint Rust code with Clippy - deny warnings (all targets including tests)
-        entry: bash -c 'cargo clippy --all-targets --all-features -- -D warnings 2>&1'
+        entry: cargo clippy --all-targets --all-features -- -D warnings
         language: system
         pass_filenames: false
         types: [rust]
@@ -29,7 +29,7 @@ repos:
       - id: cargo-test
         name: cargo test
         description: Run the test suite
-        entry: bash -c 'cargo test --workspace 2>&1'
+        entry: cargo test --workspace
         language: system
         pass_filenames: false
         types: [rust]
@@ -38,7 +38,7 @@ repos:
       - id: knots-self-check
         name: knots (self-check)
         description: Check this repo's own Rust source complexity with knots
-        entry: bash -c 'cargo run --quiet -- --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=20.0 --return-threshold=3 --baseline .knots-baseline.json --changed "$@"' --
+        entry: cargo run --quiet -- --mccabe-threshold=15 --cognitive-threshold=15 --nesting-threshold=5 --sloc-threshold=50 --abc-threshold=20.0 --return-threshold=3 --baseline .knots-baseline.json --changed
         language: system
         types: [rust]
         pass_filenames: true
