@@ -137,7 +137,9 @@ repos:
 **Configuration Options:**
 
 - `--threshold=0.70`: Minimum test-to-source complexity ratio (default: 0.70 = 70%)
-- `--level=warn`: Enforcement level (`warn` or `error`, default: `warn`)
+- `--level=warn`: Enforcement level (`warn` or `error`, default: `warn`). At
+  `warn` a failing test is reported but the hook passes, so the commit goes
+  ahead; use `error` for a failing test to stop the commit.
 - `--no-check-boundaries`: Disable boundary value detection (enabled by default)
 - `--verbose`: Show detailed per-file analysis
 

@@ -21,7 +21,7 @@ The examples show:
 
 **Good Test:** `test_timer_good.c`
 ```bash
-knots-knots-test-complexity examples/test_timer_good.c examples/timer.c
+knots-test-complexity examples/test_timer_good.c examples/timer.c
 ```
 
 Expected: **PASS**

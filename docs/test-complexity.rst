@@ -58,6 +58,10 @@ The hook wrapper defaults to naming-convention source lookup. Choose
               - --framework=ceedling
               - --test-dir=Test
 
+The hook's default level is ``warn``: a test below a threshold is reported,
+but the hook passes and the commit goes ahead. Give it ``--level=error``, as
+above, for a failing test to stop the commit.
+
 The wrapper parses ``TEST_SOURCE_FILE("path/to/source.c")`` from Ceedling test
 files to locate the corresponding source automatically. Adjust ``--test-dir``
 if your tests live in a non-default location (``test/``, ``Tests/``, ``tests/``).

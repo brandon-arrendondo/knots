@@ -22,6 +22,16 @@ existing scores and gate results can move. See
 - The `hooks/PRE_COMMIT_FRAMEWORK.md` example that runs
   `pre-commit-wrapper.sh` through a shell now passes every staged file.
   Previously it dropped the first.
+- The ABC threshold now gates the standalone hooks. `pre-commit` and
+  `pre-commit-warning-only` never applied `abc-threshold`, and
+  `pre-commit-wrapper.sh` ignored `--abc-threshold` whenever another
+  threshold was set or `--verbose` was given, because each read a line the
+  text report no longer prints. The hooks now read `knots --format ndjson`,
+  so every threshold applies in every mode, and they no longer need `bc`.
+  Commits that passed before can be rejected where a function's ABC
+  magnitude is over the configured threshold.
+- `pre-commit` and `pre-commit-warning-only` name a function once, as
+  `file.c:7:name`, instead of repeating the file (`file.c:file.c:7:name`).
 
 ## 2.0.0 - 2026-10-23
 
