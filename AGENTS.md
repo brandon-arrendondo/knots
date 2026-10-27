@@ -32,9 +32,8 @@ never sign for anyone who has not authorized it.
 
 Keep task ids out of public files, including documentation, ADRs, READMEs,
 changelogs, source comments, test names, fixtures, and papers. Never publish a
-task title either. Say what the change does and why instead. A commit
-message may keep a project-qualified task id (for example `(aurora_lint
-2267)`) for internal tracing.
+task title either, and leave both out of commit messages. Say what the change
+does and why instead.
 
 Public files never contain credentials, private fleet details such as host
 names, addresses, or network layout, or the location of an upstream defect
