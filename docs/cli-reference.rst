@@ -167,7 +167,8 @@ whose score got worse. See :doc:`baseline` for the full guide and file format.
     Snapshot the current scores to the ``--baseline`` file and exit ``0``
     without gating. Use it to adopt the gate, and to re-accept the current
     state after intentional changes. Requires ``--baseline <FILE>``; works with
-    any ``--format``.
+    any ``--format``. If any selected file was not analysed, it writes no
+    baseline and exits ``3`` (see :doc:`baseline`).
 
 .. code-block:: bash
 

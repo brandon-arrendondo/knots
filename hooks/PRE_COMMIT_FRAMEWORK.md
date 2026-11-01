@@ -436,7 +436,7 @@ jobs:
       - name: Install knots
         run: |
           cargo install knots
-          # Or: curl -L https://github.com/brandon-arrendondo/knots/releases/download/v0.2.0/knots-linux-x64 -o /usr/local/bin/knots && chmod +x /usr/local/bin/knots
+          # Or, prebuilt with no Rust toolchain: pipx install knots
       
       - uses: pre-commit/action@v3.0.0
 ```
