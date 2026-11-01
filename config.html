@@ -124,6 +124,12 @@ before (CLI flags and JSON filters only).</p>
 <p>Resolution order for each metric, per function: <strong>CLI flag</strong> &gt; <strong>per-language
 config</strong> (<code class="docutils literal notranslate"><span class="pre">[&lt;lang&gt;.thresholds]</span></code>) &gt; <strong>global config</strong> (<code class="docutils literal notranslate"><span class="pre">[thresholds]</span></code>) &gt;
 off.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;lang&gt;</span></code> is the language’s registry key: <code class="docutils literal notranslate"><span class="pre">c</span></code>, <code class="docutils literal notranslate"><span class="pre">cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">rust</span></code>,
+<code class="docutils literal notranslate"><span class="pre">python</span></code>, <code class="docutils literal notranslate"><span class="pre">javascript</span></code>, <code class="docutils literal notranslate"><span class="pre">typescript</span></code>, <code class="docutils literal notranslate"><span class="pre">ada</span></code>, <code class="docutils literal notranslate"><span class="pre">go</span></code>, <code class="docutils literal notranslate"><span class="pre">java</span></code>,
+<code class="docutils literal notranslate"><span class="pre">csharp</span></code>, <code class="docutils literal notranslate"><span class="pre">kotlin</span></code>, <code class="docutils literal notranslate"><span class="pre">swift</span></code>, <code class="docutils literal notranslate"><span class="pre">php</span></code>, <code class="docutils literal notranslate"><span class="pre">fortran</span></code>, <code class="docutils literal notranslate"><span class="pre">scala</span></code> or <code class="docutils literal notranslate"><span class="pre">lua</span></code>.
+Other spellings, such as <code class="docutils literal notranslate"><span class="pre">[c++.thresholds]</span></code>, are not an error but have no
+effect, and neither does a misspelled key or section, so check that a new
+threshold actually fires.</p>
 <p>Available keys: <code class="docutils literal notranslate"><span class="pre">mccabe</span></code>, <code class="docutils literal notranslate"><span class="pre">cognitive</span></code>, <code class="docutils literal notranslate"><span class="pre">nesting</span></code>, <code class="docutils literal notranslate"><span class="pre">sloc</span></code>, <code class="docutils literal notranslate"><span class="pre">abc</span></code>,
 <code class="docutils literal notranslate"><span class="pre">returns</span></code>, <code class="docutils literal notranslate"><span class="pre">aird</span></code>, <code class="docutils literal notranslate"><span class="pre">aicp</span></code>, <code class="docutils literal notranslate"><span class="pre">external_calls</span></code>, <code class="docutils literal notranslate"><span class="pre">unreachable_blocks</span></code>
 — these are configuration keys, not literal CLI spellings. For example,
@@ -141,11 +147,14 @@ for C/C++/Rust files.</p>
 <span class="n">function_patterns</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;^HAL_&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Within one <code class="docutils literal notranslate"><span class="pre">[[filter.exclude]]</span></code> entry, <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> and
-<code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> are AND’d together; an omitted list matches everything
-for that field. A function is excluded if it matches <em>any</em> entry. This runs
-independently of (and in addition to) <code class="docutils literal notranslate"><span class="pre">--include</span></code>/<code class="docutils literal notranslate"><span class="pre">--exclude</span></code> JSON
-filters.</p>
+<p><code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> are globs matched against the file’s path;
+<code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> are regular expressions matched against the function’s
+name. A pattern that does not compile matches nothing. Within one
+<code class="docutils literal notranslate"><span class="pre">[[filter.exclude]]</span></code> entry, <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> and <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> are
+AND’d together; an omitted list matches everything for that field. A function
+is excluded if it matches <em>any</em> entry. An entry with no <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code>
+excludes whole files, which knots then never reads. This runs independently of
+(and in addition to) <code class="docutils literal notranslate"><span class="pre">--include</span></code>/<code class="docutils literal notranslate"><span class="pre">--exclude</span></code> JSON filters.</p>
 </section>
 <section id="inline-suppression">
 <h2>Inline suppression<a class="headerlink" href="#inline-suppression" title="Link to this heading"></a></h2>
@@ -169,8 +178,8 @@ markers:</p>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">tools:off</span> <span class="pre">[TOOL[,TOOL,...]]</span></code> accepts a comma-separated tool list
-(<code class="docutils literal notranslate"><span class="pre">knots</span></code>, <code class="docutils literal notranslate"><span class="pre">funky</span></code>/<code class="docutils literal notranslate"><span class="pre">moldy</span></code>, <code class="docutils literal notranslate"><span class="pre">sqc</span></code>); omitting it suppresses every tool
-for that region. An unclosed <code class="docutils literal notranslate"><span class="pre">tools:off</span></code> extends to end of file.</p>
+(<code class="docutils literal notranslate"><span class="pre">knots</span></code>, <code class="docutils literal notranslate"><span class="pre">funky</span></code>/<code class="docutils literal notranslate"><span class="pre">moldy</span></code>, <code class="docutils literal notranslate"><span class="pre">aurora-lint</span></code>, which also accepts its former
+name <code class="docutils literal notranslate"><span class="pre">sqc</span></code>); omitting it suppresses every tool for that region. An unclosed <code class="docutils literal notranslate"><span class="pre">tools:off</span></code> extends to end of file.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
@@ -181,8 +190,8 @@ either (or both) and knots behaves as it always has.</p></li>
 <code class="docutils literal notranslate"><span class="pre">FunctionMetrics</span></code> as <code class="docutils literal notranslate"><span class="pre">suppressed</span></code> — suppressed metrics are not checked
 against thresholds. Their measured values remain in structured output
 and baseline snapshots; suppression does not remove score records.</p></li>
-<li><p>See <code class="docutils literal notranslate"><span class="pre">lang-parsing-substrate</span></code>’s <code class="docutils literal notranslate"><span class="pre">docs/unified-config-spec.md</span></code> for the
-full cross-tool spec (<code class="docutils literal notranslate"><span class="pre">suppress.toml</span></code>, per-tool config files, etc.) —
+<li><p>See <code class="docutils literal notranslate"><span class="pre">lang-parsing-substrate</span></code>’s <a class="reference external" href="https://github.com/brandon-arrendondo/lang_parsing_substrate/blob/main/docs/unified-config-spec.md">docs/unified-config-spec.md</a>
+for the full cross-tool spec (<code class="docutils literal notranslate"><span class="pre">suppress.toml</span></code>, per-tool config files, etc.) —
 this page documents only what knots currently implements.</p></li>
 </ul>
 </section>

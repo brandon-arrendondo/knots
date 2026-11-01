@@ -47,6 +47,7 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#from-pypi-prebuilt-no-rust-toolchain">From PyPI (prebuilt, no Rust toolchain)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#from-crates-io">From crates.io</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#from-github-releases">From GitHub Releases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#from-source">From Source</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#supported-languages">Supported Languages</a></li>
@@ -118,6 +119,15 @@ what the <code class="docutils literal notranslate"><span class="pre">knots-pre-
 <p>This installs <code class="docutils literal notranslate"><span class="pre">knots</span></code>. The companion is not published on crates.io;
 install its prebuilt PyPI package as described above. From a source checkout,
 use <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">install</span> <span class="pre">--path</span> <span class="pre">knots-test-complexity</span></code>.</p>
+</section>
+<section id="from-github-releases">
+<h2>From GitHub Releases<a class="headerlink" href="#from-github-releases" title="Link to this heading"></a></h2>
+<p>Each <a class="reference external" href="https://github.com/brandon-arrendondo/knots/releases/latest">release</a>
+attaches prebuilt x86-64 binaries of <code class="docutils literal notranslate"><span class="pre">knots</span></code> and <code class="docutils literal notranslate"><span class="pre">knots-test-complexity</span></code>:
+a Linux tarball (<code class="docutils literal notranslate"><span class="pre">knots-linux-x64-&lt;version&gt;.tar.gz</span></code>), a Windows zip
+(<code class="docutils literal notranslate"><span class="pre">knots-windows-x64-&lt;version&gt;.zip</span></code>), a <code class="docutils literal notranslate"><span class="pre">.deb</span></code>, an <code class="docutils literal notranslate"><span class="pre">.rpm</span></code> and an
+AppImage, with a CycloneDX SBOM (<code class="docutils literal notranslate"><span class="pre">.cdx.json</span></code>) for each binary. They need
+no Rust toolchain or C compiler.</p>
 </section>
 <section id="from-source">
 <h2>From Source<a class="headerlink" href="#from-source" title="Link to this heading"></a></h2>

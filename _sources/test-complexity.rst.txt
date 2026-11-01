@@ -62,6 +62,9 @@ The hook runs at ``--level=error``: a test below a threshold stops the
 commit. pre-commit replaces a hook's ``args`` rather than adding to them, so
 when you set ``args``, keep ``--level=error`` in them, as above, or use
 ``--level=warn`` to report a failing test without blocking the commit.
+knots 2.0.0 and earlier ran the hook at ``--level=warn``, so a configuration
+pinned to one of those releases blocks only when its ``args`` say
+``--level=error``.
 
 The wrapper parses ``TEST_SOURCE_FILE("path/to/source.c")`` from Ceedling test
 files to locate the corresponding source automatically. Adjust ``--test-dir``

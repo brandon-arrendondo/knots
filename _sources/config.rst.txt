@@ -38,6 +38,13 @@ Resolution order for each metric, per function: **CLI flag** > **per-language
 config** (``[<lang>.thresholds]``) > **global config** (``[thresholds]``) >
 off.
 
+``<lang>`` is the language's registry key: ``c``, ``cpp``, ``rust``,
+``python``, ``javascript``, ``typescript``, ``ada``, ``go``, ``java``,
+``csharp``, ``kotlin``, ``swift``, ``php``, ``fortran``, ``scala`` or ``lua``.
+Other spellings, such as ``[c++.thresholds]``, are not an error but have no
+effect, and neither does a misspelled key or section, so check that a new
+threshold actually fires.
+
 Available keys: ``mccabe``, ``cognitive``, ``nesting``, ``sloc``, ``abc``,
 ``returns``, ``aird``, ``aicp``, ``external_calls``, ``unreachable_blocks``
 — these are configuration keys, not literal CLI spellings. For example,
@@ -57,11 +64,14 @@ File/function exclusion
     [[filter.exclude]]
     function_patterns = ["^HAL_"]
 
-Within one ``[[filter.exclude]]`` entry, ``file_patterns`` and
-``function_patterns`` are AND'd together; an omitted list matches everything
-for that field. A function is excluded if it matches *any* entry. This runs
-independently of (and in addition to) ``--include``/``--exclude`` JSON
-filters.
+``file_patterns`` are globs matched against the file's path;
+``function_patterns`` are regular expressions matched against the function's
+name. A pattern that does not compile matches nothing. Within one
+``[[filter.exclude]]`` entry, ``file_patterns`` and ``function_patterns`` are
+AND'd together; an omitted list matches everything for that field. A function
+is excluded if it matches *any* entry. An entry with no ``function_patterns``
+excludes whole files, which knots then never reads. This runs independently of
+(and in addition to) ``--include``/``--exclude`` JSON filters.
 
 Inline suppression
 -------------------
@@ -91,8 +101,8 @@ markers:
     /* tools:on */
 
 ``tools:off [TOOL[,TOOL,...]]`` accepts a comma-separated tool list
-(``knots``, ``funky``/``moldy``, ``sqc``); omitting it suppresses every tool
-for that region. An unclosed ``tools:off`` extends to end of file.
+(``knots``, ``funky``/``moldy``, ``aurora-lint``, which also accepts its former
+name ``sqc``); omitting it suppresses every tool for that region. An unclosed ``tools:off`` extends to end of file.
 
 Notes
 -----
@@ -103,6 +113,7 @@ Notes
   ``FunctionMetrics`` as ``suppressed`` — suppressed metrics are not checked
   against thresholds. Their measured values remain in structured output
   and baseline snapshots; suppression does not remove score records.
-- See ``lang-parsing-substrate``'s ``docs/unified-config-spec.md`` for the
-  full cross-tool spec (``suppress.toml``, per-tool config files, etc.) —
+- See ``lang-parsing-substrate``'s `docs/unified-config-spec.md
+  <https://github.com/brandon-arrendondo/lang_parsing_substrate/blob/main/docs/unified-config-spec.md>`_
+  for the full cross-tool spec (``suppress.toml``, per-tool config files, etc.) —
   this page documents only what knots currently implements.

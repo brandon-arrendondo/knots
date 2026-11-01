@@ -248,7 +248,8 @@ function fails (the default).</p>
 <dt><code class="docutils literal notranslate"><span class="pre">--write-baseline</span></code></dt><dd><p>Snapshot the current scores to the <code class="docutils literal notranslate"><span class="pre">--baseline</span></code> file and exit <code class="docutils literal notranslate"><span class="pre">0</span></code>
 without gating. Use it to adopt the gate, and to re-accept the current
 state after intentional changes. Requires <code class="docutils literal notranslate"><span class="pre">--baseline</span> <span class="pre">&lt;FILE&gt;</span></code>; works with
-any <code class="docutils literal notranslate"><span class="pre">--format</span></code>.</p>
+any <code class="docutils literal notranslate"><span class="pre">--format</span></code>. If any selected file was not analysed, it writes no
+baseline and exits <code class="docutils literal notranslate"><span class="pre">3</span></code> (see <a class="reference internal" href="baseline.html"><span class="doc">Baseline / Ratchet Mode</span></a>).</p>
 </dd>
 </dl>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Snapshot today (run once, commit the file)</span>

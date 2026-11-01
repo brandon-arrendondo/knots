@@ -212,9 +212,24 @@ already on your <code class="docutils literal notranslate"><span class="pre">PAT
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">--cognitive-threshold=25</span>
 </pre></div>
 </div>
-<p>The hooks already cover <code class="docutils literal notranslate"><span class="pre">.js</span></code>, <code class="docutils literal notranslate"><span class="pre">.jsx</span></code>, <code class="docutils literal notranslate"><span class="pre">.ts</span></code>, and <code class="docutils literal notranslate"><span class="pre">.tsx</span></code> via
-<code class="docutils literal notranslate"><span class="pre">types_or:</span> <span class="pre">[javascript,</span> <span class="pre">jsx,</span> <span class="pre">ts,</span> <span class="pre">tsx]</span></code> — no override needed. To limit
-coverage to a subset of languages, override <code class="docutils literal notranslate"><span class="pre">types_or</span></code> explicitly:</p>
+<p>The published hooks select files with
+<code class="docutils literal notranslate"><span class="pre">types_or:</span> <span class="pre">[c,</span> <span class="pre">c++,</span> <span class="pre">rust,</span> <span class="pre">python,</span> <span class="pre">javascript,</span> <span class="pre">jsx,</span> <span class="pre">ts,</span> <span class="pre">tsx]</span></code>, so they already
+cover C, C++, Rust, Python, JavaScript and TypeScript, including <code class="docutils literal notranslate"><span class="pre">.jsx</span></code> and
+<code class="docutils literal notranslate"><span class="pre">.tsx</span></code>. They do not select files in knots’ other languages: Ada, Go, Java,
+C#, Kotlin, Swift, PHP, Fortran, Scala and Lua files are skipped unless you
+override <code class="docutils literal notranslate"><span class="pre">types_or</span></code>. pre-commit’s tags for those are <code class="docutils literal notranslate"><span class="pre">go</span></code>, <code class="docutils literal notranslate"><span class="pre">java</span></code>,
+<code class="docutils literal notranslate"><span class="pre">c#</span></code>, <code class="docutils literal notranslate"><span class="pre">kotlin</span></code>, <code class="docutils literal notranslate"><span class="pre">swift</span></code>, <code class="docutils literal notranslate"><span class="pre">php</span></code>, <code class="docutils literal notranslate"><span class="pre">fortran</span></code>, <code class="docutils literal notranslate"><span class="pre">scala</span></code> and <code class="docutils literal notranslate"><span class="pre">lua</span></code>.
+Ada has no tag, so match it with <code class="docutils literal notranslate"><span class="pre">files:</span></code> instead:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>
+<span class="w">  </span><span class="nt">types_or</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">c</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">go</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">java</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">kotlin</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># add the languages you use</span>
+
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>
+<span class="w">  </span><span class="nt">types_or</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">file</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">files</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">\.(adb|ads|ada)$</span>
+</pre></div>
+</div>
+<p>To limit coverage to a subset of languages, override <code class="docutils literal notranslate"><span class="pre">types_or</span></code> the same
+way:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>
 <span class="w">  </span><span class="nt">args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--mccabe-threshold=20</span><span class="p p-Indicator">]</span>
 <span class="w">  </span><span class="nt">types_or</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">javascript</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">jsx</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># Python + JS only, skip TS</span>

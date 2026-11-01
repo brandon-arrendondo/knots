@@ -33,6 +33,16 @@ This installs ``knots``. The companion is not published on crates.io;
 install its prebuilt PyPI package as described above. From a source checkout,
 use ``cargo install --path knots-test-complexity``.
 
+From GitHub Releases
+--------------------
+
+Each `release <https://github.com/brandon-arrendondo/knots/releases/latest>`_
+attaches prebuilt x86-64 binaries of ``knots`` and ``knots-test-complexity``:
+a Linux tarball (``knots-linux-x64-<version>.tar.gz``), a Windows zip
+(``knots-windows-x64-<version>.zip``), a ``.deb``, an ``.rpm`` and an
+AppImage, with a CycloneDX SBOM (``.cdx.json``) for each binary. They need
+no Rust toolchain or C compiler.
+
 From Source
 -----------
 

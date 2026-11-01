@@ -307,7 +307,8 @@ first arm, which accounts for nearly all remaining differences</p></li>
 <li><p><strong>Thresholds</strong>: ≤10 good, 11–20 moderate, 21+ consider refactoring</p></li>
 <li><p><strong>Validated</strong>: agrees with pmccabe’s “traditional” count (each <code class="docutils literal notranslate"><span class="pre">case</span></code>
 counted, McCabe’s definition) on 29,852 of 30,461 C functions (98.00%)
-across six corpora pinned by commit. 597 of the 609 differing functions
+across six corpora pinned by commit, as recorded on 2026-10-05 in
+<code class="docutils literal notranslate"><span class="pre">validation/README.md</span></code>. 597 of the 609 differing functions
 contain <code class="docutils literal notranslate"><span class="pre">#if</span></code> arms (above). Most of the other 12 are macro artifacts: a
 <code class="docutils literal notranslate"><span class="pre">switch</span></code> whose <code class="docutils literal notranslate"><span class="pre">case</span></code> labels come from macros (neither tool sees them;
 knots counts the switch as one decision, pmccabe as none), or an <code class="docutils literal notranslate"><span class="pre">if</span></code>

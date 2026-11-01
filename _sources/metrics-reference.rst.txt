@@ -206,7 +206,8 @@ Counts the number of linearly independent paths through a function.
 - **Thresholds**: ≤10 good, 11–20 moderate, 21+ consider refactoring
 - **Validated**: agrees with pmccabe's "traditional" count (each ``case``
   counted, McCabe's definition) on 29,852 of 30,461 C functions (98.00%)
-  across six corpora pinned by commit. 597 of the 609 differing functions
+  across six corpora pinned by commit, as recorded on 2026-10-05 in
+  ``validation/README.md``. 597 of the 609 differing functions
   contain ``#if`` arms (above). Most of the other 12 are macro artifacts: a
   ``switch`` whose ``case`` labels come from macros (neither tool sees them;
   knots counts the switch as one decision, pmccabe as none), or an ``if``

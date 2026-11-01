@@ -142,9 +142,26 @@ JavaScript / TypeScript / React projects:
             - --mccabe-threshold=20
             - --cognitive-threshold=25
 
-The hooks already cover ``.js``, ``.jsx``, ``.ts``, and ``.tsx`` via
-``types_or: [javascript, jsx, ts, tsx]`` — no override needed. To limit
-coverage to a subset of languages, override ``types_or`` explicitly:
+The published hooks select files with
+``types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]``, so they already
+cover C, C++, Rust, Python, JavaScript and TypeScript, including ``.jsx`` and
+``.tsx``. They do not select files in knots' other languages: Ada, Go, Java,
+C#, Kotlin, Swift, PHP, Fortran, Scala and Lua files are skipped unless you
+override ``types_or``. pre-commit's tags for those are ``go``, ``java``,
+``c#``, ``kotlin``, ``swift``, ``php``, ``fortran``, ``scala`` and ``lua``.
+Ada has no tag, so match it with ``files:`` instead:
+
+.. code-block:: yaml
+
+        - id: knots
+          types_or: [c, go, java, kotlin]   # add the languages you use
+
+        - id: knots
+          types_or: [file]
+          files: \.(adb|ads|ada)$
+
+To limit coverage to a subset of languages, override ``types_or`` the same
+way:
 
 .. code-block:: yaml
 
