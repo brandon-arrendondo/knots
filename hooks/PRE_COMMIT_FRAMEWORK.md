@@ -32,20 +32,24 @@ pip install pre-commit
 ### 2. Create .pre-commit-config.yaml
 
 In your project root, create or edit `.pre-commit-config.yaml`. The
-recommended setup uses the hooks published in the knots repository:
+recommended setup uses the `knots-pre-commit` mirror, whose hooks install the
+prebuilt knots wheel from PyPI, so there is no Rust toolchain to install and
+nothing to compile:
 
 ```yaml
 repos:
   # ... your other hooks ...
 
-  - repo: https://github.com/brandon-arrendondo/knots
+  - repo: https://github.com/brandon-arrendondo/knots-pre-commit
     rev: v2.0.0
     hooks:
       - id: knots
 ```
 
-`docs/ci-integration.rst` describes the published hooks and their options in
-full.
+The knots repository publishes the same hooks, built from source on first
+use, plus variants that use a knots already on `PATH`; see
+[Published Hooks](#published-hooks). `docs/ci-integration.rst` describes both
+in full.
 
 To run the shell wrapper from a local knots checkout instead (see
 [The Wrapper Script](#the-wrapper-script)):
@@ -77,8 +81,10 @@ Now pre-commit will run knots automatically on commit.
 
 ## Published Hooks
 
-The knots repository's `.pre-commit-hooks.yaml` publishes these hooks. Each
-runs `knots` itself on the staged files:
+The `knots-pre-commit` mirror publishes `knots`, `knots-verbose` and
+`knots-strict`, installing knots from its PyPI wheel. The knots repository's
+own `.pre-commit-hooks.yaml` publishes these hooks. Each runs `knots` itself
+on the staged files:
 
 | Hook id | Installs knots by | Default arguments |
 |---------|-------------------|-------------------|
@@ -250,7 +256,7 @@ Or restrict to Rust only:
 repos:
   # ... your other hooks ...
 
-  - repo: https://github.com/brandon-arrendondo/knots
+  - repo: https://github.com/brandon-arrendondo/knots-pre-commit
     rev: v2.0.0
     hooks:
       - id: knots
@@ -392,9 +398,9 @@ Add `--verbose` to args or set `verbose: true`:
 
 ### GitHub Actions
 
-GitHub's Ubuntu runners include Rust and pipx, so the published `knots` hook
-can build knots itself, and pre-commit can run through pipx with no setup
-step:
+GitHub's Ubuntu runners include pipx, so pre-commit can run through it with
+no setup step. The mirror's hooks install knots themselves (the knots
+repository's `knots` hook builds it with the runner's Rust toolchain):
 
 ```yaml
 name: pre-commit
@@ -410,21 +416,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # To skip the build, use the knots-system hook and install the
-      # prebuilt binary instead: pipx install knots
       - run: pipx run pre-commit run --all-files --show-diff-on-failure
 ```
 
 ### GitLab CI
 
-The `python` image has no Rust toolchain, so install the prebuilt knots
-wheel and use the `knots-system` hook:
+The `python` image has no Rust toolchain, so use the mirror's hooks, which
+install the prebuilt knots wheel, or install it yourself (`pip install knots`)
+for the knots repository's `knots-system` hook:
 
 ```yaml
 pre-commit:
   image: python:3
   before_script:
-    - pip install pre-commit knots
+    - pip install pre-commit
   script:
     - pre-commit run --all-files
 ```
