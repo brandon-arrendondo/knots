@@ -123,7 +123,7 @@ Add to your project's `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v2.0.0  # a released knots tag
+    rev: v2.1.0  # a released knots tag
     hooks:
       - id: test-complexity
         args:
