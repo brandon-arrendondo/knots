@@ -127,9 +127,11 @@ off.</p>
 <p><code class="docutils literal notranslate"><span class="pre">&lt;lang&gt;</span></code> is the language’s registry key: <code class="docutils literal notranslate"><span class="pre">c</span></code>, <code class="docutils literal notranslate"><span class="pre">cpp</span></code>, <code class="docutils literal notranslate"><span class="pre">rust</span></code>,
 <code class="docutils literal notranslate"><span class="pre">python</span></code>, <code class="docutils literal notranslate"><span class="pre">javascript</span></code>, <code class="docutils literal notranslate"><span class="pre">typescript</span></code>, <code class="docutils literal notranslate"><span class="pre">ada</span></code>, <code class="docutils literal notranslate"><span class="pre">go</span></code>, <code class="docutils literal notranslate"><span class="pre">java</span></code>,
 <code class="docutils literal notranslate"><span class="pre">csharp</span></code>, <code class="docutils literal notranslate"><span class="pre">kotlin</span></code>, <code class="docutils literal notranslate"><span class="pre">swift</span></code>, <code class="docutils literal notranslate"><span class="pre">php</span></code>, <code class="docutils literal notranslate"><span class="pre">fortran</span></code>, <code class="docutils literal notranslate"><span class="pre">scala</span></code> or <code class="docutils literal notranslate"><span class="pre">lua</span></code>.
-Other spellings, such as <code class="docutils literal notranslate"><span class="pre">[c++.thresholds]</span></code>, are not an error but have no
-effect, and neither does a misspelled key or section, so check that a new
-threshold actually fires.</p>
+A section or key knots does not read is an error: knots names the file, the
+line and the nearest valid name, and exits <code class="docutils literal notranslate"><span class="pre">1</span></code> before analysing anything.
+For example, <code class="docutils literal notranslate"><span class="pre">[&quot;c++&quot;.thresholds]</span></code> is reported as an unknown section with
+<code class="docutils literal notranslate"><span class="pre">cpp</span></code> suggested, and <code class="docutils literal notranslate"><span class="pre">mccab</span> <span class="pre">=</span> <span class="pre">10</span></code> as an unknown key with <code class="docutils literal notranslate"><span class="pre">mccabe</span></code>
+suggested.</p>
 <p>Available keys: <code class="docutils literal notranslate"><span class="pre">mccabe</span></code>, <code class="docutils literal notranslate"><span class="pre">cognitive</span></code>, <code class="docutils literal notranslate"><span class="pre">nesting</span></code>, <code class="docutils literal notranslate"><span class="pre">sloc</span></code>, <code class="docutils literal notranslate"><span class="pre">abc</span></code>,
 <code class="docutils literal notranslate"><span class="pre">returns</span></code>, <code class="docutils literal notranslate"><span class="pre">aird</span></code>, <code class="docutils literal notranslate"><span class="pre">aicp</span></code>, <code class="docutils literal notranslate"><span class="pre">external_calls</span></code>, <code class="docutils literal notranslate"><span class="pre">unreachable_blocks</span></code>
 — these are configuration keys, not literal CLI spellings. For example,
@@ -149,7 +151,10 @@ for C/C++/Rust files.</p>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> are globs matched against the file’s path;
 <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> are regular expressions matched against the function’s
-name. A pattern that does not compile matches nothing. Within one
+name. Every pattern is compiled when the configuration loads; one that does
+not compile is an error that names the entry (by its position among the
+<code class="docutils literal notranslate"><span class="pre">[[filter.exclude]]</span></code> entries), the pattern and the parser’s message, and
+knots exits <code class="docutils literal notranslate"><span class="pre">1</span></code> before analysing anything. Within one
 <code class="docutils literal notranslate"><span class="pre">[[filter.exclude]]</span></code> entry, <code class="docutils literal notranslate"><span class="pre">file_patterns</span></code> and <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code> are
 AND’d together; an omitted list matches everything for that field. A function
 is excluded if it matches <em>any</em> entry. An entry with no <code class="docutils literal notranslate"><span class="pre">function_patterns</span></code>

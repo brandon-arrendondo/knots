@@ -58,7 +58,7 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmark Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Troubleshooting</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#path-is-a-directory-use-r-recursive">“Path is a directory. Use -r/–recursive”</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#path-dir-is-a-directory-use-r-recursive">“Path ‘&lt;dir&gt;’ is a directory. Use -r/–recursive”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#warning-not-analysed-read-file-stream-did-not-contain-valid-utf-8">“Warning: Not analysed (read): &lt;file&gt;: stream did not contain valid UTF-8”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#no-supported-source-files-found-in-directory">“No supported source files found in directory”</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#rust-cognitive-scores-differ-from-clippy">Rust Cognitive scores differ from Clippy</a></li>
@@ -97,8 +97,8 @@
              
   <section id="troubleshooting">
 <h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h1>
-<section id="path-is-a-directory-use-r-recursive">
-<h2>“Path is a directory. Use -r/–recursive”<a class="headerlink" href="#path-is-a-directory-use-r-recursive" title="Link to this heading"></a></h2>
+<section id="path-dir-is-a-directory-use-r-recursive">
+<h2>“Path ‘&lt;dir&gt;’ is a directory. Use -r/–recursive”<a class="headerlink" href="#path-dir-is-a-directory-use-r-recursive" title="Link to this heading"></a></h2>
 <p>You passed a directory without <code class="docutils literal notranslate"><span class="pre">-r</span></code>. Nothing is analysed and knots exits 2.
 Add <code class="docutils literal notranslate"><span class="pre">-r</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">knots</span> <span class="o">-</span><span class="n">r</span> <span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">directory</span><span class="o">/</span>

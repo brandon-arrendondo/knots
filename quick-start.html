@@ -139,6 +139,7 @@ function from any line of output (not just threshold violations).</p>
   AIRD Score: 87
   AICP Score: 72
   External Calls: 14
+  State Coupling: 3
   Max Complexity: 45
 </pre></div>
 </div>
@@ -157,22 +158,23 @@ function from any line of output (not just threshold violations).</p>
 <li><p>Writes per-function detail to a file when <code class="docutils literal notranslate"><span class="pre">--report</span> <span class="pre">&lt;FILE&gt;</span></code> is given (opt-in)</p></li>
 <li><p>Reports file processing statistics</p></li>
 </ul>
-<p>Example output:</p>
+<p>Example output, abridged, from <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">-r</span> <span class="pre">sample-files</span></code> in the knots
+repository:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>=== TOP 5 WORST FUNCTIONS ===
 
-1. 😢 drivers/hal_rcc.c:142:HAL_RCC_OscConfig
-   McCabe: 71, Cognitive: 214, Nesting: 11, SLOC: 327, ABC: 134.90, Returns: 23, TestScore: 9
+1. 😐 sample-files/complex.c:7:process_matrix
+   McCabe: 6, Cognitive: 13, Nesting: 4, SLOC: 17, ABC: 6.71, Returns: 0, TestScore: 9, AIRD: 25, AICP: 3, ExtCalls: 1
 
 === TOTALS &amp; AVERAGES ===
 
-  Total Functions: 3404
-  Average McCabe Complexity: 2.02
-  Average Cognitive Complexity: 1.65
+  Total Functions: 33
+  Average McCabe Complexity: 2.55
+  Average Cognitive Complexity: 2.42
 
 === FILES PROCESSED ===
 
-  Total files selected: 165
-  Analysed: 165
+  Total files selected: 18
+  Analysed: 18
   Not analysed: 0
   Syntax errors, no functions recovered: 0
 </pre></div>
@@ -247,7 +249,7 @@ source files and omit headers:</p>
 <p>Filter schema:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;src/**/*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;**/src/**/*.c&quot;</span><span class="p">,</span>
 <span class="w">    </span><span class="s2">&quot;!**/vendor/**&quot;</span><span class="p">,</span>
 <span class="w">    </span><span class="s2">&quot;!**/test_*.c&quot;</span>
 <span class="w">  </span><span class="p">],</span>

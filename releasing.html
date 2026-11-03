@@ -143,8 +143,13 @@ publisher at <a class="reference external" href="https://pypi.org/manage/account
 <p><code class="docutils literal notranslate"><span class="pre">X.Y.Z</span></code> is the new version.</p>
 <ol class="arabic">
 <li><p><strong>Bump the version.</strong> Edit <code class="docutils literal notranslate"><span class="pre">[workspace.package].version</span></code> in <code class="docutils literal notranslate"><span class="pre">Cargo.toml</span></code>,
-update the documented <code class="docutils literal notranslate"><span class="pre">rev:</span></code> pins (<code class="docutils literal notranslate"><span class="pre">docs/</span></code>, <code class="docutils literal notranslate"><span class="pre">example-pre-commit-config.yaml</span></code>),
-then <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">build</span></code> to refresh <code class="docutils literal notranslate"><span class="pre">Cargo.lock</span></code>. Commit.</p></li>
+update the documented <code class="docutils literal notranslate"><span class="pre">rev:</span></code> pins (<code class="docutils literal notranslate"><span class="pre">docs/</span></code>, <code class="docutils literal notranslate"><span class="pre">hooks/*.md</span></code>,
+<code class="docutils literal notranslate"><span class="pre">example-pre-commit-config.yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">knots-test-complexity/README.md</span></code>),
+then <code class="docutils literal notranslate"><span class="pre">cargo</span> <span class="pre">build</span></code> to refresh <code class="docutils literal notranslate"><span class="pre">Cargo.lock</span></code>. Check the third-party versions (the GitHub Action in
+<code class="docutils literal notranslate"><span class="pre">hooks/PRE_COMMIT_FRAMEWORK.md</span></code>, the <code class="docutils literal notranslate"><span class="pre">pre-commit-hooks</span></code> pin in
+<code class="docutils literal notranslate"><span class="pre">example-pre-commit-config.yaml</span></code>) against each project’s release page,
+update any that moved, and update the date in the comment at the top of
+<code class="docutils literal notranslate"><span class="pre">hooks/PRE_COMMIT_FRAMEWORK.md</span></code>. Commit.</p></li>
 <li><p><strong>Tag and push knots.</strong> This publishes both wheels:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>tag<span class="w"> </span>vX.Y.Z
 git<span class="w"> </span>push<span class="w"> </span>--follow-tags
@@ -164,6 +169,10 @@ git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </
 </div>
 <p><strong>Order matters:</strong> the mirror’s <code class="docutils literal notranslate"><span class="pre">knots==X.Y.Z</span></code> pin must reference a version
 already on PyPI, so always publish knots (step 2) <strong>before</strong> tagging the mirror.</p>
+<p>Keep the mirror’s hooks the same as knots’ own: each hook in its
+<code class="docutils literal notranslate"><span class="pre">.pre-commit-hooks.yaml</span></code> has the same <code class="docutils literal notranslate"><span class="pre">files:</span></code> selection and default
+<code class="docutils literal notranslate"><span class="pre">args:</span></code> as the hook of the same id in knots’ <code class="docutils literal notranslate"><span class="pre">.pre-commit-hooks.yaml</span></code>.
+Copy any change across before tagging.</p>
 </li>
 </ol>
 </section>

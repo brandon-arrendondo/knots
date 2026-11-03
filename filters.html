@@ -64,7 +64,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#example-1-analyze-only-high-complexity-functions">Example 1: Analyze only high-complexity functions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#example-2-exclude-test-files-and-test-functions">Example 2: Exclude test files and test functions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#example-3-focus-on-specific-modules-with-concerning-complexity">Example 3: Focus on specific modules with concerning complexity</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#example-4-exclude-vendor-code-and-simple-functions">Example 4: Exclude vendor code and simple functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-4-exclude-vendor-code-and-simple-hal-and-reserved-name-functions">Example 4: Exclude vendor code and simple HAL and reserved-name functions</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#filter-logic">Filter Logic</a><ul>
@@ -150,8 +150,9 @@ knots<span class="w"> </span>-r<span class="w"> </span>/path/to/code<span class=
 </ul>
 <p><strong>Examples:</strong></p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;src/**/*.c&quot;</span></code> — all <code class="docutils literal notranslate"><span class="pre">.c</span></code> files in <code class="docutils literal notranslate"><span class="pre">src/</span></code> and subdirectories</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lib/*.c&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">.c</span></code> files under <code class="docutils literal notranslate"><span class="pre">lib/</span></code>, including nested directories</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;**/src/**/*.c&quot;</span></code> — all <code class="docutils literal notranslate"><span class="pre">.c</span></code> files in a <code class="docutils literal notranslate"><span class="pre">src/</span></code> directory and its
+subdirectories</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;**/lib/*.c&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">.c</span></code> files under <code class="docutils literal notranslate"><span class="pre">lib/</span></code>, including nested directories</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;!**/test_*.c&quot;</span></code> — exclude files starting with <code class="docutils literal notranslate"><span class="pre">test_</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;!**/vendor/**&quot;</span></code> — exclude everything in vendor directories</p></li>
 </ul>
@@ -238,8 +239,8 @@ are filtered out.</p>
 <p><code class="docutils literal notranslate"><span class="pre">filter-focus.json</span></code>:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">  </span><span class="nt">&quot;file_patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">    </span><span class="s2">&quot;src/core/**/*.c&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="s2">&quot;src/drivers/**/*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;**/src/core/**/*.c&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s2">&quot;**/src/drivers/**/*.c&quot;</span><span class="p">,</span>
 <span class="w">    </span><span class="s2">&quot;!**/vendor/**&quot;</span>
 <span class="w">  </span><span class="p">],</span>
 <span class="w">  </span><span class="nt">&quot;min_complexity&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
@@ -251,8 +252,8 @@ are filtered out.</p>
 </pre></div>
 </div>
 </section>
-<section id="example-4-exclude-vendor-code-and-simple-functions">
-<h3>Example 4: Exclude vendor code and simple functions<a class="headerlink" href="#example-4-exclude-vendor-code-and-simple-functions" title="Link to this heading"></a></h3>
+<section id="example-4-exclude-vendor-code-and-simple-hal-and-reserved-name-functions">
+<h3>Example 4: Exclude vendor code and simple HAL and reserved-name functions<a class="headerlink" href="#example-4-exclude-vendor-code-and-simple-hal-and-reserved-name-functions" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create exclude filter</span>
 cat<span class="w"> </span>&gt;<span class="w"> </span>filter-exclude.json<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
 <span class="s">{</span>
@@ -272,6 +273,9 @@ cat<span class="w"> </span>&gt;<span class="w"> </span>filter-exclude.json<span 
 knots<span class="w"> </span>-r<span class="w"> </span>.<span class="w"> </span>--exclude<span class="w"> </span>filter-exclude.json
 </pre></div>
 </div>
+<p>Because both function criteria are present, only <code class="docutils literal notranslate"><span class="pre">HAL_*</span></code> and <code class="docutils literal notranslate"><span class="pre">__*</span></code>
+functions with complexity 5 or less are excluded; other simple functions
+remain.</p>
 </section>
 </section>
 <section id="filter-logic">
@@ -318,7 +322,10 @@ at function level; an empty exclude object is a no-op. Include filters
 likewise impose no restriction for an omitted or empty criterion.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">knots.toml</span></code> exclusions (see <a class="reference internal" href="config.html"><span class="doc">knots.toml &amp; Inline Suppression</span></a>) remain an alternative for
 combining file and function criteria within one entry.</p></li>
-<li><p>File patterns are matched against the full file path.</p></li>
+<li><p>File patterns are matched against the path as knots discovered it, which
+begins with the path you passed: <code class="docutils literal notranslate"><span class="pre">./src/x.c</span></code> under <code class="docutils literal notranslate"><span class="pre">-r</span> <span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">src/x.c</span></code>
+under <code class="docutils literal notranslate"><span class="pre">-r</span> <span class="pre">src</span></code>. Start a pattern with <code class="docutils literal notranslate"><span class="pre">**/</span></code> (as in <code class="docutils literal notranslate"><span class="pre">**/src/**/*.c</span></code>) so
+it matches however the scan was started.</p></li>
 <li><p>Function patterns use Rust’s regex syntax.</p></li>
 <li><p>Invalid regex patterns are silently ignored (the function won’t match).</p></li>
 </ul>
