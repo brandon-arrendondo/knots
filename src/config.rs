@@ -159,9 +159,7 @@ impl KnotsToml {
             if candidate.is_file() {
                 let content = fs::read_to_string(&candidate)
                     .with_context(|| format!("Failed to read {}", candidate.display()))?;
-                let origin = candidate.display().to_string();
-                let cfg = Self::parse(&content, &origin)
-                    .with_context(|| format!("Failed to parse {origin}"))?;
+                let cfg = Self::parse(&content, &candidate.display().to_string())?;
                 return Ok(Some(cfg));
             }
             dir = d.parent();
@@ -188,7 +186,7 @@ impl KnotsToml {
                 .collect();
             bail!("{}", lines.join("\n"));
         }
-        Ok(toml::from_str(content)?)
+        toml::from_str(content).with_context(|| format!("Failed to parse {origin}"))
     }
 }
 
