@@ -534,7 +534,58 @@ needs to safely modify a function. Higher = harder for an AI to modify.</p>
 <p>Each ratio is capped at 1 before it is weighted (a negative <code class="docutils literal notranslate"><span class="pre">test_score</span></code> or
 <code class="docutils literal notranslate"><span class="pre">doc_score</span></code> counts as 0), and the sum is rounded and clamped to 0–100.
 <code class="docutils literal notranslate"><span class="pre">state_coupling</span></code> is the explicit parameter count plus the number of
-distinct <code class="docutils literal notranslate"><span class="pre">self</span></code>/<code class="docutils literal notranslate"><span class="pre">this</span></code> fields the function touches.</p>
+distinct members the function reaches through its own receiver, each
+counted once however often it is used. Which members count depends on the
+language:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Language</p></th>
+<th class="head"><p>Receiver</p></th>
+<th class="head"><p>Members counted</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Rust, Python, Swift</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">self.member</span></code></p></td>
+<td><p>fields and methods</p></td>
+</tr>
+<tr class="row-odd"><td><p>C++</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">this-&gt;member</span></code>,
+<code class="docutils literal notranslate"><span class="pre">(*this).member</span></code></p></td>
+<td><p>fields and methods</p></td>
+</tr>
+<tr class="row-even"><td><p>Java, JavaScript, TypeScript,</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">this.member</span></code></p></td>
+<td><p>fields and methods</p></td>
+</tr>
+<tr class="row-odd"><td><p>C#, Kotlin</p></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>PHP</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">$this-&gt;member</span></code></p></td>
+<td><p>fields and methods</p></td>
+</tr>
+</tbody>
+</table>
+<p>“Methods” means a call through the receiver: <code class="docutils literal notranslate"><span class="pre">self.helper()</span></code> counts
+<code class="docutils literal notranslate"><span class="pre">helper</span></code> as <code class="docutils literal notranslate"><span class="pre">self.count</span></code> counts <code class="docutils literal notranslate"><span class="pre">count</span></code>. In C++, <code class="docutils literal notranslate"><span class="pre">this-&gt;g&lt;int&gt;()</span></code>
+counts <code class="docutils literal notranslate"><span class="pre">g</span></code>, whatever its template arguments, and <code class="docutils literal notranslate"><span class="pre">this-&gt;~S()</span></code> counts the
+destructor. A lambda inside a method that uses <code class="docutils literal notranslate"><span class="pre">this-&gt;member</span></code> counts
+toward that method. A class defined inside a C++ function has its own
+<code class="docutils literal notranslate"><span class="pre">this</span></code>, so its member functions’ accesses do not count for the enclosing
+function. A JavaScript <code class="docutils literal notranslate"><span class="pre">function</span></code> nested inside a method is different:
+its <code class="docutils literal notranslate"><span class="pre">this.member</span></code> accesses do count for the method, even though that
+<code class="docutils literal notranslate"><span class="pre">this</span></code> is not the method’s.</p>
+<p>Only the spellings in the table are recognized. In C++, <code class="docutils literal notranslate"><span class="pre">(this)-&gt;a</span></code>,
+<code class="docutils literal notranslate"><span class="pre">(*(this)).a</span></code>, <code class="docutils literal notranslate"><span class="pre">this[0].a</span></code> and <code class="docutils literal notranslate"><span class="pre">static_cast&lt;D*&gt;(this)-&gt;x</span></code> (as in
+CRTP) are not counted, and tree-sitter-cpp does not parse
+<code class="docutils literal notranslate"><span class="pre">this-&gt;operator()(1)</span></code>, so an operator called that way is not counted
+either. A member named without its receiver (a bare <code class="docutils literal notranslate"><span class="pre">count</span></code> inside a
+C++, Java, C# or Kotlin member function) is not counted: telling it from a
+local or a global needs the class’s members, which an out-of-line
+definition or a base class keeps in another file. In the other languages,
+and for a static member function, only the parameters count.</p>
 <p>AIRD reads the source <strong>as written</strong>. Its <code class="docutils literal notranslate"><span class="pre">cognitive</span></code> input (and the McCabe
 behind <code class="docutils literal notranslate"><span class="pre">test_score</span></code>) counts every live <code class="docutils literal notranslate"><span class="pre">#if</span></code> arm, where the <code class="docutils literal notranslate"><span class="pre">mccabe</span></code> and
 <code class="docutils literal notranslate"><span class="pre">cognitive</span></code> columns report the worst real configuration. McCabe and

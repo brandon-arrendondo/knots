@@ -42,7 +42,7 @@ The hook wrapper defaults to naming-convention source lookup. Choose
 
     repos:
       - repo: https://github.com/brandon-arrendondo/knots
-        rev: v2.1.0
+        rev: v2.2.0
         hooks:
           # Main complexity check
           - id: knots
