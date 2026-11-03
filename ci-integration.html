@@ -149,7 +149,7 @@ knots<span class="w"> </span>-r<span class="w"> </span>src/<span class="w"> </sp
 <span class="w">  </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots -r --format sarif src/ &gt; knots.sarif</span>
 
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Upload SARIF</span>
-<span class="w">  </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github/codeql-action/upload-sarif@v3</span>
+<span class="w">  </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github/codeql-action/upload-sarif@v4</span>
 <span class="w">  </span><span class="nt">with</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">sarif_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots.sarif</span>
 </pre></div>
@@ -215,16 +215,16 @@ already on your <code class="docutils literal notranslate"><span class="pre">PAT
 <p>The hooks in the knots repository select files by extension: exactly the
 extensions <code class="docutils literal notranslate"><span class="pre">knots</span> <span class="pre">--supported-languages</span></code> lists, including <code class="docutils literal notranslate"><span class="pre">.h</span></code> and
 <code class="docutils literal notranslate"><span class="pre">.ads</span></code>, in any letter case. So every language knots supports is checked, and
-no file reaches knots that it cannot analyse. The <code class="docutils literal notranslate"><span class="pre">knots-pre-commit</span></code> mirror
-takes the same selection in its next release; until then it selects C, C++,
-Rust, Python and JavaScript files by pre-commit’s type tags.</p>
+no file reaches knots that it cannot analyse. They do not use pre-commit’s
+type tags, which have no tag for Ada and tag files such as <code class="docutils literal notranslate"><span class="pre">.hh</span></code>, <code class="docutils literal notranslate"><span class="pre">.inl</span></code>
+and <code class="docutils literal notranslate"><span class="pre">.ipp</span></code> as C++; knots would report those as not analysed and fail the
+commit with status <code class="docutils literal notranslate"><span class="pre">3</span></code>. The <code class="docutils literal notranslate"><span class="pre">knots-pre-commit</span></code> mirror takes the same
+selection in its next release; until then it selects C, C++, Rust, Python
+and JavaScript files by pre-commit’s type tags.</p>
 <p>Because the match ignores case, <code class="docutils literal notranslate"><span class="pre">.C</span></code> and <code class="docutils literal notranslate"><span class="pre">.H</span></code> files are passed to knots,
 which reads them as C, as it does under <code class="docutils literal notranslate"><span class="pre">-r</span></code>. C++ code in a file named that
 way is parsed with the C grammar, so its functions can be missed without an
-error. They do not use pre-commit’s type tags, which
-have no tag for Ada and tag files such as <code class="docutils literal notranslate"><span class="pre">.hh</span></code>, <code class="docutils literal notranslate"><span class="pre">.inl</span></code> and <code class="docutils literal notranslate"><span class="pre">.ipp</span></code> as
-C++; knots would report those as not analysed and fail the commit with
-status <code class="docutils literal notranslate"><span class="pre">3</span></code>.</p>
+error.</p>
 <p>To limit a hook to some languages, add <code class="docutils literal notranslate"><span class="pre">types_or</span></code>. pre-commit selects only
 the files that match both it and the hook’s extensions:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">knots</span>

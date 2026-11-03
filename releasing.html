@@ -184,8 +184,15 @@ pipx<span class="w"> </span>run<span class="w"> </span>--spec<span class="w"> </
 <span class="c1"># End-to-end zero-compile pre-commit path</span>
 pre-commit<span class="w"> </span>try-repo<span class="w"> </span>https://github.com/brandon-arrendondo/knots-pre-commit<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>knots<span class="w"> </span>--ref<span class="w"> </span>vX.Y.Z<span class="w"> </span>--files<span class="w"> </span>path/to/source.rs
+
+<span class="c1"># Every knots-pre-commit rev: pin in the docs and examples names a tag</span>
+<span class="c1"># the mirror has (exits 1 and prints MISSING for any that does not)</span>
+scripts/check_mirror_pins.sh
 </pre></div>
 </div>
+<p>The docs recommend the mirror, so a <code class="docutils literal notranslate"><span class="pre">rev:</span></code> pin there that names a missing
+tag fails every user who copies it. Run the check after step 3, and again
+after any commit that changes a pin.</p>
 </section>
 <section id="notes-recovery">
 <h2>Notes &amp; recovery<a class="headerlink" href="#notes-recovery" title="Link to this heading"></a></h2>
