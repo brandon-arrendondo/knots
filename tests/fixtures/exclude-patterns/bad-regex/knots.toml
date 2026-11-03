@@ -1,0 +1,3 @@
+# The regex has an unclosed group.
+[[filter.exclude]]
+function_patterns = ["^generated_("]

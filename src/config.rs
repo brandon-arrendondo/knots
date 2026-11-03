@@ -8,7 +8,7 @@
 //! unchanged — this is an additive config surface, not a replacement.
 
 use anyhow::{bail, Context, Result};
-use globset::Glob;
+use globset::{Glob, GlobMatcher};
 use knots::languages;
 use regex::Regex;
 use serde::Deserialize;
@@ -64,9 +64,35 @@ impl TomlThresholds {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(try_from = "RawFilterSection")]
 pub struct FilterSection {
-    #[serde(default)]
     pub exclude: Vec<FilterExclude>,
+}
+
+/// `[filter]` as written, before its exclude patterns compile.
+#[derive(Deserialize)]
+struct RawFilterSection {
+    #[serde(default)]
+    exclude: Vec<RawFilterExclude>,
+}
+
+impl TryFrom<RawFilterSection> for FilterSection {
+    type Error = String;
+
+    /// Names a failing entry by its position: toml reports every
+    /// `[[filter.exclude]]` error at the first entry's header.
+    fn try_from(raw: RawFilterSection) -> Result<Self, String> {
+        let exclude = raw
+            .exclude
+            .into_iter()
+            .enumerate()
+            .map(|(i, entry)| {
+                FilterExclude::try_from(entry)
+                    .map_err(|e| format!("[[filter.exclude]] entry {}: {e}", i + 1))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self { exclude })
+    }
 }
 
 /// One `[[filter.exclude]]` entry. `file_patterns` and `function_patterns`
@@ -74,12 +100,52 @@ pub struct FilterSection {
 /// "matches everything" for that field (so a function-only or file-only
 /// entry works as expected). A function is excluded if it matches *any*
 /// entry.
-#[derive(Debug, Clone, Default, Deserialize)]
+///
+/// Patterns are compiled once, when the config loads. One that does not
+/// compile refuses the config, naming the pattern and the parser's error,
+/// rather than matching nothing and leaving its exclusion silently off.
+#[derive(Debug, Clone, Default)]
 pub struct FilterExclude {
+    pub file_patterns: Vec<GlobMatcher>,
+    pub function_patterns: Vec<Regex>,
+}
+
+/// A `[[filter.exclude]]` entry as written, before its patterns compile.
+#[derive(Deserialize)]
+struct RawFilterExclude {
     #[serde(default)]
-    pub file_patterns: Vec<String>,
+    file_patterns: Vec<String>,
     #[serde(default)]
-    pub function_patterns: Vec<String>,
+    function_patterns: Vec<String>,
+}
+
+impl TryFrom<RawFilterExclude> for FilterExclude {
+    type Error = String;
+
+    fn try_from(raw: RawFilterExclude) -> Result<Self, String> {
+        let file_patterns = raw
+            .file_patterns
+            .iter()
+            .map(|p| {
+                Glob::new(p)
+                    .map(|g| g.compile_matcher())
+                    .map_err(|e| format!("file_patterns: `{p}` is not a valid glob: {e}"))
+            })
+            .collect::<Result<_, _>>()?;
+        let function_patterns = raw
+            .function_patterns
+            .iter()
+            .map(|p| {
+                Regex::new(p).map_err(|e| {
+                    format!("function_patterns: `{p}` is not a valid regular expression: {e}")
+                })
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            file_patterns,
+            function_patterns,
+        })
+    }
 }
 
 impl KnotsToml {
@@ -326,20 +392,13 @@ fn line_of(content: &str, span: Option<std::ops::Range<usize>>) -> usize {
         .unwrap_or(0)
 }
 
-fn glob_match(pattern: &str, path: &str) -> bool {
-    Glob::new(pattern)
-        .map(|g| g.compile_matcher().is_match(path))
-        .unwrap_or(false)
-}
-
 /// Whether an entry excludes the whole of `file_path`: one with no function
 /// patterns whose file patterns match it (or are empty). Such a file is out
 /// of scope, so it is left out before it is read.
 pub fn excludes_file(rules: &[FilterExclude], file_path: &str) -> bool {
     rules.iter().any(|r| {
         r.function_patterns.is_empty()
-            && (r.file_patterns.is_empty()
-                || r.file_patterns.iter().any(|p| glob_match(p, file_path)))
+            && (r.file_patterns.is_empty() || r.file_patterns.iter().any(|g| g.is_match(file_path)))
     })
 }
 
@@ -347,13 +406,11 @@ pub fn excludes_file(rules: &[FilterExclude], file_path: &str) -> bool {
 pub fn exclude_matches(rules: &[FilterExclude], file_path: &str, function_name: &str) -> bool {
     rules.iter().any(|r| {
         let file_ok =
-            r.file_patterns.is_empty() || r.file_patterns.iter().any(|p| glob_match(p, file_path));
+            r.file_patterns.is_empty() || r.file_patterns.iter().any(|g| g.is_match(file_path));
         let func_ok = r.function_patterns.is_empty()
-            || r.function_patterns.iter().any(|p| {
-                Regex::new(p)
-                    .map(|re| re.is_match(function_name))
-                    .unwrap_or(false)
-            });
+            || r.function_patterns
+                .iter()
+                .any(|re| re.is_match(function_name));
         file_ok && func_ok
     })
 }
@@ -479,6 +536,39 @@ function_patterns = ["^test_"]
         .unwrap();
         assert_eq!(cfg.thresholds.returns, Some(3));
         assert_eq!(cfg.languages["rust"].thresholds.external_calls, Some(4));
+    }
+
+    fn load_error(src: &str) -> String {
+        toml::from_str::<KnotsToml>(src).unwrap_err().to_string()
+    }
+
+    #[test]
+    fn invalid_glob_is_a_config_error() {
+        let msg = load_error("[[filter.exclude]]\nfile_patterns = [\"a/**\", \"b/[\"]\n");
+        assert!(
+            msg.contains("[[filter.exclude]] entry 1: file_patterns: `b/[` is not a valid glob"),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn invalid_regex_is_a_config_error_naming_its_entry() {
+        let msg = load_error(
+            "[[filter.exclude]]\nfunction_patterns = [\"^ok\"]\n\
+             [[filter.exclude]]\nfunction_patterns = [\"a{2\"]\n",
+        );
+        assert!(
+            msg.contains(
+                "[[filter.exclude]] entry 2: function_patterns: `a{2` is not a valid regular expression"
+            ),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn inline_exclude_entries_are_compiled_too() {
+        let msg = load_error("[filter]\nexclude = [{ function_patterns = [\"(\"] }]\n");
+        assert!(msg.contains("entry 1: function_patterns: `(`"), "{msg}");
     }
 
     #[test]

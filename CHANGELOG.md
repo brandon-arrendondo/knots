@@ -48,6 +48,13 @@ existing scores and gate results can move. See
   the valid name. Previously such a name was ignored, so the threshold it
   meant to set never applied and the run could pass. A configuration that
   loaded before can now fail to load; correct or remove the names it lists.
+- A `[[filter.exclude]]` glob in `file_patterns` or regular expression in
+  `function_patterns` that does not compile now stops knots with exit
+  status 1 before anything is analysed, naming the entry, the pattern and
+  the parser's error. Previously such a pattern matched nothing, so the
+  functions it meant to exclude were still reported and gated. A
+  configuration that loaded before can now fail to load; correct the
+  pattern it names.
 - The published `test-complexity` pre-commit hook now blocks a commit whose
   test fails a threshold: it runs at `--level=error`. Previously it ran at
   `warn`, reporting the failure and passing. Setting `args:` replaces the

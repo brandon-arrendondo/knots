@@ -1,0 +1,6 @@
+# A valid glob and a valid regex, each in its own entry.
+[[filter.exclude]]
+file_patterns = ["vendor/**"]
+
+[[filter.exclude]]
+function_patterns = ["^generated_"]

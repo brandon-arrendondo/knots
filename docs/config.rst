@@ -68,7 +68,10 @@ File/function exclusion
 
 ``file_patterns`` are globs matched against the file's path;
 ``function_patterns`` are regular expressions matched against the function's
-name. A pattern that does not compile matches nothing. Within one
+name. Every pattern is compiled when the configuration loads; one that does
+not compile is an error that names the entry (by its position among the
+``[[filter.exclude]]`` entries), the pattern and the parser's message, and
+knots exits ``1`` before analysing anything. Within one
 ``[[filter.exclude]]`` entry, ``file_patterns`` and ``function_patterns`` are
 AND'd together; an omitted list matches everything for that field. A function
 is excluded if it matches *any* entry. An entry with no ``function_patterns``

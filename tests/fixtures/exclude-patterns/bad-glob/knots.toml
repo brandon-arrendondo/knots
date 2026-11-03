@@ -1,0 +1,6 @@
+# The second entry's glob has an unclosed character class.
+[[filter.exclude]]
+function_patterns = ["^generated_"]
+
+[[filter.exclude]]
+file_patterns = ["vendor/[a-"]
