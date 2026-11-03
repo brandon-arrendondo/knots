@@ -2221,8 +2221,24 @@ fn extract_navigation_self_field<'a>(node: Node, source_code: &'a [u8]) -> Optio
 // needs the class's members, which an out-of-line definition or a base
 // class keeps in another file.
 fn extract_cpp_this_member<'a>(node: Node, source_code: &'a [u8]) -> Option<&'a str> {
-    let receiver = node.child_by_field_name("argument")?;
-    let is_this = match receiver.kind() {
+    if !is_cpp_this_receiver(node.child_by_field_name("argument")?) {
+        return None;
+    }
+    // `this->g<int>()` and `this->template g<int>()` both name `g`; a
+    // destructor call names `~S`.
+    let mut field = node.child_by_field_name("field")?;
+    loop {
+        field = match field.kind() {
+            "template_method" => field.child_by_field_name("name")?,
+            "dependent_name" => field.named_child(0)?,
+            _ => return field.utf8_text(source_code).ok(),
+        };
+    }
+}
+
+// `this` itself, or `(*this)`.
+fn is_cpp_this_receiver(receiver: Node) -> bool {
+    match receiver.kind() {
         "this" => true,
         "parenthesized_expression" => receiver.named_child(0).is_some_and(|inner| {
             inner.kind() == "pointer_expression"
@@ -2234,42 +2250,55 @@ fn extract_cpp_this_member<'a>(node: Node, source_code: &'a [u8]) -> Option<&'a 
                     .is_some_and(|arg| arg.kind() == "this")
         }),
         _ => false,
-    };
-    if !is_this {
-        return None;
     }
-    node.child_by_field_name("field")?
-        .utf8_text(source_code)
-        .ok()
+}
+
+// A C++ class, struct or union defined inside a function has its own
+// `this`: its member functions' accesses are not the enclosing method's.
+fn is_cpp_local_class(node: Node) -> bool {
+    matches!(
+        node.kind(),
+        "class_specifier" | "struct_specifier" | "union_specifier"
+    ) && node.child_by_field_name("body").is_some()
+}
+
+// The member a node reaches through its function's own receiver
+// (`self.x`, `this->x`, `$this->x`, ...), if it is such an access.
+fn receiver_member<'a>(node: Node, source_code: &'a [u8]) -> Option<&'a str> {
+    match node.kind() {
+        "field_expression" => try_extract_named_field(node, source_code, "value", "self", "field")
+            .or_else(|| extract_cpp_this_member(node, source_code)),
+        "attribute" => try_extract_named_field(node, source_code, "object", "self", "attribute"),
+        "member_expression" => {
+            try_extract_named_field(node, source_code, "object", "this", "property")
+        }
+        "field_access" => try_extract_named_field(node, source_code, "object", "this", "field"),
+        // Java `this.h()`.
+        "method_invocation" => try_extract_named_field(node, source_code, "object", "this", "name"),
+        // PHP `$this->h()`.
+        "member_call_expression" => {
+            try_extract_named_field(node, source_code, "object", "$this", "name")
+        }
+        "member_access_expression" => {
+            // C#: expression == "this"; PHP: object == "$this" (different field names, no ambiguity)
+            try_extract_named_field(node, source_code, "expression", "this", "name")
+                .or_else(|| try_extract_named_field(node, source_code, "object", "$this", "name"))
+        }
+        "navigation_expression" => extract_navigation_self_field(node, source_code),
+        _ => None,
+    }
 }
 
 // Iterative (explicit stack): see visit_node_mccabe's comment.
 fn collect_self_fields_recursive(root: Node, source_code: &[u8], fields: &mut HashSet<String>) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        let extracted: Option<&str> = match node.kind() {
-            "field_expression" => {
-                try_extract_named_field(node, source_code, "value", "self", "field")
-                    .or_else(|| extract_cpp_this_member(node, source_code))
-            }
-            "attribute" => {
-                try_extract_named_field(node, source_code, "object", "self", "attribute")
-            }
-            "member_expression" => {
-                try_extract_named_field(node, source_code, "object", "this", "property")
-            }
-            "field_access" => try_extract_named_field(node, source_code, "object", "this", "field"),
-            "member_access_expression" => {
-                // C#: expression == "this"; PHP: object == "$this" (different field names, no ambiguity)
-                try_extract_named_field(node, source_code, "expression", "this", "name").or_else(
-                    || try_extract_named_field(node, source_code, "object", "$this", "name"),
-                )
-            }
-            "navigation_expression" => extract_navigation_self_field(node, source_code),
-            _ => None,
-        };
+        let extracted = receiver_member(node, source_code);
         if let Some(name) = extracted {
             fields.insert(name.to_string());
+        }
+        if node != root && is_cpp_local_class(node) {
+            continue;
         }
         let mut cursor = node.walk();
         stack.extend(node.children(&mut cursor));
@@ -2703,6 +2732,21 @@ mod state_coupling_tests {
     }
 
     #[test]
+    fn cpp_template_member_calls_count_the_member_once() {
+        let code = "int S::f() { return this->g<int>() + this->g<long>() \
+                    + this->template g<char>() + this->~S(); }";
+        // g once, ~S once.
+        assert_eq!(cpp_coupling(code, "f"), 2);
+    }
+
+    #[test]
+    fn cpp_local_class_members_do_not_count_for_the_enclosing_method() {
+        let code = "int S::f() { struct L { int q; int g() { return this->q; } }; \
+                    return this->a; }";
+        assert_eq!(cpp_coupling(code, "f"), 1);
+    }
+
+    #[test]
     fn cpp_out_of_line_definition_counts_this_members() {
         assert_eq!(
             cpp_coupling("int S::m(int x) { return this->q + x; }", "m"),
@@ -2776,14 +2820,27 @@ mod state_coupling_tests {
              &["function_declaration"], 3),
             ("java", java::LANGUAGE.into(),
              "class S { int f(int x) { return this.a + this.h() + x; } }",
-             &["method_declaration"], 2),
+             &["method_declaration"], 3),
             ("php", php::LANGUAGE_PHP.into(),
              "<?php class S { function f($x) { return $this->a + $this->h() + $x; } }",
-             &["method_declaration"], 2),
+             &["method_declaration"], 3),
         ];
         for (name, language, code, kinds, want) in rows {
             assert_eq!(coupling_of_kind(language, code, kinds), want, "{name}");
         }
+    }
+
+    #[test]
+    fn javascript_nested_function_this_counts_for_the_method() {
+        // Documented: the nested function's `this` is not the method's, but
+        // its accesses still count for the method.
+        let js = "class S { f() { const g = function () { return this.z; }; return this.a; } }";
+        let got = coupling_of_kind(
+            crate::tree_sitter_javascript::LANGUAGE.into(),
+            js,
+            &["method_definition"],
+        );
+        assert_eq!(got, 2);
     }
 
     #[test]

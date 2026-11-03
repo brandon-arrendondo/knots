@@ -440,21 +440,30 @@ Language                        Receiver                    Members counted
 Rust, Python, Swift             ``self.member``             fields and methods
 C++                             ``this->member``,           fields and methods
                                 ``(*this).member``
-JavaScript, TypeScript, C#,     ``this.member``             fields and methods
-Kotlin
-Java                            ``this.member``             fields only
-PHP                             ``$this->member``           fields only
+Java, JavaScript, TypeScript,   ``this.member``             fields and methods
+C#, Kotlin
+PHP                             ``$this->member``           fields and methods
 ==============================  ==========================  =================
 
 "Methods" means a call through the receiver: ``self.helper()`` counts
-``helper`` as ``self.count`` counts ``count``. In Java and PHP,
-``this.helper()`` and ``$this->helper()`` are not counted. A lambda inside a
-method that uses ``this->member`` counts toward that method. A member named
-without its receiver (a bare ``count`` inside a C++, Java, C# or Kotlin
-member function) is not counted: telling it from a local or a global needs
-the class's members, which an out-of-line definition or a base class keeps
-in another file. In the other languages, and for a static member function,
-only the parameters count.
+``helper`` as ``self.count`` counts ``count``. In C++, ``this->g<int>()``
+counts ``g``, whatever its template arguments, and ``this->~S()`` counts the
+destructor. A lambda inside a method that uses ``this->member`` counts
+toward that method. A class defined inside a C++ function has its own
+``this``, so its member functions' accesses do not count for the enclosing
+function. A JavaScript ``function`` nested inside a method is different:
+its ``this.member`` accesses do count for the method, even though that
+``this`` is not the method's.
+
+Only the spellings in the table are recognized. In C++, ``(this)->a``,
+``(*(this)).a``, ``this[0].a`` and ``static_cast<D*>(this)->x`` (as in
+CRTP) are not counted, and tree-sitter-cpp does not parse
+``this->operator()(1)``, so an operator called that way is not counted
+either. A member named without its receiver (a bare ``count`` inside a
+C++, Java, C# or Kotlin member function) is not counted: telling it from a
+local or a global needs the class's members, which an out-of-line
+definition or a base class keeps in another file. In the other languages,
+and for a static member function, only the parameters count.
 
 AIRD reads the source **as written**. Its ``cognitive`` input (and the McCabe
 behind ``test_score``) counts every live ``#if`` arm, where the ``mccabe`` and

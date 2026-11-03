@@ -19,6 +19,10 @@ existing scores and gate results can move. See
   counted. The metrics reference now says that state coupling counts
   members, fields and methods, and lists the receiver each language
   uses.
+- Java and PHP state coupling now counts method calls through the
+  receiver, `this.helper()` and `$this->helper()`, as a member, as it
+  already did for fields and as the other languages count calls. A Java or
+  PHP function's `state_coupling`, and its AIRD through it, can rise.
 
 ## 2.1.0 - 2026-11-03
 
