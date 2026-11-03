@@ -55,16 +55,17 @@ existing scores and gate results can move. See
   functions it meant to exclude were still reported and gated. A
   configuration that loaded before can now fail to load; correct the
   pattern it names.
-- The published `knots`, `knots-verbose`, `knots-strict`, `knots-system`
-  and `knots-system-strict` pre-commit hooks now select every file knots can
-  analyse, by its extension in any letter case: Ada, Go, Java, C#, Kotlin,
+- The `knots`, `knots-verbose`, `knots-strict`, `knots-system` and
+  `knots-system-strict` pre-commit hooks in the knots repository now select
+  every file knots can analyse, by its extension in any letter case: Ada, Go, Java, C#, Kotlin,
   Swift, PHP, Fortran, Scala and Lua files are checked as well as C, C++,
   Rust, Python, JavaScript and TypeScript. They no longer pass files that
   pre-commit tags as C++ or Python but knots cannot analyse, such as `.hh`,
   `.inl`, `.ipp` or an extensionless Python script, which made the scan
   incomplete and failed the commit. Commits that passed before can be
   rejected where a newly checked file is over a threshold; add `types_or`
-  to the hook to check only some languages.
+  to the hook to check only some languages. The `knots-pre-commit` mirror's
+  hooks follow in its next release.
 - The published `test-complexity` pre-commit hook now blocks a commit whose
   test fails a threshold: it runs at `--level=error`. Previously it ran at
   `warn`, reporting the failure and passing. Setting `args:` replaces the

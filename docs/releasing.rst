@@ -71,6 +71,11 @@ Release steps
    **Order matters:** the mirror's ``knots==X.Y.Z`` pin must reference a version
    already on PyPI, so always publish knots (step 2) **before** tagging the mirror.
 
+   Keep the mirror's hooks the same as knots' own: each hook in its
+   ``.pre-commit-hooks.yaml`` has the same ``files:`` selection and default
+   ``args:`` as the hook of the same id in knots' ``.pre-commit-hooks.yaml``.
+   Copy any change across before tagging.
+
 Verifying a release
 -------------------
 

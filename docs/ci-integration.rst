@@ -142,10 +142,17 @@ JavaScript / TypeScript / React projects:
             - --mccabe-threshold=20
             - --cognitive-threshold=25
 
-The published knots hooks select files by extension: exactly the extensions
-``knots --supported-languages`` lists, including ``.h`` and ``.ads``, in any
-letter case. So every language knots supports is checked, and no file reaches
-knots that it cannot analyse. They do not use pre-commit's type tags, which
+The hooks in the knots repository select files by extension: exactly the
+extensions ``knots --supported-languages`` lists, including ``.h`` and
+``.ads``, in any letter case. So every language knots supports is checked, and
+no file reaches knots that it cannot analyse. The ``knots-pre-commit`` mirror
+takes the same selection in its next release; until then it selects C, C++,
+Rust, Python and JavaScript files by pre-commit's type tags.
+
+Because the match ignores case, ``.C`` and ``.H`` files are passed to knots,
+which reads them as C, as it does under ``-r``. C++ code in a file named that
+way is parsed with the C grammar, so its functions can be missed without an
+error. They do not use pre-commit's type tags, which
 have no tag for Ada and tag files such as ``.hh``, ``.inl`` and ``.ipp`` as
 C++; knots would report those as not analysed and fail the commit with
 status ``3``.
