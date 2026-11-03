@@ -41,9 +41,11 @@ off.
 ``<lang>`` is the language's registry key: ``c``, ``cpp``, ``rust``,
 ``python``, ``javascript``, ``typescript``, ``ada``, ``go``, ``java``,
 ``csharp``, ``kotlin``, ``swift``, ``php``, ``fortran``, ``scala`` or ``lua``.
-Other spellings, such as ``[c++.thresholds]``, are not an error but have no
-effect, and neither does a misspelled key or section, so check that a new
-threshold actually fires.
+A section or key knots does not read is an error: knots names the file, the
+line and the nearest valid name, and exits ``1`` before analysing anything.
+For example, ``["c++".thresholds]`` is reported as an unknown section with
+``cpp`` suggested, and ``mccab = 10`` as an unknown key with ``mccabe``
+suggested.
 
 Available keys: ``mccabe``, ``cognitive``, ``nesting``, ``sloc``, ``abc``,
 ``returns``, ``aird``, ``aicp``, ``external_calls``, ``unreachable_blocks``

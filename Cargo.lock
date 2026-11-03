@@ -269,6 +269,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+ "toml_edit",
  "tree-sitter",
 ]
 

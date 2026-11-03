@@ -41,6 +41,13 @@ existing scores and gate results can move. See
 
 ### Changed
 
+- `knots.toml` now refuses a section or key that knots does not read, such
+  as `["c++".thresholds]` (the section is `[cpp.thresholds]`) or a
+  misspelled threshold like `mccab`. knots exits 1 before analysing
+  anything, naming each one with its file and line and, where one is close,
+  the valid name. Previously such a name was ignored, so the threshold it
+  meant to set never applied and the run could pass. A configuration that
+  loaded before can now fail to load; correct or remove the names it lists.
 - The published `test-complexity` pre-commit hook now blocks a commit whose
   test fails a threshold: it runs at `--level=error`. Previously it ran at
   `warn`, reporting the failure and passing. Setting `args:` replaces the

@@ -1,0 +1,19 @@
+# Every section and key knots reads, once each.
+[thresholds]
+mccabe = 10
+cognitive = 10
+nesting = 5
+sloc = 50
+abc = 20.0
+returns = 3
+aird = 50
+aicp = 50
+external_calls = 20
+unreachable_blocks = 0
+
+[c.thresholds]
+mccabe = 1
+
+[[filter.exclude]]
+file_patterns = ["vendor/**"]
+function_patterns = ["^generated_"]

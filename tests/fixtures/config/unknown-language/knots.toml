@@ -1,0 +1,6 @@
+# The C++ section is keyed `cpp`; "c++" is the display name.
+[thresholds]
+mccabe = 10
+
+["c++".thresholds]
+mccabe = 1

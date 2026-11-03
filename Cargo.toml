@@ -29,6 +29,8 @@ serde_json.workspace = true
 regex.workspace = true
 rayon.workspace = true
 toml = "0.8"
+# Spans for knots.toml validation: an unknown key is reported at its line.
+toml_edit = { version = "0.22", default-features = false, features = ["parse"] }
 
 [workspace]
 members = [

@@ -1,0 +1,3 @@
+# `mccab` is a misspelling of `mccabe`.
+[c.thresholds]
+mccab = 1
