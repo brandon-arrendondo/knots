@@ -8,6 +8,14 @@
 # binary), use the knots-system / knots-system-strict variants, which set
 # language: system and skip the Rust toolchain requirement.
 
+# The knots hooks select files by extension, exactly the set knots analyses
+# (`knots --supported-languages`, explicit-only .h and .ads included), in any
+# letter case, as knots matches them. pre-commit's type tags are not used:
+# they miss Ada, and tag files knots cannot analyse (.hh, .inl and .ipp as
+# C++, an extensionless script as Python), which would fail the scan as
+# incomplete. tests/pre_commit_hooks.rs keeps this list equal to knots'
+# registry.
+
 # Standard complexity check — AIRD gate only, fully overridable
 # Override thresholds by setting `args:` in your .pre-commit-config.yaml.
 # Because pre-commit *replaces* args (not appends), you get full control:
@@ -18,7 +26,7 @@
   entry: knots
   args: [--aird-threshold=85]
   language: rust
-  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
+  files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
 
 # Verbose variant — same overridable defaults, adds per-function detail to stdout
 - id: knots-verbose
@@ -27,17 +35,17 @@
   entry: knots
   args: [--verbose, --aird-threshold=85]
   language: rust
-  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
+  files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
 
 # Strict variant — baked-in conservative thresholds for teams that want a
 # tighter baseline without managing args themselves
 - id: knots-strict
   name: Code Complexity Check (Strict)
-  description: Strict thresholds for C, C++, Rust, Python, JavaScript, and TypeScript (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 20.0, Returns 3)
+  description: Strict thresholds for every language knots supports (McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 20.0, Returns 3)
   entry: knots
   args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=20.0, --return-threshold=3]
   language: rust
-  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
+  files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
 
 # system variants — require knots on PATH; skip the Rust toolchain install.
 # Use these when your team installs knots via a released binary or package manager.
@@ -47,7 +55,7 @@
   entry: knots
   args: [--aird-threshold=85]
   language: system
-  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
+  files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
 
 - id: knots-system-strict
   name: Code Complexity Check (system, strict)
@@ -55,7 +63,7 @@
   entry: knots
   args: [--mccabe-threshold=10, --cognitive-threshold=10, --nesting-threshold=3, --sloc-threshold=30, --abc-threshold=20.0, --return-threshold=3]
   language: system
-  types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]
+  files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
 
 # Test quality checker - validates tests have sufficient complexity and boundary coverage
 # Default discovery: naming convention (test_foo.c / foo_test.c -> foo.c)

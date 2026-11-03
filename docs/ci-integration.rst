@@ -142,32 +142,25 @@ JavaScript / TypeScript / React projects:
             - --mccabe-threshold=20
             - --cognitive-threshold=25
 
-The published hooks select files with
-``types_or: [c, c++, rust, python, javascript, jsx, ts, tsx]``, so they already
-cover C, C++, Rust, Python, JavaScript and TypeScript, including ``.jsx`` and
-``.tsx``. They do not select files in knots' other languages: Ada, Go, Java,
-C#, Kotlin, Swift, PHP, Fortran, Scala and Lua files are skipped unless you
-override ``types_or``. pre-commit's tags for those are ``go``, ``java``,
-``c#``, ``kotlin``, ``swift``, ``php``, ``fortran``, ``scala`` and ``lua``.
-Ada has no tag, so match it with ``files:`` instead:
+The published knots hooks select files by extension: exactly the extensions
+``knots --supported-languages`` lists, including ``.h`` and ``.ads``, in any
+letter case. So every language knots supports is checked, and no file reaches
+knots that it cannot analyse. They do not use pre-commit's type tags, which
+have no tag for Ada and tag files such as ``.hh``, ``.inl`` and ``.ipp`` as
+C++; knots would report those as not analysed and fail the commit with
+status ``3``.
 
-.. code-block:: yaml
-
-        - id: knots
-          types_or: [c, go, java, kotlin]   # add the languages you use
-
-        - id: knots
-          types_or: [file]
-          files: \.(adb|ads|ada)$
-
-To limit coverage to a subset of languages, override ``types_or`` the same
-way:
+To limit a hook to some languages, add ``types_or``. pre-commit selects only
+the files that match both it and the hook's extensions:
 
 .. code-block:: yaml
 
         - id: knots
           args: [--mccabe-threshold=20]
           types_or: [python, javascript, jsx]   # Python + JS only, skip TS
+
+Setting ``files:`` replaces the hook's own extension list, so it can select
+files knots cannot analyse; prefer ``types_or`` or ``exclude:`` to narrow it.
 
 See ``example-pre-commit-config.yaml`` in the repository for a full example.
 
