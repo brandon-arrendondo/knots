@@ -13,6 +13,7 @@
 //! `git init` and `git add` in a temp directory at the outer repository.
 #![cfg(unix)]
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -266,4 +267,200 @@ fn staged_repo_leaves_an_outer_repository_untouched() {
     let staged = git_in(&sentinel, &["ls-files", "--cached"]);
     assert_eq!(staged, "", "the sentinel's index changed");
     fs::remove_dir_all(&sentinel).unwrap();
+}
+
+/// A git repository in the temp directory with `files` written and staged.
+fn repo_with(name: &str, files: &[(&str, &[u8])]) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("knots-{}-{name}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["-c", "init.defaultBranch=main", "init", "-q"]);
+    for (file, content) in files {
+        fs::write(dir.join(file), content).unwrap();
+        git(&dir, &["add", file]);
+    }
+    dir
+}
+
+fn git(dir: &Path, args: &[&str]) {
+    let status = isolated("git")
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "git {args:?}");
+}
+
+/// Runs a staged-file hook in `dir` with knots at `validator` and every
+/// threshold set in the environment, McCabe at 3.
+fn hook_with(hook: &str, dir: &Path, validator: &str) -> Output {
+    isolated("sh")
+        .arg(repo_root().join("hooks").join(hook))
+        .current_dir(dir)
+        .env("VALIDATOR_PATH", validator)
+        .env("MCCABE_THRESHOLD", "3")
+        .env("COGNITIVE_THRESHOLD", "99")
+        .env("NESTING_THRESHOLD", "99")
+        .env("SLOC_THRESHOLD", "999")
+        .env("ABC_THRESHOLD", "99")
+        .env("RETURN_THRESHOLD", "99")
+        .env("VERBOSE", "false")
+        .output()
+        .unwrap()
+}
+
+fn all_output(output: &Output) -> String {
+    format!(
+        "{}{}",
+        stdout(output),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
+const OK_C: &[u8] = b"int f(int a) { return a; }\n";
+/// Not UTF-8, so knots cannot read it and the scan is incomplete (exit 3).
+const UNREADABLE_C: &[u8] = b"\xff\xfe int f(void) { return 1; }\n";
+const NO_KNOTS: &str = "/nonexistent/knots";
+
+fn registry_extensions() -> BTreeSet<String> {
+    knots::languages()
+        .iter()
+        .flat_map(|l| l.extensions.iter().chain(l.explicit_only.iter()))
+        .map(|e| e.to_ascii_lowercase())
+        .collect()
+}
+
+/// The extensions in a hook script's `SOURCE_EXT='\.(a|b|...)$'` line.
+fn hook_extensions(text: &str) -> Option<BTreeSet<String>> {
+    let pattern = text
+        .lines()
+        .find_map(|l| l.strip_prefix("SOURCE_EXT='"))?
+        .strip_suffix('\'')?;
+    let inner = pattern.strip_prefix(r"\.(")?.strip_suffix(")$")?;
+    Some(inner.split('|').map(str::to_string).collect())
+}
+
+#[test]
+fn standalone_hooks_select_every_supported_extension_and_nothing_else() {
+    for hook in ["pre-commit", "pre-commit-warning-only"] {
+        let text = fs::read_to_string(repo_root().join("hooks").join(hook)).unwrap();
+        let listed = hook_extensions(&text).unwrap_or_else(|| panic!("{hook}: no SOURCE_EXT"));
+        assert_eq!(listed, registry_extensions(), "{hook}");
+        assert!(
+            text.contains(r#"grep -iE "$SOURCE_EXT""#),
+            "{hook}: must match without regard to case"
+        );
+    }
+}
+
+/// A Go file, outside the old C/C++/Rust/Python/JavaScript selection, is
+/// checked, in any letter case.
+#[test]
+fn pre_commit_checks_languages_beyond_the_original_six() {
+    let go =
+        b"func F(a int) int {\n if a > 1 { if a > 2 { if a > 3 { return 1 } } }\n return 0\n}\n";
+    let dir = repo_with("hook-go", &[("a.go", go), ("B.GO", go)]);
+    let output = hook_with("pre-commit", &dir, KNOTS);
+    let out = all_output(&output);
+    assert_eq!(output.status.code(), Some(1), "{out}");
+    assert!(out.contains("a.go:1:F"), "{out}");
+    assert!(out.contains("B.GO:1:F"), "{out}");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A staged file knots cannot read (exit 3) fails the blocking hooks, is
+/// reported by the warning-only hook, and knots' own message is shown.
+#[test]
+fn an_unreadable_file_is_never_a_clean_result() {
+    let dir = repo_with(
+        "hook-unreadable",
+        &[("ok.c", OK_C), ("bad.c", UNREADABLE_C)],
+    );
+
+    let output = hook_with("pre-commit", &dir, KNOTS);
+    let out = all_output(&output);
+    assert_eq!(output.status.code(), Some(1), "{out}");
+    assert!(
+        out.contains("bad.c: not analysed (knots exited 3)"),
+        "{out}"
+    );
+    assert!(
+        out.contains("knots: Warning: Not analysed (read): bad.c"),
+        "{out}"
+    );
+    assert!(out.contains("could not analyse every staged file"), "{out}");
+
+    let output = hook_with("pre-commit-warning-only", &dir, KNOTS);
+    let out = all_output(&output);
+    assert_eq!(output.status.code(), Some(0), "{out}");
+    assert!(
+        out.contains("bad.c: not analysed (knots exited 3)"),
+        "{out}"
+    );
+    assert!(out.contains("could not analyse 1 staged file(s)"), "{out}");
+    assert!(!out.contains("All complexity checks passed"), "{out}");
+
+    let output = isolated("sh")
+        .arg(repo_root().join("hooks/pre-commit-wrapper.sh"))
+        .arg(format!("--validator-path={KNOTS}"))
+        .args(["ok.c", "bad.c"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let out = all_output(&output);
+    assert_eq!(output.status.code(), Some(1), "{out}");
+    assert!(
+        out.contains("bad.c: not analysed (knots exited 3)"),
+        "{out}"
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+/// knots analyses a file with syntax errors and no recoverable function and
+/// exits 0, warning on stderr; the hook passes and shows that warning.
+#[test]
+fn knots_warnings_are_shown_not_dropped() {
+    let dir = repo_with("hook-syntax", &[("syn.c", b"}}}{{{ ((( int\n")]);
+    let output = hook_with("pre-commit", &dir, KNOTS);
+    let out = all_output(&output);
+    assert_eq!(output.status.code(), Some(0), "{out}");
+    assert!(
+        out.contains("knots: Warning: syn.c has syntax errors"),
+        "{out}"
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+/// With source files to check and no knots, the blocking hooks fail and the
+/// warning-only hook warns; with nothing to check, all pass.
+#[test]
+fn a_missing_knots_fails_loudly_when_there_is_something_to_check() {
+    let dir = repo_with("hook-no-knots", &[("ok.c", OK_C)]);
+    let output = hook_with("pre-commit", &dir, NO_KNOTS);
+    assert_eq!(output.status.code(), Some(1), "{}", all_output(&output));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("knots not found"));
+
+    let output = hook_with("pre-commit-warning-only", &dir, NO_KNOTS);
+    assert_eq!(output.status.code(), Some(0), "{}", all_output(&output));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("were not checked"));
+
+    let wrapper = |files: &[&str]| {
+        isolated("sh")
+            .arg(repo_root().join("hooks/pre-commit-wrapper.sh"))
+            .arg(format!("--validator-path={NO_KNOTS}"))
+            .args(files)
+            .current_dir(&dir)
+            .output()
+            .unwrap()
+    };
+    let output = wrapper(&["ok.c"]);
+    assert_eq!(output.status.code(), Some(1), "{}", all_output(&output));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("knots not found"));
+    assert_eq!(wrapper(&[]).status.code(), Some(0));
+    fs::remove_dir_all(&dir).unwrap();
+
+    let dir = repo_with("hook-no-sources", &[("notes.txt", b"x\n")]);
+    let output = hook_with("pre-commit", &dir, NO_KNOTS);
+    assert_eq!(output.status.code(), Some(0), "{}", all_output(&output));
+    fs::remove_dir_all(&dir).unwrap();
 }

@@ -131,7 +131,7 @@ Each result carries seven properties: ``mccabe``, ``cognitive``, ``nesting``,
 complexity band is independent of threshold flags; include filters cannot
 force functions at or below 10 into SARIF. Use JSON/NDJSON for all records.
 
-**GitHub Code Scanning**: upload with ``github/codeql-action/upload-sarif@v3``
+**GitHub Code Scanning**: upload with ``github/codeql-action/upload-sarif@v4``
 to surface findings as PR annotations.
 
 **VS Code**: install the *SARIF Viewer* extension and open ``knots.sarif``.

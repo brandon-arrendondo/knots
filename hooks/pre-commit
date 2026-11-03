@@ -122,34 +122,59 @@ summary() {
 
 TAB=$(printf '\t')
 
-# Check if knots is installed
-if [ ! -x "$VALIDATOR_PATH" ]; then
-    printf '%b\n' "${YELLOW}Warning: knots not found at $VALIDATOR_PATH${NC}"
-    printf '%s\n' "Install it or set the path with: git config hooks.knots.path /path/to/knots"
-    printf '%s\n' "Skipping complexity check..."
-    exit 0
-fi
+# The extensions knots analyses (`knots --supported-languages`, explicit-only
+# .h and .ads included), matched in any letter case as knots matches them.
+# tests/hook_scripts.rs keeps this list equal to knots' language registry.
+SOURCE_EXT='\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
 
 # Get list of supported source files being committed
-C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$')
+C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -iE "$SOURCE_EXT")
 
 if [ -z "$C_FILES" ]; then
     # No supported source files in this commit
     exit 0
 fi
 
+# Source files are staged, so a missing knots fails the commit rather than
+# letting it through unchecked.
+if [ ! -x "$VALIDATOR_PATH" ]; then
+    printf '%b\n' "${RED}Error: knots not found${VALIDATOR_PATH:+ at $VALIDATOR_PATH}${NC}" >&2
+    printf '%s\n' "Install it or set the path with: git config hooks.knots.path /path/to/knots" >&2
+    printf '%s\n' "To commit without the check (not recommended): git commit --no-verify" >&2
+    exit 1
+fi
+
+# Run knots on $1 and leave its ndjson records in OUTPUT and its exit status
+# in STATUS. Anything knots writes to stderr (a file it could not read, one
+# with syntax errors and no function recovered) is printed, not dropped, so
+# a file knots could not analyse never looks like a clean one.
+ERR_FILE=$(mktemp) || exit 2
+trap 'rm -f "$ERR_FILE"' EXIT
+run_knots() {
+    OUTPUT=$("$VALIDATOR_PATH" --format ndjson "$1" 2>"$ERR_FILE")
+    STATUS=$?
+    if [ -s "$ERR_FILE" ]; then
+        sed 's/^/  knots: /' "$ERR_FILE"
+    fi
+}
+
 printf '%s\n' "Running knots on staged files..."
 printf '%s\n' ""
 
 FAILED=0
-WARNINGS=0
+NOT_ANALYSED=0
 
 for file in $C_FILES; do
     if [ ! -f "$file" ]; then
         continue
     fi
 
-    OUTPUT=$("$VALIDATOR_PATH" --format ndjson "$file" 2>/dev/null)
+    run_knots "$file"
+    if [ "$STATUS" -ne 0 ]; then
+        printf '%b%s%b\n' "$RED" "✗ $file: not analysed (knots exited $STATUS)" "$NC"
+        NOT_ANALYSED=1
+        continue
+    fi
 
     while IFS="$TAB" read -r label message; do
         [ -n "$label" ] || continue
@@ -167,8 +192,19 @@ EOF
     fi
 done
 
-if [ $FAILED -eq 1 ]; then
+if [ $NOT_ANALYSED -eq 1 ] && [ $FAILED -eq 0 ]; then
     printf '%s\n' ""
+    printf '%b\n' "${RED}Commit rejected: knots could not analyse every staged file${NC}"
+    printf '%s\n' "Fix the file, or leave it out of the commit."
+    printf '%s\n' ""
+    printf '%s\n' "To bypass this check (not recommended), use:"
+    printf '%s\n' "  git commit --no-verify"
+    exit 1
+elif [ $FAILED -eq 1 ]; then
+    printf '%s\n' ""
+    if [ $NOT_ANALYSED -eq 1 ]; then
+        printf '%b\n' "${RED}Commit rejected: knots could not analyse every staged file${NC}"
+    fi
     printf '%b\n' "${RED}Commit rejected: Complexity thresholds exceeded${NC}"
     printf '%s\n' ""
     printf '%s\n' "To adjust thresholds, run:"

@@ -18,7 +18,7 @@ cp /path/to/knots/hooks/* .
 ## What You Get
 
 Every time you `git commit`, the hook will:
-1. Find the C, C++, Rust, Python and JavaScript files you're committing (`.c`, `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hxx`, `.rs`, `.py`, `.js`, `.mjs`, `.cjs`)
+1. Find all supported source files you're committing (C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java, C#, Kotlin, Swift, PHP, Fortran, Scala, and Lua)
 2. Check their complexity
 3. Block the commit if any function exceeds thresholds
 

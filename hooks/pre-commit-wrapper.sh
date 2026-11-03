@@ -153,38 +153,46 @@ done
 # Debug: Uncomment to verify thresholds
 # printf '%s\n' "DEBUG: McCabe=$MCCABE_THRESHOLD, Cognitive=$COGNITIVE_THRESHOLD, Nesting=$NESTING_THRESHOLD" >&2
 
-# Check if knots is available
-if ! command -v "$VALIDATOR_PATH" >/dev/null 2>&1; then
-    printf '%b\n' "${YELLOW}Warning: knots not found at $VALIDATOR_PATH${NC}"
-    printf '%s\n' "Install it or set VALIDATOR_PATH environment variable"
-    exit 0  # Don't fail if tool not installed
-fi
-
 # If no files provided, exit successfully
 if [ $# -eq 0 ]; then
     exit 0
 fi
 
+# Files were passed, so a missing knots fails the hook rather than letting
+# them through unchecked.
+if ! command -v "$VALIDATOR_PATH" >/dev/null 2>&1; then
+    printf '%b\n' "${RED}Error: knots not found at $VALIDATOR_PATH${NC}" >&2
+    printf '%s\n' "Install it, or set --validator-path or the VALIDATOR_PATH environment variable" >&2
+    exit 1
+fi
+
+# Run knots on $1 and leave its ndjson records in OUTPUT and its exit status
+# in STATUS. Anything knots writes to stderr (a file it could not read, one
+# with syntax errors and no function recovered) is printed, not dropped, so
+# a file knots could not analyse never looks like a clean one.
+ERR_FILE=$(mktemp) || exit 2
+trap 'rm -f "$ERR_FILE"' EXIT
+run_knots() {
+    OUTPUT=$("$VALIDATOR_PATH" --format ndjson "$1" 2>"$ERR_FILE")
+    STATUS=$?
+    if [ -s "$ERR_FILE" ]; then
+        sed 's/^/  knots: /' "$ERR_FILE"
+    fi
+}
+
 FAILED=0
 TOTAL_VIOLATIONS=0
+NOT_ANALYSED=0
 
 for file in "$@"; do
     if [ ! -f "$file" ]; then
         continue
     fi
 
-    OUTPUT=$("$VALIDATOR_PATH" --format ndjson "$file" 2>&1)
-    EXIT_CODE=$?
-
-    # Check if command succeeded
-    if [ $EXIT_CODE -ne 0 ]; then
-        # Skip UTF-8 errors silently (common in third-party/generated code)
-        if printf '%s\n' "$OUTPUT" | grep -q "did not contain valid UTF-8"; then
-            continue
-        fi
-        # Show other errors
-        printf '%b\n' "${RED}Error running knots on $file${NC}"
-        printf '%s\n' "$OUTPUT" | head -3
+    run_knots "$file"
+    if [ "$STATUS" -ne 0 ]; then
+        printf '%b%s%b\n' "$RED" "✗ $file: not analysed (knots exited $STATUS)" "$NC"
+        NOT_ANALYSED=$((NOT_ANALYSED + 1))
         FAILED=1
         continue
     fi
@@ -214,7 +222,12 @@ done
 # Final summary
 if [ $FAILED -eq 1 ]; then
     printf '%s\n' ""
-    printf '%b\n' "${RED}Found $TOTAL_VIOLATIONS complexity violation(s)${NC}"
+    if [ $NOT_ANALYSED -gt 0 ]; then
+        printf '%b\n' "${RED}knots could not analyse $NOT_ANALYSED file(s)${NC}"
+    fi
+    if [ $TOTAL_VIOLATIONS -gt 0 ] || [ $NOT_ANALYSED -eq 0 ]; then
+        printf '%b\n' "${RED}Found $TOTAL_VIOLATIONS complexity violation(s)${NC}"
+    fi
     exit 1
 else
     if [ "$VERBOSE" = true ]; then

@@ -352,8 +352,8 @@ pre-commit run knots --all-files
 
 ### knots Not Found
 
-If the wrapper cannot find knots, it prints a warning and **passes the
-commit without checking anything**. Point it at the binary:
+When it is given files and cannot find knots, the wrapper fails with
+"knots not found". Point it at the binary:
 
 ```bash
 # Set path via environment variable
@@ -367,8 +367,7 @@ export VALIDATOR_PATH=/path/to/knots
       language: script
 ```
 
-The published `knots-system` hooks fail instead when `knots` is not on
-`PATH`.
+The published `knots-system` hooks also fail when `knots` is not on `PATH`.
 
 ### Changes Not Detected
 

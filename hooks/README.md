@@ -141,12 +141,17 @@ git commit --no-verify -m "Emergency fix"
 
 ## What Gets Checked?
 
-The hook checks all supported source files being staged:
-- C/C++: `.c`, `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hxx`
-- Rust: `.rs`
-- Python: `.py`
-- JavaScript: `.js`, `.mjs`, `.cjs`
+The hook checks every staged file knots can analyse, chosen by extension in
+any letter case: C, C++, Rust, Python, JavaScript, TypeScript, Ada, Go, Java,
+C#, Kotlin, Swift, PHP, Fortran, Scala and Lua (`knots --supported-languages`
+lists the extensions, `.h` and `.ads` included).
 - Only files that are staged (in `git add`)
+
+If knots cannot analyse a staged file (for example one that is not valid
+UTF-8), the blocking hook rejects the commit and the warning-only hook
+reports it; knots' own message is shown either way. A warning knots prints
+for a file it did analyse, such as one with syntax errors and no function
+recovered, is shown and does not block.
 
 Files NOT checked:
 - Deleted files
@@ -272,6 +277,11 @@ chmod +x .git/hooks/pre-commit
 
 ### knots Not Found
 
+When source files are staged and knots cannot be found, the blocking hook
+rejects the commit (`git commit --no-verify` skips it) and the warning-only
+hook warns that nothing was checked. A commit with no source files is not
+affected.
+
 ```bash
 # Install knots
 cargo install knots
@@ -323,16 +333,16 @@ If you already have a pre-commit hook, integrate knots:
 
 # ... your existing checks ...
 
-# Add knots check (the extensions the standalone hooks check)
-if command -v knots >/dev/null 2>&1; then
-    SRC_FILES=$(git diff --cached --name-only --diff-filter=ACM \
-        | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$')
-    if [ -n "$SRC_FILES" ]; then
-        for file in $SRC_FILES; do
-            # Without a threshold, knots exits 0 however complex the code is.
-            knots --mccabe-threshold 15 --cognitive-threshold 15 "$file" || exit 1
-        done
-    fi
+# Add knots check (all supported languages)
+SRC_FILES=$(git diff --cached --name-only --diff-filter=ACM \
+    | grep -iE '\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$')
+if [ -n "$SRC_FILES" ]; then
+    command -v knots >/dev/null 2>&1 || { echo "knots not found" >&2; exit 1; }
+    for file in $SRC_FILES; do
+        # Without a threshold, knots exits 0 however complex the code is.
+        # It exits 3 when it cannot analyse the file.
+        knots --mccabe-threshold 15 --cognitive-threshold 15 "$file" || exit 1
+    done
 fi
 
 # ... more of your checks ...
@@ -347,9 +357,9 @@ A: Not directly. Consider using warning-only mode and manual review for complex 
 A: Yes — see [PRE_COMMIT_FRAMEWORK.md](PRE_COMMIT_FRAMEWORK.md). The published hook is the recommended approach; the shell wrapper is also documented there.
 
 **Q: What happens with syntax errors?**
-A: The hook does not block on them. It discards knots' warnings, and a file
-knots cannot parse or read yields no functions, so the commit goes through.
-Run knots on the file directly to see the warning.
+A: knots still analyses the file and warns that it has syntax errors; the
+hook shows the warning and gates whatever functions were recovered. A file
+knots cannot analyse at all (exit 3) blocks the commit.
 
 **Q: Can I check complexity without committing?**
 A: Yes! Run `knots file.c` (or any supported file) manually anytime.

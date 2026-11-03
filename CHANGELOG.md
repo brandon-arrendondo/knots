@@ -66,6 +66,24 @@ existing scores and gate results can move. See
   rejected where a newly checked file is over a threshold; add `types_or`
   to the hook to check only some languages. The `knots-pre-commit` mirror's
   hooks follow in its next release.
+- The standalone hooks in `hooks/` (`pre-commit`, `pre-commit-warning-only`
+  and the pre-commit framework's `pre-commit-wrapper.sh`) no longer let a
+  file through unchecked:
+  - `pre-commit` and `pre-commit-warning-only` check every staged file knots
+    can analyse, by its extension in any letter case, where they checked
+    only C, C++, Rust, Python and JavaScript.
+  - A staged file knots cannot analyse, such as one that is not valid
+    UTF-8, now fails `pre-commit` and `pre-commit-wrapper.sh` and is
+    reported by `pre-commit-warning-only`. The hooks used to discard knots'
+    messages and pass such a file, and `pre-commit-wrapper.sh` skipped
+    UTF-8 errors on purpose; knots' messages are now shown.
+  - When there are files to check and knots cannot be found, `pre-commit`
+    and `pre-commit-wrapper.sh` fail, and `pre-commit-warning-only` warns
+    that nothing was checked. All three used to pass.
+
+  Commits that passed before can be rejected: install knots, fix or leave
+  out a file knots cannot read, or exclude it in your pre-commit
+  configuration.
 - The published `test-complexity` pre-commit hook now blocks a commit whose
   test fails a threshold: it runs at `--level=error`. Previously it ran at
   `warn`, reporting the failure and passing. Setting `args:` replaces the

@@ -67,7 +67,7 @@ SARIF upload for PR annotations:
       run: knots -r --format sarif src/ > knots.sarif
 
     - name: Upload SARIF
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: knots.sarif
 
