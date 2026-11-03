@@ -169,11 +169,13 @@ fi
 # Run knots on $1 and leave its ndjson records in OUTPUT and its exit status
 # in STATUS. Anything knots writes to stderr (a file it could not read, one
 # with syntax errors and no function recovered) is printed, not dropped, so
-# a file knots could not analyse never looks like a clean one.
+# a file knots could not analyse never looks like a clean one. knots exits 3
+# when it could not analyse the file and 1 when its own check failed (a
+# threshold set in knots.toml, or an error such as an unreadable knots.toml).
 ERR_FILE=$(mktemp) || exit 2
 trap 'rm -f "$ERR_FILE"' EXIT
 run_knots() {
-    OUTPUT=$("$VALIDATOR_PATH" --format ndjson "$1" 2>"$ERR_FILE")
+    OUTPUT=$("$VALIDATOR_PATH" --format ndjson "$1" 2>"$ERR_FILE" </dev/null)
     STATUS=$?
     if [ -s "$ERR_FILE" ]; then
         sed 's/^/  knots: /' "$ERR_FILE"
@@ -183,6 +185,7 @@ run_knots() {
 FAILED=0
 TOTAL_VIOLATIONS=0
 NOT_ANALYSED=0
+KNOTS_FAILED=0
 
 for file in "$@"; do
     if [ ! -f "$file" ]; then
@@ -190,12 +193,20 @@ for file in "$@"; do
     fi
 
     run_knots "$file"
-    if [ "$STATUS" -ne 0 ]; then
-        printf '%b%s%b\n' "$RED" "✗ $file: not analysed (knots exited $STATUS)" "$NC"
-        NOT_ANALYSED=$((NOT_ANALYSED + 1))
-        FAILED=1
-        continue
-    fi
+    case $STATUS in
+        0) ;;
+        1)
+            printf '%b%s%b\n' "$RED" "✗ $file: knots' own check failed (exit 1); see the knots: lines above" "$NC"
+            KNOTS_FAILED=$((KNOTS_FAILED + 1))
+            FAILED=1
+            ;;
+        *)
+            printf '%b%s%b\n' "$RED" "✗ $file: not analysed (knots exited $STATUS)" "$NC"
+            NOT_ANALYSED=$((NOT_ANALYSED + 1))
+            FAILED=1
+            continue
+            ;;
+    esac
 
     FILE_HAS_VIOLATIONS=false
     while IFS="$TAB" read -r label message; do
@@ -225,7 +236,10 @@ if [ $FAILED -eq 1 ]; then
     if [ $NOT_ANALYSED -gt 0 ]; then
         printf '%b\n' "${RED}knots could not analyse $NOT_ANALYSED file(s)${NC}"
     fi
-    if [ $TOTAL_VIOLATIONS -gt 0 ] || [ $NOT_ANALYSED -eq 0 ]; then
+    if [ $KNOTS_FAILED -gt 0 ]; then
+        printf '%b\n' "${RED}knots' own check failed for $KNOTS_FAILED file(s)${NC}"
+    fi
+    if [ $TOTAL_VIOLATIONS -gt 0 ] || { [ $NOT_ANALYSED -eq 0 ] && [ $KNOTS_FAILED -eq 0 ]; }; then
         printf '%b\n' "${RED}Found $TOTAL_VIOLATIONS complexity violation(s)${NC}"
     fi
     exit 1

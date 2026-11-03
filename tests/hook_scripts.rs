@@ -464,3 +464,44 @@ fn a_missing_knots_fails_loudly_when_there_is_something_to_check() {
     assert_eq!(output.status.code(), Some(0), "{}", all_output(&output));
     fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Paths with a space or non-ASCII characters are checked, not skipped.
+#[test]
+fn pre_commit_checks_paths_with_spaces_and_non_ascii_names() {
+    let go =
+        b"func F(a int) int {\n if a > 1 { if a > 2 { if a > 3 { return 1 } } }\n return 0\n}\n";
+    let dir = repo_with(
+        "hook-names",
+        &[("my file.go", go), ("\u{fc}n\u{ef}.go", go)],
+    );
+    let output = hook_with("pre-commit", &dir, KNOTS);
+    let out = all_output(&output);
+    assert_eq!(output.status.code(), Some(1), "{out}");
+    assert!(out.contains("my file.go:1:F"), "{out}");
+    assert!(out.contains("\u{fc}n\u{ef}.go:1:F"), "{out}");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A threshold set in knots.toml makes knots itself exit 1. That is knots'
+/// own check failing, reported as such, not a file knots could not analyse.
+#[test]
+fn a_knots_toml_gate_failure_is_not_called_unanalysed() {
+    let toml = b"[thresholds]\nmccabe = 1\n";
+    let c = b"int f(int a) { if (a) return 1; return 0; }\n";
+    let dir = repo_with("hook-toml-gate", &[("knots.toml", toml), ("ok.c", c)]);
+    for (hook, code) in [("pre-commit", 1), ("pre-commit-warning-only", 0)] {
+        let output = hook_with(hook, &dir, KNOTS);
+        let out = all_output(&output);
+        assert_eq!(output.status.code(), Some(code), "{hook}: {out}");
+        assert!(
+            out.contains("ok.c: knots' own check failed (exit 1)"),
+            "{hook}: {out}"
+        );
+        assert!(
+            out.contains("knots:   ok.c:1:f — McCabe 2 > 1"),
+            "{hook}: {out}"
+        );
+        assert!(!out.contains("not analysed"), "{hook}: {out}");
+    }
+    fs::remove_dir_all(&dir).unwrap();
+}

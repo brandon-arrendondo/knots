@@ -80,6 +80,11 @@ existing scores and gate results can move. See
   - When there are files to check and knots cannot be found, `pre-commit`
     and `pre-commit-wrapper.sh` fail, and `pre-commit-warning-only` warns
     that nothing was checked. All three used to pass.
+  - A threshold set in `knots.toml` that knots itself fails is reported as
+    knots' own check failing, with its messages, and blocks the blocking
+    hooks.
+  - Staged paths with spaces or non-ASCII characters are checked;
+    `pre-commit` and `pre-commit-warning-only` used to skip them.
 
   Commits that passed before can be rejected: install knots, fix or leave
   out a file knots cannot read, or exclude it in your pre-commit
