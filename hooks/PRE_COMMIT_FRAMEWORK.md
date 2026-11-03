@@ -41,7 +41,7 @@ repos:
   # ... your other hooks ...
 
   - repo: https://github.com/brandon-arrendondo/knots-pre-commit
-    rev: v2.1.0
+    rev: v2.2.0
     hooks:
       - id: knots
 ```
@@ -99,7 +99,7 @@ so setting `args:` replaces the defaults:
 
 ```yaml
   - repo: https://github.com/brandon-arrendondo/knots
-    rev: v2.1.0
+    rev: v2.2.0
     hooks:
       - id: knots
         args: [--mccabe-threshold=15, --cognitive-threshold=15]
@@ -257,7 +257,7 @@ repos:
   # ... your other hooks ...
 
   - repo: https://github.com/brandon-arrendondo/knots-pre-commit
-    rev: v2.1.0
+    rev: v2.2.0
     hooks:
       - id: knots
         exclude: ^(vendor/|third_party/)  # Exclude third-party code
