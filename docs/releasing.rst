@@ -44,8 +44,13 @@ Release steps
 ``X.Y.Z`` is the new version.
 
 1. **Bump the version.** Edit ``[workspace.package].version`` in ``Cargo.toml``,
-   update the documented ``rev:`` pins (``docs/``, ``example-pre-commit-config.yaml``),
-   then ``cargo build`` to refresh ``Cargo.lock``. Commit.
+   update the documented ``rev:`` pins (``docs/``, ``hooks/*.md``,
+   ``example-pre-commit-config.yaml``), then ``cargo build`` to refresh
+   ``Cargo.lock``. Check the third-party versions (the GitHub Action in
+   ``hooks/PRE_COMMIT_FRAMEWORK.md``, the ``pre-commit-hooks`` pin in
+   ``example-pre-commit-config.yaml``) against each project's release page,
+   update any that moved, and update the date in the comment at the top of
+   ``hooks/PRE_COMMIT_FRAMEWORK.md``. Commit.
 
 2. **Tag and push knots.** This publishes both wheels:
 

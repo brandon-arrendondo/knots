@@ -4,6 +4,12 @@ This guide is for using knots with the [pre-commit](https://pre-commit.com/) fra
 
 **Note:** This is different from the standalone shell hooks in this directory. If you're not using the pre-commit framework, see [README.md](README.md) instead.
 
+<!-- Third-party versions in this file (the GitHub Action) and in
+example-pre-commit-config.yaml were checked against each project's release
+page on 2026-11-03. Refresh them,
+and the knots `rev:` pins, at each knots release (docs/releasing.rst,
+step 1). -->
+
 ## What is pre-commit?
 
 pre-commit is a framework for managing git pre-commit hooks. It's popular in Python projects but works with any language.
@@ -25,31 +31,39 @@ pip install pre-commit
 
 ### 2. Create .pre-commit-config.yaml
 
-In your project root, create or edit `.pre-commit-config.yaml`:
+In your project root, create or edit `.pre-commit-config.yaml`. The
+recommended setup uses the hooks published in the knots repository:
 
 ```yaml
 repos:
   # ... your other hooks ...
-  
+
+  - repo: https://github.com/brandon-arrendondo/knots
+    rev: v2.0.0
+    hooks:
+      - id: knots
+```
+
+`docs/ci-integration.rst` describes the published hooks and their options in
+full.
+
+To run the shell wrapper from a local knots checkout instead (see
+[The Wrapper Script](#the-wrapper-script)):
+
+```yaml
+repos:
   - repo: local
     hooks:
       - id: knots
         name: Code Complexity Check
         entry: /path/to/knots/hooks/pre-commit-wrapper.sh
         language: script
-        files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
+        files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
         pass_filenames: true
 ```
 
-**Recommended: use the published hook instead (handles language filtering automatically):**
-
-```yaml
-repos:
-  - repo: https://github.com/brandon-arrendondo/knots
-    rev: v2.0.0
-    hooks:
-      - id: knots
-```
+The `files:` pattern lists the extensions knots analyses
+(`knots --supported-languages`). Narrow it to the languages you use.
 
 ### 3. Install the Hooks
 
@@ -61,19 +75,54 @@ pre-commit install
 
 Now pre-commit will run knots automatically on commit.
 
-## Available Hooks
+## Published Hooks
 
-All three hook variants use the same wrapper script but differ in their behavior:
+The knots repository's `.pre-commit-hooks.yaml` publishes these hooks. Each
+runs `knots` itself on the staged files:
 
-| Variant | Uses `knots -v`? | Shows Summaries? | Default Thresholds |
-|---------|-----------------|------------------|-------------------|
-| **knots** | No | Only violations | Standard (15/15/5/50/10.0/3) |
-| **knots-verbose** | Yes | All files | Standard (15/15/5/50/10.0/3) |
-| **knots-strict** | Yes | Only violations | Strict (10/10/3/30/5.0/3) |
+| Hook id | Installs knots by | Default arguments |
+|---------|-------------------|-------------------|
+| `knots` | building it with cargo | `--aird-threshold=85` |
+| `knots-verbose` | building it with cargo | `--verbose --aird-threshold=85` |
+| `knots-strict` | building it with cargo | McCabe 10, Cognitive 10, Nesting 3, SLOC 30, ABC 20.0, Returns 3 |
+| `knots-system` | none: uses `knots` on `PATH` | `--aird-threshold=85` |
+| `knots-system-strict` | none: uses `knots` on `PATH` | as `knots-strict` |
 
-**Note:** Any custom threshold arguments automatically enable `knots -v` mode for detailed analysis.
+pre-commit replaces a hook's `args:` with yours rather than adding to them,
+so setting `args:` replaces the defaults:
 
-### Standard Hook
+```yaml
+  - repo: https://github.com/brandon-arrendondo/knots
+    rev: v2.0.0
+    hooks:
+      - id: knots
+        args: [--mccabe-threshold=15, --cognitive-threshold=15]
+        exclude: ^(vendor/|third_party/)
+```
+
+## The Wrapper Script
+
+`hooks/pre-commit-wrapper.sh` runs knots on each file it is given and checks
+six metrics against thresholds of its own. It reads knots' `--format ndjson`
+records, so every threshold applies whatever else is set.
+
+| Metric | Option | Default |
+|--------|--------|---------|
+| McCabe | `--mccabe-threshold` | 15 |
+| Cognitive | `--cognitive-threshold` | 15 |
+| Nesting | `--nesting-threshold` | 5 |
+| SLOC | `--sloc-threshold` | 50 |
+| ABC | `--abc-threshold` | 10.0 |
+| Returns | `--return-threshold` | 3 |
+
+An option you leave out keeps its default. `--verbose` also prints a summary
+for each file that passes. `--validator-path=PATH` (or the `VALIDATOR_PATH`
+environment variable) names the knots binary; the default is `knots` on
+`PATH`.
+
+Options take either form: `--mccabe-threshold 15` or `--mccabe-threshold=15`.
+
+### Standard
 
 ```yaml
 - repo: local
@@ -82,17 +131,13 @@ All three hook variants use the same wrapper script but differ in their behavior
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
+      files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
       pass_filenames: true
 ```
 
-**Thresholds:** McCabe: 15, Cognitive: 15, Nesting: 5, SLOC: 50, ABC: 10.0, Returns: 3
-
 **Output:** Shows only violations (functions exceeding thresholds). Passes silently if no issues found.
 
-**Implementation:** Uses compact knots output format (single line per function) for faster parsing.
-
-### Verbose Hook
+### Verbose
 
 ```yaml
 - repo: local
@@ -101,88 +146,45 @@ All three hook variants use the same wrapper script but differ in their behavior
       name: Code Complexity Check (Verbose)
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh --verbose
       language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
+      files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
       pass_filenames: true
 ```
 
 **Output:** Shows violations (if any) and a summary of all files checked, even when they pass.
 
-**Implementation:** Runs `knots -v` to get detailed per-function metrics and displays summary statistics for all analyzed files.
-
-### Strict Hook
+### Stricter Thresholds
 
 ```yaml
 - repo: local
   hooks:
     - id: knots-strict
       name: Code Complexity Check (Strict)
-      entry: /path/to/knots/hooks/pre-commit-wrapper.sh --mccabe-threshold 10 --cognitive-threshold 10
+      entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
+      files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
       pass_filenames: true
+      args:
+        - --mccabe-threshold=10
+        - --cognitive-threshold=10
+        - --nesting-threshold=3
+        - --sloc-threshold=30
+        - --abc-threshold=20.0
+        - --return-threshold=3
 ```
 
-**Thresholds:** McCabe: 10, Cognitive: 10, Nesting: 3, SLOC: 30, ABC: 5.0, Returns: 3
-
-**Output:** Shows only violations (functions exceeding stricter thresholds).
-
-**Implementation:** Automatically uses `knots -v` when custom thresholds are provided, enabling detailed per-function analysis for more accurate threshold checking.
+These match the published `knots-strict` hook.
 
 ## Custom Configuration
 
-### Argument Format
+### Coming from flake8
 
-The wrapper script supports both argument formats:
-- **Space-separated:** `--mccabe-threshold 15`
-- **Equals-separated:** `--mccabe-threshold=15`
-
-Both formats work identically. The `.pre-commit-hooks.yaml` file uses the equals format (`--arg=value`), but you can use either format in your configuration.
-
-### Comparison with flake8 Configuration
-
-If you're familiar with flake8, here's how knots arguments map to flake8 arguments:
-
-| flake8 | knots | Default |
-|--------|-------|---------|
-| `--max-complexity=15` | `--mccabe-threshold=15` | 15 |
-| `--max-cognitive-complexity=15` | `--cognitive-threshold=15` | 15 |
-| `--max-returns=3` | `--return-threshold=3` | 3 |
-| N/A | `--nesting-threshold=5` | 5 |
-| N/A | `--sloc-threshold=50` | 50 |
-| N/A | `--abc-threshold=10.0` | 10.0 |
-
-**Example flake8 config:**
-```yaml
-- repo: https://github.com/PyCQA/flake8
-  rev: 7.3.0
-  hooks:
-    - id: flake8
-      args:
-        - --max-complexity=15
-        - --max-cognitive-complexity=15
-        - --max-returns=3
-      exclude: ^(vendor/|third_party/)
-```
-
-**Equivalent knots config:**
-```yaml
-- repo: local
-  hooks:
-    - id: knots
-      entry: /path/to/knots/hooks/pre-commit-wrapper.sh
-      language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
-      exclude: ^(vendor/|third_party/)
-      pass_filenames: true
-      args:
-        - --mccabe-threshold=15
-        - --cognitive-threshold=15
-        - --return-threshold=3
-```
+flake8's `--max-complexity=N` (its bundled McCabe check) corresponds to knots'
+`--mccabe-threshold=N`. knots' other thresholds (cognitive, nesting, SLOC,
+ABC, returns, AIRD) have no counterpart in flake8 itself.
 
 ### Custom Thresholds
 
-Configure all available thresholds (similar to flake8):
+Set only the thresholds you want to change; the others keep their defaults:
 
 ```yaml
 - repo: local
@@ -191,29 +193,7 @@ Configure all available thresholds (similar to flake8):
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
-      pass_filenames: true
-      args:
-        - --mccabe-threshold=15
-        - --cognitive-threshold=15
-        - --return-threshold=3
-        - --nesting-threshold=5
-        - --sloc-threshold=50
-        - --abc-threshold=10.0
-```
-
-**Note:** When any custom threshold arguments are provided, the wrapper automatically uses `knots -v` for detailed analysis. This ensures accurate threshold checking across all metrics.
-
-Or customize specific thresholds only:
-
-```yaml
-- repo: local
-  hooks:
-    - id: knots
-      name: Code Complexity Check
-      entry: /path/to/knots/hooks/pre-commit-wrapper.sh
-      language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
+      files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
       pass_filenames: true
       args:
         - --mccabe-threshold=12
@@ -258,7 +238,7 @@ Or restrict to Rust only:
       name: Code Complexity Check
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
+      files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
       exclude: ^(vendor/|third_party/)  # Exclude vendor code
       pass_filenames: true
 ```
@@ -267,33 +247,25 @@ Or restrict to Rust only:
 
 ```yaml
 # See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-added-large-files
+  # ... your other hooks ...
 
-  # Code complexity checking (similar to flake8 configuration)
-  - repo: local
+  - repo: https://github.com/brandon-arrendondo/knots
+    rev: v2.0.0
     hooks:
       - id: knots
-        name: Code Complexity Check
-        entry: /path/to/knots/hooks/pre-commit-wrapper.sh
-        language: script
-        files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
         exclude: ^(vendor/|third_party/)  # Exclude third-party code
-        pass_filenames: true
         args:
+          - --aird-threshold=85
           - --mccabe-threshold=15
           - --cognitive-threshold=15
-          - --return-threshold=3
           - --nesting-threshold=5
           - --sloc-threshold=50
-          - --abc-threshold=10.0
+          - --return-threshold=3
 ```
+
+Run `pre-commit autoupdate` to move each `rev:` in your configuration to its
+repository's latest tag.
 
 ## Usage
 
@@ -336,7 +308,7 @@ git commit --no-verify -m "Emergency fix"
 | **Installation** | Requires Python + pre-commit | Just copy script |
 | **Configuration** | YAML file | git config |
 | **Multiple Hooks** | Easy to manage many hooks | One hook file |
-| **Language Support** | Many languages | Just a POSIX shell (`sh`) |
+| **Runtime** | Python (pre-commit) | A POSIX shell (`sh`) |
 | **Auto-update** | `pre-commit autoupdate` | Manual |
 | **Team Distribution** | Commit config file | Commit hook scripts |
 | **CI Integration** | `pre-commit run --all-files` | Run hook directly |
@@ -374,6 +346,9 @@ pre-commit run knots --all-files
 
 ### knots Not Found
 
+If the wrapper cannot find knots, it prints a warning and **passes the
+commit without checking anything**. Point it at the binary:
+
 ```bash
 # Set path via environment variable
 export VALIDATOR_PATH=/path/to/knots
@@ -382,9 +357,12 @@ export VALIDATOR_PATH=/path/to/knots
 - repo: local
   hooks:
     - id: knots
-      entry: sh -c 'VALIDATOR_PATH=/path/to/knots /path/to/hooks/pre-commit-wrapper.sh "$@"' --
+      entry: /path/to/knots/hooks/pre-commit-wrapper.sh --validator-path=/path/to/knots
       language: script
 ```
+
+The published `knots-system` hooks fail instead when `knots` is not on
+`PATH`.
 
 ### Changes Not Detected
 
@@ -404,7 +382,7 @@ Add `--verbose` to args or set `verbose: true`:
     - id: knots
       entry: /path/to/knots/hooks/pre-commit-wrapper.sh
       language: script
-      files: \.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$
+      files: '(?i)\.(c|h|cpp|cc|cxx|hpp|hxx|rs|py|js|mjs|cjs|jsx|ts|tsx|adb|ada|ads|go|java|cs|kt|kts|swift|php|f90|f95|f03|f08|scala|sc|lua)$'
       verbose: true
       args:
         - --verbose
@@ -413,6 +391,10 @@ Add `--verbose` to args or set `verbose: true`:
 ## CI/CD Integration
 
 ### GitHub Actions
+
+GitHub's Ubuntu runners include Rust and pipx, so the published `knots` hook
+can build knots itself, and pre-commit can run through pipx with no setup
+step:
 
 ```yaml
 name: pre-commit
@@ -426,29 +408,23 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-      
-      # Install knots
-      - name: Install knots
-        run: |
-          cargo install knots
-          # Or, prebuilt with no Rust toolchain: pipx install knots
-      
-      - uses: pre-commit/action@v3.0.0
+      - uses: actions/checkout@v7
+
+      # To skip the build, use the knots-system hook and install the
+      # prebuilt binary instead: pipx install knots
+      - run: pipx run pre-commit run --all-files --show-diff-on-failure
 ```
 
 ### GitLab CI
 
+The `python` image has no Rust toolchain, so install the prebuilt knots
+wheel and use the `knots-system` hook:
+
 ```yaml
 pre-commit:
-  image: python:3.11
+  image: python:3
   before_script:
-    - pip install pre-commit
-    - cargo install knots  # Or install from release
+    - pip install pre-commit knots
   script:
     - pre-commit run --all-files
 ```
@@ -471,7 +447,7 @@ repos:
         args:
           - --mccabe-threshold=10
           - --cognitive-threshold=10
-  
+
   # Lenient for legacy code
   - repo: local
     hooks:
