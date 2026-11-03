@@ -2213,6 +2213,36 @@ fn extract_navigation_self_field<'a>(node: Node, source_code: &'a [u8]) -> Optio
     }
 }
 
+// C++: `this->member` and `(*this).member`, fields and methods alike
+// (`this->f()` is a call whose function is this field_expression). The
+// receiver must be the grammar's `this` node, so a C variable that happens
+// to be named `this` is not matched. Bare member access (`member` with an
+// implicit `this`) is not counted: telling a member from a local or global
+// needs the class's members, which an out-of-line definition or a base
+// class keeps in another file.
+fn extract_cpp_this_member<'a>(node: Node, source_code: &'a [u8]) -> Option<&'a str> {
+    let receiver = node.child_by_field_name("argument")?;
+    let is_this = match receiver.kind() {
+        "this" => true,
+        "parenthesized_expression" => receiver.named_child(0).is_some_and(|inner| {
+            inner.kind() == "pointer_expression"
+                && inner
+                    .child_by_field_name("operator")
+                    .is_some_and(|op| op.kind() == "*")
+                && inner
+                    .child_by_field_name("argument")
+                    .is_some_and(|arg| arg.kind() == "this")
+        }),
+        _ => false,
+    };
+    if !is_this {
+        return None;
+    }
+    node.child_by_field_name("field")?
+        .utf8_text(source_code)
+        .ok()
+}
+
 // Iterative (explicit stack): see visit_node_mccabe's comment.
 fn collect_self_fields_recursive(root: Node, source_code: &[u8], fields: &mut HashSet<String>) {
     let mut stack = vec![root];
@@ -2220,6 +2250,7 @@ fn collect_self_fields_recursive(root: Node, source_code: &[u8], fields: &mut Ha
         let extracted: Option<&str> = match node.kind() {
             "field_expression" => {
                 try_extract_named_field(node, source_code, "value", "self", "field")
+                    .or_else(|| extract_cpp_this_member(node, source_code))
             }
             "attribute" => {
                 try_extract_named_field(node, source_code, "object", "self", "attribute")
@@ -2599,6 +2630,160 @@ mod state_coupling_tests {
         }
         find_fn(root, code.as_bytes(), &mut result);
         result
+    }
+
+    /// State coupling of the first function named `name` in `code`, parsed
+    /// with `language`.
+    fn coupling_of(language: tree_sitter::Language, code: &str, name: &str) -> u32 {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut stack = vec![tree.root_node()];
+        while let Some(node) = stack.pop() {
+            let is_fn = matches!(node.kind(), "function_definition" | "function_item");
+            let named = is_fn
+                && node
+                    .utf8_text(code.as_bytes())
+                    .is_ok_and(|t| t.contains(&format!("{name}(")));
+            if named {
+                return calculate_state_coupling(node, code.as_bytes());
+            }
+            let mut c = node.walk();
+            stack.extend(node.children(&mut c));
+        }
+        panic!("no function {name}");
+    }
+
+    fn cpp_coupling(code: &str, name: &str) -> u32 {
+        coupling_of(crate::tree_sitter_cpp::LANGUAGE.into(), code, name)
+    }
+
+    const CPP_CLASS: &str = "struct S {\n\
+        int a, b;\n\
+        int f(int x) { return this->a + this->b + x; }\n\
+        int g() { return (*this).a + this->h(); }\n\
+        int h() { auto l = [this]() { return this->b; }; return l() + this->a; }\n\
+        static int s(int y) { return y; }\n\
+        int i(int x) { return a + b + x; }\n\
+        int j(S *o) { return o->a + this->a + this->a; }\n\
+    };\n";
+
+    #[test]
+    fn cpp_this_arrow_fields_are_counted() {
+        // One parameter plus this->a and this->b, as `self.a + self.b + x`
+        // scores in Python.
+        assert_eq!(cpp_coupling(CPP_CLASS, "f"), 3);
+    }
+
+    #[test]
+    fn cpp_deref_this_field_and_method_call_are_counted() {
+        // (*this).a and this->h(): two distinct members.
+        assert_eq!(cpp_coupling(CPP_CLASS, "g"), 2);
+    }
+
+    #[test]
+    fn cpp_members_used_in_a_lambda_capturing_this_count_for_the_method() {
+        assert_eq!(cpp_coupling(CPP_CLASS, "h"), 2);
+    }
+
+    #[test]
+    fn cpp_static_member_function_counts_parameters_only() {
+        assert_eq!(cpp_coupling(CPP_CLASS, "s"), 1);
+    }
+
+    #[test]
+    fn cpp_implicit_member_access_is_not_counted() {
+        // Bare `a`/`b` need class-member resolution; documented as a limit.
+        assert_eq!(cpp_coupling(CPP_CLASS, "i"), 1);
+    }
+
+    #[test]
+    fn cpp_member_of_another_object_is_not_counted_and_this_member_once() {
+        assert_eq!(cpp_coupling(CPP_CLASS, "j"), 2);
+    }
+
+    #[test]
+    fn cpp_out_of_line_definition_counts_this_members() {
+        assert_eq!(
+            cpp_coupling("int S::m(int x) { return this->q + x; }", "m"),
+            2
+        );
+    }
+
+    #[test]
+    fn c_variable_named_this_is_not_a_receiver() {
+        let c = "struct s { int a; };\nint f(struct s *this) { return this->a; }\n";
+        assert_eq!(
+            coupling_of(crate::tree_sitter_c::LANGUAGE.into(), c, "f"),
+            1
+        );
+    }
+
+    #[test]
+    fn python_self_attribute_and_method_call_unchanged() {
+        let py = "class S:\n    def f(self, x):\n        return self.a + self.b + self.h() + x\n";
+        assert_eq!(
+            coupling_of(crate::tree_sitter_python::LANGUAGE.into(), py, "f"),
+            4
+        );
+    }
+
+    #[test]
+    fn rust_self_field_and_method_call_unchanged() {
+        let rs = "impl S { fn f(&self, x: i32) -> i32 { self.a + self.b + self.h() + x } }";
+        assert_eq!(rust_coupling(rs), 4);
+    }
+
+    /// State coupling of the first node of one of `kinds` in `code`.
+    fn coupling_of_kind(language: tree_sitter::Language, code: &str, kinds: &[&str]) -> u32 {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(code, None).unwrap();
+        let mut stack = vec![tree.root_node()];
+        while let Some(node) = stack.pop() {
+            if kinds.contains(&node.kind()) {
+                return calculate_state_coupling(node, code.as_bytes());
+            }
+            let mut c = node.walk();
+            stack.extend(node.children(&mut c));
+        }
+        panic!("no {kinds:?} in {code}");
+    }
+
+    // Each row of the receiver table in docs/metrics-reference.rst: one
+    // parameter, one field and one method call through the receiver.
+    #[test]
+    fn receiver_table_in_the_metrics_reference_holds() {
+        use crate::{
+            tree_sitter_c_sharp as cs, tree_sitter_java as java, tree_sitter_javascript as js,
+            tree_sitter_kotlin_ng as kt, tree_sitter_php as php, tree_sitter_swift as swift,
+            tree_sitter_typescript as ts,
+        };
+        let rows: [(&str, tree_sitter::Language, &str, &[&str], u32); 7] = [
+            ("swift", swift::LANGUAGE.into(),
+             "class S { func f(x: Int) -> Int { let p = self.a\n let q = self.h()\n return p + q + x } }",
+             &["function_declaration"], 3),
+            ("javascript", js::LANGUAGE.into(),
+             "class S { f(x) { return this.a + this.h() + x; } }", &["method_definition"], 3),
+            ("typescript", ts::LANGUAGE_TYPESCRIPT.into(),
+             "class S { f(x: number) { return this.a + this.h() + x; } }",
+             &["method_definition"], 3),
+            ("c#", cs::LANGUAGE.into(),
+             "class S { int F(int x) { return this.a + this.H() + x; } }",
+             &["method_declaration"], 3),
+            ("kotlin", kt::LANGUAGE.into(),
+             "class S { fun f(x: Int): Int { return this.a + this.h() + x } }",
+             &["function_declaration"], 3),
+            ("java", java::LANGUAGE.into(),
+             "class S { int f(int x) { return this.a + this.h() + x; } }",
+             &["method_declaration"], 2),
+            ("php", php::LANGUAGE_PHP.into(),
+             "<?php class S { function f($x) { return $this->a + $this->h() + $x; } }",
+             &["method_declaration"], 2),
+        ];
+        for (name, language, code, kinds, want) in rows {
+            assert_eq!(coupling_of_kind(language, code, kinds), want, "{name}");
+        }
     }
 
     #[test]

@@ -430,7 +430,31 @@ needs to safely modify a function. Higher = harder for an AI to modify.
 Each ratio is capped at 1 before it is weighted (a negative ``test_score`` or
 ``doc_score`` counts as 0), and the sum is rounded and clamped to 0–100.
 ``state_coupling`` is the explicit parameter count plus the number of
-distinct ``self``/``this`` fields the function touches.
+distinct members the function reaches through its own receiver, each
+counted once however often it is used. Which members count depends on the
+language:
+
+==============================  ==========================  =================
+Language                        Receiver                    Members counted
+==============================  ==========================  =================
+Rust, Python, Swift             ``self.member``             fields and methods
+C++                             ``this->member``,           fields and methods
+                                ``(*this).member``
+JavaScript, TypeScript, C#,     ``this.member``             fields and methods
+Kotlin
+Java                            ``this.member``             fields only
+PHP                             ``$this->member``           fields only
+==============================  ==========================  =================
+
+"Methods" means a call through the receiver: ``self.helper()`` counts
+``helper`` as ``self.count`` counts ``count``. In Java and PHP,
+``this.helper()`` and ``$this->helper()`` are not counted. A lambda inside a
+method that uses ``this->member`` counts toward that method. A member named
+without its receiver (a bare ``count`` inside a C++, Java, C# or Kotlin
+member function) is not counted: telling it from a local or a global needs
+the class's members, which an out-of-line definition or a base class keeps
+in another file. In the other languages, and for a static member function,
+only the parameters count.
 
 AIRD reads the source **as written**. Its ``cognitive`` input (and the McCabe
 behind ``test_score``) counts every live ``#if`` arm, where the ``mccabe`` and

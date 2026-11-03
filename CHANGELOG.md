@@ -6,6 +6,20 @@ counting rule is listed under Changed, even when it corrects a bug, because
 existing scores and gate results can move. See
 [ADR-0004](docs/adr/0004-changelog-is-for-users.md).
 
+## Unreleased
+
+### Changed
+
+- C++ state coupling now counts the members a method reaches through
+  `this`: `this->member` and `(*this).member`, fields and method calls
+  alike, each distinct member once, as `self.member` already counts in
+  Rust and Python. A C++ method with `this->a + this->b + x` scores 3,
+  where it scored 1. A C++ function's `state_coupling`, and its AIRD
+  through it, can rise. A member named without `this->` is still not
+  counted. The metrics reference now says that state coupling counts
+  members, fields and methods, and lists the receiver each language
+  uses.
+
 ## 2.1.0 - 2026-11-03
 
 ### Fixed
