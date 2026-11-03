@@ -92,8 +92,8 @@ void test_timeout_boundaries() {
 
 ### Output Modes
 
-- **Warning Mode** (default): Reports violations but doesn't fail pre-commit
-- **Error Mode**: Fails pre-commit on violations
+- **Warning Mode** (`--level=warn`, the default when the binary is run directly): Reports violations and exits 0
+- **Error Mode** (`--level=error`, what the published hook runs): Exits 1 on violations, failing the commit
 - **Verbose Mode**: Shows detailed per-function complexity breakdown
 
 ## Building
@@ -137,6 +137,7 @@ repos:
 **Configuration Options:**
 
 - `--threshold=0.70`: Minimum test-to-source complexity ratio (default: 0.70 = 70%)
+- `--boundary-threshold=0.80`: Minimum boundary test coverage ratio (default: 0.80 = 80%)
 - `--level`: Enforcement level, `warn` or `error`. At `error` a failing test
   stops the commit; at `warn` it is reported and the commit goes ahead. The
   published hook passes `--level=error`. Setting `args:` replaces that, so
@@ -144,7 +145,7 @@ repos:
   `--level=warn` to opt out. Run directly, `knots-test-complexity` defaults
   to `warn`.
 - `--no-check-boundaries`: Disable boundary value detection (enabled by default)
-- `--verbose`: Show detailed per-file analysis
+- `--verbose`: Show detailed per-function analysis
 
 **Example: Strict Enforcement**
 ```yaml
@@ -190,76 +191,89 @@ knots-test-complexity \
 
 ### Output Example
 
+From the files in `examples/`:
+`knots-test-complexity examples/test_timer_good.c examples/timer.c`
+
 ```
-Analyzing Test Quality: test_battery_service.c
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Test Quality Analysis: test_timer_good.c
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Source File: battery_service.c
-  Functions: 15
-  Total Cyclomatic Complexity: 87
-  Boundary Values Detected: 12
-    - uint8_t variables: 4 (boundaries: 0, 255)
-    - Range checks: 8 (if (x > MAX), etc.)
+Source File:
+  File: timer.c
+  Functions: 7
+  Total Cyclomatic Complexity: 13
+  Total Cognitive Complexity: 7
 
-Test File: test_battery_service.c
-  Functions: 58
-  Total Cyclomatic Complexity: 74
-  Boundary Tests Found: 15
+Test File:
+  File: test_timer_good.c
+  Functions: 7
+  Total Cyclomatic Complexity: 12
+  Total Cognitive Complexity: 7
 
 Complexity Analysis:
-  Test/Source Ratio: 85% ✓ (threshold: 70%)
-  Test Complexity: 74
-  Source Complexity: 87
-  Ratio: 74/87 = 0.85
+  Test/Source Ratio: 92% ✓ (threshold: 70%)
+  Test Cyclomatic Complexity: 12
+  Source Cyclomatic Complexity: 13
 
 Boundary Analysis:
-  Required Boundary Tests: 12
-  Found Boundary Tests: 15 ✓
-  Coverage: 125%
+  Integer Boundaries Detected: 6
+  Pointer Boundaries Detected: 0
+  Boundary Test Coverage: 86% ✓ (threshold: 80%)
+  Test Values Found: 30
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Result: ✓ PASS
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ### Failure Example
 
+`knots-test-complexity --level=error examples/test_timer_bad.c examples/timer.c`
+exits 1:
+
 ```
-Analyzing Test Quality: test_lin_comm_service.c
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Test Quality Analysis: test_timer_bad.c
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Source File: lin_comm_service.c
-  Functions: 8
-  Total Cyclomatic Complexity: 54
-  Boundary Values Detected: 8
+Source File:
+  File: timer.c
+  Functions: 7
+  Total Cyclomatic Complexity: 13
+  Total Cognitive Complexity: 7
 
-Test File: test_lin_comm_service.c
-  Functions: 12
-  Total Cyclomatic Complexity: 28
-  Boundary Tests Found: 3
+Test File:
+  File: test_timer_bad.c
+  Functions: 4
+  Total Cyclomatic Complexity: 4
+  Total Cognitive Complexity: 0
 
 Complexity Analysis:
-  Test/Source Ratio: 52% ✗ (threshold: 70%)
-  Test Complexity: 28
-  Source Complexity: 54
-  Ratio: 28/54 = 0.52
+  Test/Source Ratio: 30% ✗ (threshold: 70%)
+  Test Cyclomatic Complexity: 4
+  Source Cyclomatic Complexity: 13
 
 Boundary Analysis:
-  Required Boundary Tests: 8
-  Found Boundary Tests: 3 ✗
-  Missing Boundaries:
-    - rxByteCounter: 0, 3, 11, 12 (RX_HEADER_SIZE boundaries)
-    - rxFrameId: 0, 0x3F (FRAME_MASK boundary)
+  Integer Boundaries Detected: 6
+  Pointer Boundaries Detected: 0
+  Boundary Test Coverage: 79% ✗ (threshold: 80%)
+  Test Values Found: 12
 
 Recommendations:
-  1. Add tests for edge cases and error paths
-  2. Test boundary conditions: 0, max values, overflow
-  3. Add state transition tests (4 static variables detected)
-  4. Consider parametrized tests or loops in test code
+Add ~4 more complexity points to tests (39 percentage points below threshold)
+Consider adding:
+  - Edge case tests (boundary values, overflow scenarios)
+  - Error path tests (invalid inputs, error conditions)
+  - State transition tests (different initial conditions)
+  - Parametrized tests or loops in test code
 
-Result: ✗ FAIL (--level=error)
+Missing boundary value tests:
+  1. constant_200 (range_check_upper): missing values [198, 199, 201]
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Result: ✗ FAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ## Algorithm Details
@@ -268,7 +282,7 @@ Result: ✗ FAIL (--level=error)
 
 ```
 For each test file:
-  1. Parse test file with tree-sitter-c
+  1. Parse test file (knots picks the grammar from the file's extension)
   2. Calculate cyclomatic complexity for all test functions
      - Count: if, while, for, switch, &&, ||, ?:
      - Include test helper functions
@@ -362,8 +376,8 @@ This encourages well-structured tests with reusable helpers.
       name: Test Quality Check
       entry: hooks/test-complexity-wrapper.sh
       language: script
-      files: ^Test/test_.*\.c$
-      args: [--threshold=70, --level=error]
+      files: (^|/)(test_[^/]+|[^/]+_test)\.(c|cpp|cc|cxx)$
+      args: [--threshold=0.70, --level=error]
 ```
 
 ### Future: Unified Tool
@@ -381,20 +395,17 @@ complexity-check --source <file.c> --test <test_file.c>
 
 ## Dependencies
 
-```toml
-[dependencies]
-tree-sitter = "0.22"
-tree-sitter-c = "0.21"
-anyhow = "1.0"
-clap = { version = "4.5", features = ["derive"] }
-regex = "1.10"
-```
+The crate depends on `knots` itself (for parsing and the complexity metrics),
+plus `tree-sitter`, `anyhow`, `clap`, `colored` and `regex`, with versions set
+in the workspace's root `Cargo.toml`.
 
 ## Project Structure
 
 ```
 knots-test-complexity/
 ├── Cargo.toml                          # Rust project manifest
+├── pyproject.toml                      # PyPI wheel build (maturin)
+├── LICENSE-MIT                         # License
 ├── README.md                           # This file
 ├── src/
 │   ├── main.rs                        # CLI entry point
@@ -402,8 +413,11 @@ knots-test-complexity/
 │   ├── boundary.rs                    # Boundary value detector
 │   └── reporter.rs                    # Output formatting
 └── examples/
+    ├── timer.c                        # Example source
     ├── test_timer_good.c              # Example: sufficient complexity
     ├── test_timer_bad.c               # Example: insufficient complexity
+    ├── sensor.c                       # Example source
+    ├── test_sensor_boundaries.c       # Example: boundary-value tests
     └── README.md                      # Example documentation
 ```
 
@@ -423,7 +437,7 @@ cargo test -- --nocapture
 
 ## License
 
-MIT License. See LICENSE file.
+MIT License. See LICENSE-MIT.
 
 ## See Also
 

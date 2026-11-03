@@ -49,6 +49,7 @@ Shows a detailed per-function breakdown including all test scoring sub-axes::
       AIRD Score: 87
       AICP Score: 72
       External Calls: 14
+      State Coupling: 3
       Max Complexity: 45
 
 Recursive Directory Analysis
@@ -67,23 +68,24 @@ Recursive mode:
 - Writes per-function detail to a file when ``--report <FILE>`` is given (opt-in)
 - Reports file processing statistics
 
-Example output::
+Example output, abridged, from ``knots -r sample-files`` in the knots
+repository::
 
     === TOP 5 WORST FUNCTIONS ===
 
-    1. 😢 drivers/hal_rcc.c:142:HAL_RCC_OscConfig
-       McCabe: 71, Cognitive: 214, Nesting: 11, SLOC: 327, ABC: 134.90, Returns: 23, TestScore: 9
+    1. 😐 sample-files/complex.c:7:process_matrix
+       McCabe: 6, Cognitive: 13, Nesting: 4, SLOC: 17, ABC: 6.71, Returns: 0, TestScore: 9, AIRD: 25, AICP: 3, ExtCalls: 1
 
     === TOTALS & AVERAGES ===
 
-      Total Functions: 3404
-      Average McCabe Complexity: 2.02
-      Average Cognitive Complexity: 1.65
+      Total Functions: 33
+      Average McCabe Complexity: 2.55
+      Average Cognitive Complexity: 2.42
 
     === FILES PROCESSED ===
 
-      Total files selected: 165
-      Analysed: 165
+      Total files selected: 18
+      Analysed: 18
       Not analysed: 0
       Syntax errors, no functions recovered: 0
 
@@ -170,7 +172,7 @@ Filter schema:
 
     {
       "file_patterns": [
-        "src/**/*.c",
+        "**/src/**/*.c",
         "!**/vendor/**",
         "!**/test_*.c"
       ],

@@ -71,9 +71,10 @@ git config hooks.knots.abc-threshold 10.0
 # Set Return count threshold (default: 3)
 git config hooks.knots.return-threshold 3
 
-# Enable verbose output (shows per-function details in multi-line format)
-# Non-verbose shows single-line format per function
-# Note: Summary statistics are always shown regardless of verbose mode
+# Enable verbose output: the blocking hook also prints a short summary
+# (function count and McCabe, Cognitive, nesting and SLOC totals) for each
+# checked file. Without it, only threshold breaches are shown. The
+# warning-only hook ignores this setting.
 git config hooks.knots.verbose true
 
 # Set custom knots path
@@ -149,7 +150,8 @@ The hook checks all supported source files being staged:
 
 Files NOT checked:
 - Deleted files
-- Renamed files (only if content changed)
+- Renamed files, even when their content also changed (the hook selects
+  added, copied and modified files only)
 - Files not staged
 
 ## Threshold Guidelines
@@ -217,11 +219,10 @@ git config hooks.knots.cognitive-threshold 20
 ```bash
 # Add to repo (not .git/hooks, which is local)
 mkdir -p tools/hooks
-cp pre-commit tools/hooks/
-cp install-hook.sh tools/hooks/
+cp pre-commit pre-commit-warning-only install-hook.sh tools/hooks/
 
-# Team members run:
-cd tools/hooks && ./install-hook.sh
+# Team members run, from the repository root:
+./tools/hooks/install-hook.sh
 ```
 
 **Option 2: Setup Script in Root**
@@ -322,13 +323,14 @@ If you already have a pre-commit hook, integrate knots:
 
 # ... your existing checks ...
 
-# Add knots check (all supported languages)
+# Add knots check (the extensions the standalone hooks check)
 if command -v knots >/dev/null 2>&1; then
     SRC_FILES=$(git diff --cached --name-only --diff-filter=ACM \
         | grep -E '\.(c|cpp|cc|cxx|h|hpp|hxx|rs|py|js|mjs|cjs)$')
     if [ -n "$SRC_FILES" ]; then
         for file in $SRC_FILES; do
-            knots "$file" || exit 1
+            # Without a threshold, knots exits 0 however complex the code is.
+            knots --mccabe-threshold 15 --cognitive-threshold 15 "$file" || exit 1
         done
     fi
 fi
@@ -345,7 +347,9 @@ A: Not directly. Consider using warning-only mode and manual review for complex 
 A: Yes — see [PRE_COMMIT_FRAMEWORK.md](PRE_COMMIT_FRAMEWORK.md). The published hook is the recommended approach; the shell wrapper is also documented there.
 
 **Q: What happens with syntax errors?**
-A: The tool will fail gracefully and report the error. Commit is blocked.
+A: The hook does not block on them. It discards knots' warnings, and a file
+knots cannot parse or read yields no functions, so the commit goes through.
+Run knots on the file directly to see the warning.
 
 **Q: Can I check complexity without committing?**
 A: Yes! Run `knots file.c` (or any supported file) manually anytime.

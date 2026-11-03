@@ -48,8 +48,9 @@ Glob-style patterns for matching file paths. Supports:
 
 **Examples:**
 
-- ``"src/**/*.c"`` — all ``.c`` files in ``src/`` and subdirectories
-- ``"lib/*.c"`` — ``.c`` files under ``lib/``, including nested directories
+- ``"**/src/**/*.c"`` — all ``.c`` files in a ``src/`` directory and its
+  subdirectories
+- ``"**/lib/*.c"`` — ``.c`` files under ``lib/``, including nested directories
 - ``"!**/test_*.c"`` — exclude files starting with ``test_``
 - ``"!**/vendor/**"`` — exclude everything in vendor directories
 
@@ -146,8 +147,8 @@ Example 3: Focus on specific modules with concerning complexity
 
     {
       "file_patterns": [
-        "src/core/**/*.c",
-        "src/drivers/**/*.c",
+        "**/src/core/**/*.c",
+        "**/src/drivers/**/*.c",
         "!**/vendor/**"
       ],
       "min_complexity": 10,
@@ -158,8 +159,8 @@ Example 3: Focus on specific modules with concerning complexity
 
     knots -r . --include filter-focus.json
 
-Example 4: Exclude vendor code and simple functions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example 4: Exclude vendor code and simple HAL and reserved-name functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -180,6 +181,10 @@ Example 4: Exclude vendor code and simple functions
     EOF
 
     knots -r . --exclude filter-exclude.json
+
+Because both function criteria are present, only ``HAL_*`` and ``__*``
+functions with complexity 5 or less are excluded; other simple functions
+remain.
 
 Filter Logic
 ------------
@@ -227,6 +232,9 @@ Notes
   likewise impose no restriction for an omitted or empty criterion.
 - ``knots.toml`` exclusions (see :doc:`config`) remain an alternative for
   combining file and function criteria within one entry.
-- File patterns are matched against the full file path.
+- File patterns are matched against the path as knots discovered it, which
+  begins with the path you passed: ``./src/x.c`` under ``-r .``, ``src/x.c``
+  under ``-r src``. Start a pattern with ``**/`` (as in ``**/src/**/*.c``) so
+  it matches however the scan was started.
 - Function patterns use Rust's regex syntax.
 - Invalid regex patterns are silently ignored (the function won't match).
