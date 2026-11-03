@@ -93,6 +93,14 @@ Verifying a release
     pre-commit try-repo https://github.com/brandon-arrendondo/knots-pre-commit \
         knots --ref vX.Y.Z --files path/to/source.rs
 
+    # Every knots-pre-commit rev: pin in the docs and examples names a tag
+    # the mirror has (exits 1 and prints MISSING for any that does not)
+    scripts/check_mirror_pins.sh
+
+The docs recommend the mirror, so a ``rev:`` pin there that names a missing
+tag fails every user who copies it. Run the check after step 3, and again
+after any commit that changes a pin.
+
 Notes & recovery
 ----------------
 
